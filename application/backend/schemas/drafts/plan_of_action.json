@@ -1,0 +1,238 @@
+{
+  "asset_id": "plan_of_action",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Plan-of-Action-Architect-Prompt.md",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry_niche",
+      "label": "Industry / Niche",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_country",
+      "label": "Region / Country",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — for search-volume estimates, competitor selection, and compliance framing"
+    },
+    {
+      "field_id": "prepared_by_agency_name_optional",
+      "label": "Prepared By / Agency Name (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "plan_date_optional",
+      "label": "Plan Date (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — defaults to today's date if left blank",
+      "fallback_instruction": "Defaults to today's date if left blank."
+    },
+    {
+      "field_id": "primary_service_being_expanded",
+      "label": "Primary Service Being Expanded",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — the single root service this whole plan is built around, e.g. \"Google Ads Management,\" \"Social Media Marketing,\" \"Bookkeeping Services\""
+    },
+    {
+      "field_id": "primary_pillar_page_existing_or_target_url",
+      "label": "Primary Pillar Page (existing or target URL)",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — e.g. trafficradius.com.au/google-ads-management/. If it doesn't exist yet, state \"not yet built — target slug: ___\""
+    },
+    {
+      "field_id": "existing_phase_1_assets_optional",
+      "label": "Existing Phase 1 Assets (optional)",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER or leave blank — if a CRO audit, rebuilt pillar page, lead magnet, funnel, blog, SMS sequence, or SEO pass already exists for the primary service, reference or attach it here so Phase 1 is marked complete rather than re-planned from scratch. If nothing exists yet, say \"greenfield — Phase 1 not started.\""
+    },
+    {
+      "field_id": "sub_services_to_expand_into_phase_2",
+      "label": "Sub-Services to Expand Into (Phase 2)",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — list the logical sub-categories of the primary service that deserve their own dedicated pillar page, e.g. for \"Google Ads Management\": Search, Shopping, Display, Remarketing, YouTube, Performance Max, Local Service Ads, Audit. If you want these inferred rather than supplied, say \"infer 6-10 sub-services from the primary service and industry norms.\""
+    },
+    {
+      "field_id": "industry_verticals_to_target_phase_3_optional",
+      "label": "Industry Verticals to Target (Phase 3, optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — the industries/business types this service is commonly sold into, e.g. E-commerce, Trades, Healthcare, Professional Services, Real Estate, Hospitality. If left blank, infer from the ICP document.",
+      "fallback_instruction": "If left blank, infer from the ICP document."
+    },
+    {
+      "field_id": "locations_to_target_phase_3_optional",
+      "label": "Locations to Target (Phase 3, optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — cities/regions worth a dedicated location page. If left blank, infer the top 6-8 population/commercial centres for the stated Region / Country.",
+      "fallback_instruction": "If left blank, infer the top 6-8 population/commercial centres for the stated Region / Country."
+    },
+    {
+      "field_id": "icp_document",
+      "label": "ICP Document",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — paste, attach, or say \"use the ICP established earlier in this conversation.\" Should cover avatar, pains, goals, decision criteria, awareness level, and objections."
+    },
+    {
+      "field_id": "cro_messaging_framework_optional",
+      "label": "CRO / Messaging Framework (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the CRO audit / psychological-layer framework already established, so tone and locked terminology carry through every asset in this plan."
+    },
+    {
+      "field_id": "existing_funnels_lead_magnets_optional",
+      "label": "Existing Funnels / Lead Magnets (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "funnel_stages",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — reference any funnel document or lead magnet already established, so this plan is additive rather than duplicative."
+    },
+    {
+      "field_id": "existing_value_ladder_offers_optional",
+      "label": "Existing Value Ladder / Offers (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "offer_ladder",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — reference any value ladder already established, so funnel conversion events point at real, already-defined next steps (consultation, audit, retainer tier) rather than inventing new ones."
+    },
+    {
+      "field_id": "brand_design_reference_optional",
+      "label": "Brand Design Reference (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "design_tokens",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — a design-system reference already established in this conversation, OR the live website URL to extract from, OR explicit brand values, if any HTML deliverables are required as part of this plan."
+    },
+    {
+      "field_id": "competitor_list",
+      "label": "Competitor List",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER — attach or reference a file/spreadsheet of 3-6 direct competitors in this industry and region. Used for the current-state content gap analysis and the \"why we rank sub-services this way\" reasoning. If none supplied, name 3-6 well-known competitors from general knowledge and flag this as an assumption. Confirmed: unlike 9 of the other 15 main assets, Plan of Action has no paired numbered Competitor Analysis file — this is a plain, general, user-supplied-or-inferred list, not a reference to one of the 10 numbered competitor prompts.",
+      "fallback_instruction": "If none supplied, name 3-6 well-known competitors from general knowledge and flag this as an assumption."
+    },
+    {
+      "field_id": "keyword_search_volume_data_source_optional",
+      "label": "Keyword / Search Volume Data Source (optional)",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER — attach or reference a keyword research export if one exists. If left blank, state estimated monthly search volumes using judgement and clearly label every volume figure as an estimate, not verified data.",
+      "fallback_instruction": "If left blank, state estimated monthly search volumes using judgement and clearly label every volume figure as an estimate, not verified data."
+    },
+    {
+      "field_id": "plan_length",
+      "label": "Plan Length",
+      "kind": "number",
+      "required": true,
+      "source": "user_input",
+      "default": 12,
+      "raw_explanation": "YOUR ANSWER — number of months to plan across, default 12"
+    },
+    {
+      "field_id": "number_of_phases",
+      "label": "Number of Phases",
+      "kind": "number",
+      "required": true,
+      "source": "user_input",
+      "default": 3,
+      "raw_explanation": "YOUR ANSWER — default 3 (Quick Win / Sub-Service Expansion / Full Sitemap Expansion). State a different number and their names if this business needs a different shape, e.g. a 2-phase plan for a smaller operator."
+    },
+    {
+      "field_id": "delivery_capacity",
+      "label": "Delivery Capacity",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — solo operator, small team, or full agency; affects how many assets per month are realistic to commit to in the timeline"
+    },
+    {
+      "field_id": "regulated_field_flag",
+      "label": "Regulated Field Flag",
+      "kind": "boolean_flag",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — Yes/No. If yes, name the regulation so no-guarantee, compliance-safe language is applied throughout every asset description.",
+      "conditional_children": ["regulation_name"]
+    },
+    {
+      "field_id": "regulation_name",
+      "label": "Regulation Name",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "conditional_on": { "field": "regulated_field_flag", "equals": true },
+      "raw_explanation": "Name the regulation so no-guarantee, compliance-safe language is applied throughout every asset description."
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    }
+  ]
+}

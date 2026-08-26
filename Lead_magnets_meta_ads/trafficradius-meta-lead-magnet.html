@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>5 Early Warning Signs Your Meta Ads Are About to Fail | Traffic Radius</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── RESET & BASE ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:   #0D1F3C;
+      --blue:   #1B62FF;
+      --orange: #FF5C2B;
+      --white:  #F5F7FA;
+      --grey:   #4A5568;
+      --grey-light: #E2E8F0;
+      --grey-mid: #8492A6;
+      --navy-mid: #162d54;
+      --navy-light: #1e3a6e;
+    }
+
+    html, body {
+      min-height: 100%;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--white);
+      color: var(--navy);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── GATEWAY OVERLAY ───────────────────────────────────────────────── */
+    #gateway {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(13, 31, 60, 0.60);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    .gateway-card {
+      background: #ffffff;
+      border-radius: 20px;
+      width: 100%;
+      max-width: 520px;
+      padding: 44px 48px;
+      box-shadow:
+        0 32px 80px rgba(13, 31, 60, 0.28),
+        0 0 0 1px rgba(27, 98, 255, 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .gateway-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--orange) 0%, var(--blue) 100%);
+      border-radius: 20px 20px 0 0;
+    }
+
+    .gateway-logo {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 28px;
+    }
+
+    .gateway-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 12px;
+    }
+
+    .gateway-eyebrow::before {
+      content: '';
+      width: 20px;
+      height: 2px;
+      background: var(--orange);
+      display: inline-block;
+      border-radius: 2px;
+    }
+
+    .gateway-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--navy);
+      margin-bottom: 10px;
+    }
+
+    .gateway-subtitle {
+      font-size: 14px;
+      color: var(--grey);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .gateway-teaser {
+      background: var(--white);
+      border: 1px solid var(--grey-light);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .gateway-teaser-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--grey);
+      font-weight: 500;
+    }
+
+    .teaser-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 10px;
+      color: white;
+      font-weight: 700;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border: 1.5px solid var(--grey-light);
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--navy);
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    .form-group input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(27, 98, 255, 0.12);
+    }
+
+    .form-group input::placeholder {
+      color: #b0bac9;
+    }
+
+    .gateway-btn {
+      width: 100%;
+      height: 52px;
+      background: var(--orange);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 18px;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: 0.01em;
+    }
+
+    .gateway-btn:hover {
+      background: #e84e20;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(255, 92, 43, 0.35);
+    }
+
+    .gateway-btn:active {
+      transform: translateY(0);
+    }
+
+    .gateway-privacy {
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--grey-mid);
+      margin-top: 14px;
+      line-height: 1.5;
+    }
+
+    .gateway-privacy a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    /* ─── MAIN CONTENT PAGE ─────────────────────────────────────────────── */
+    #content-page {
+      display: none;
+      min-height: 100vh;
+    }
+
+    /* HEADER */
+    .page-header {
+      background: var(--navy);
+      padding: 0;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 48px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .header-cta-small {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      font-weight: 500;
+    }
+
+    .header-cta-small a {
+      color: var(--orange);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* HERO BAND */
+    .hero-band {
+      background: var(--navy);
+      padding: 52px 48px 56px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 18px;
+    }
+
+    .hero-eyebrow::before {
+      content: '';
+      width: 24px;
+      height: 2px;
+      background: var(--orange);
+      display: inline-block;
+      border-radius: 2px;
+    }
+
+    .hero-title {
+      font-family: 'Sora', sans-serif;
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 800;
+      line-height: 1.2;
+      color: #ffffff;
+      max-width: 820px;
+      margin-bottom: 20px;
+    }
+
+    .hero-title span.highlight {
+      color: var(--orange);
+    }
+
+    .hero-desc {
+      font-size: 16px;
+      color: rgba(255,255,255,0.72);
+      line-height: 1.7;
+      max-width: 680px;
+      margin-bottom: 28px;
+    }
+
+    .hero-meta-row {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+    }
+
+    .hero-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      font-weight: 500;
+    }
+
+    .hero-meta-item svg {
+      flex-shrink: 0;
+    }
+
+    /* MAIN BODY */
+    .page-body {
+      background: var(--white);
+      padding: 56px 48px 80px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* INTRO SECTION */
+    .intro-box {
+      background: #fff;
+      border: 1px solid var(--grey-light);
+      border-left: 4px solid var(--blue);
+      border-radius: 0 12px 12px 0;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+      font-size: 15px;
+      color: var(--grey);
+      line-height: 1.75;
+    }
+
+    .intro-box strong {
+      color: var(--navy);
+    }
+
+    /* SECTION LABEL */
+    .section-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--grey-light);
+    }
+
+    .section-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 8px;
+      line-height: 1.25;
+    }
+
+    .section-desc {
+      font-size: 15px;
+      color: var(--grey);
+      margin-bottom: 36px;
+      line-height: 1.65;
+    }
+
+    /* WARNING SIGN CARDS */
+    .signs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      margin-bottom: 60px;
+    }
+
+    .sign-card {
+      background: #ffffff;
+      border: 1px solid var(--grey-light);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(13, 31, 60, 0.05);
+      transition: box-shadow 0.2s;
+    }
+
+    .sign-card:hover {
+      box-shadow: 0 8px 32px rgba(13, 31, 60, 0.10);
+    }
+
+    .sign-card-header {
+      background: var(--navy);
+      padding: 20px 28px;
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+    }
+
+    .sign-number {
+      font-family: 'Sora', sans-serif;
+      font-size: 42px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.12);
+      line-height: 1;
+      flex-shrink: 0;
+      min-width: 52px;
+      letter-spacing: -2px;
+    }
+
+    .sign-header-content {
+      flex: 1;
+    }
+
+    .sign-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+      background: rgba(255, 92, 43, 0.12);
+      border: 1px solid rgba(255, 92, 43, 0.3);
+      border-radius: 4px;
+      padding: 3px 8px;
+      margin-bottom: 8px;
+    }
+
+    .sign-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.3;
+    }
+
+    .sign-card-body {
+      padding: 24px 28px;
+    }
+
+    .sign-description {
+      font-size: 14.5px;
+      color: var(--grey);
+      line-height: 1.7;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--grey-light);
+    }
+
+    .sign-description strong {
+      color: var(--navy);
+    }
+
+    /* CHECKLIST ITEMS */
+    .checklist-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checklist-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--grey-light);
+    }
+
+    .checklist {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--navy);
+      line-height: 1.55;
+    }
+
+    .checklist li .check-box {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--grey-light);
+      border-radius: 5px;
+      flex-shrink: 0;
+      margin-top: 1px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      background: #fff;
+    }
+
+    .checklist li.checked .check-box {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+
+    .checklist li.checked .check-box::after {
+      content: '';
+      width: 10px;
+      height: 6px;
+      border-left: 2px solid white;
+      border-bottom: 2px solid white;
+      transform: rotate(-45deg) translateY(-1px);
+      display: block;
+    }
+
+    .checklist li.checked .check-text {
+      color: var(--grey-mid);
+      text-decoration: line-through;
+      text-decoration-color: var(--grey-light);
+    }
+
+    /* ACTION BLOCK */
+    .action-block {
+      background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
+      border: 1px solid rgba(27, 98, 255, 0.15);
+      border-radius: 10px;
+      padding: 16px 18px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .action-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .action-icon svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .action-content {}
+
+    .action-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 4px;
+    }
+
+    .action-text {
+      font-size: 13.5px;
+      color: var(--navy);
+      line-height: 1.55;
+      font-weight: 500;
+    }
+
+    /* DANGER METER */
+    .danger-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--grey-light);
+    }
+
+    .danger-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--grey-mid);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .danger-bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--grey-light);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+
+    .danger-bar-fill {
+      height: 100%;
+      border-radius: 100px;
+      transition: width 1s ease;
+    }
+
+    .danger-value {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--navy);
+      white-space: nowrap;
+    }
+
+    /* SCORE SUMMARY */
+    .score-summary {
+      background: var(--navy);
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 48px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 28px;
+      align-items: center;
+    }
+
+    .score-text h3 {
+      font-family: 'Sora', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .score-text p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.65;
+    }
+
+    .score-display {
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .score-number {
+      font-family: 'Sora', sans-serif;
+      font-size: 52px;
+      font-weight: 800;
+      color: var(--orange);
+      line-height: 1;
+      display: block;
+      transition: all 0.3s;
+    }
+
+    .score-label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.45);
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* CTA SECTION */
+    .cta-section {
+      background: linear-gradient(135deg, #FF5C2B 0%, #e84214 100%);
+      border-radius: 20px;
+      padding: 48px 44px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 32px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 200px; height: 200px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .cta-section::after {
+      content: '';
+      position: absolute;
+      bottom: -60px; right: 80px;
+      width: 160px; height: 160px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+    }
+
+    .cta-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.65);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cta-eyebrow::before {
+      content: '';
+      width: 20px; height: 2px;
+      background: rgba(255,255,255,0.65);
+      border-radius: 2px;
+    }
+
+    .cta-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.25;
+      margin-bottom: 12px;
+    }
+
+    .cta-desc {
+      font-size: 15px;
+      color: rgba(255,255,255,0.75);
+      line-height: 1.65;
+      max-width: 540px;
+    }
+
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #fff;
+      color: var(--orange);
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 16px 32px;
+      border-radius: 10px;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: transform 0.15s, box-shadow 0.2s;
+      flex-shrink: 0;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.20);
+    }
+
+    /* FOOTER */
+    .page-footer {
+      background: var(--navy);
+      padding: 32px 48px;
+    }
+
+    .footer-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .footer-text {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.6;
+    }
+
+    .footer-text a {
+      color: rgba(255,255,255,0.55);
+      text-decoration: none;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    .footer-links a {
+      font-size: 12.5px;
+      color: rgba(255,255,255,0.45);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .footer-links a:hover {
+      color: rgba(255,255,255,0.75);
+    }
+
+    /* ─── PROGRESS BAR ──────────────────────────────────────────────────── */
+    .progress-strip {
+      background: var(--white);
+      border-bottom: 1px solid var(--grey-light);
+      padding: 14px 48px;
+    }
+
+    .progress-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .progress-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--grey);
+      white-space: nowrap;
+    }
+
+    .progress-label span {
+      color: var(--blue);
+    }
+
+    .overall-bar-track {
+      flex: 1;
+      height: 8px;
+      background: var(--grey-light);
+      border-radius: 100px;
+      overflow: hidden;
+      max-width: 300px;
+    }
+
+    .overall-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue) 0%, var(--orange) 100%);
+      border-radius: 100px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .progress-status {
+      font-size: 12px;
+      color: var(--grey-mid);
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    /* ─── UTILITY ────────────────────────────────────────────────────────── */
+    .spacer-lg { height: 48px; }
+
+    /* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
+    @media (max-width: 700px) {
+      .gateway-card { padding: 32px 24px; }
+      .header-top { padding: 18px 20px; }
+      .hero-band { padding: 36px 20px 40px; }
+      .page-body { padding: 36px 20px 60px; }
+      .score-summary { grid-template-columns: 1fr; gap: 20px; }
+      .score-display { text-align: left; display: flex; align-items: baseline; gap: 12px; }
+      .cta-section { grid-template-columns: 1fr; text-align: center; padding: 32px 24px; }
+      .cta-button { width: 100%; }
+      .cta-desc { max-width: 100%; }
+      .progress-strip { padding: 12px 20px; }
+      .sign-card-header { padding: 16px 20px; }
+      .sign-card-body { padding: 18px 20px; }
+      .footer-inner { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .page-footer { padding: 24px 20px; }
+    }
+
+    /* ─── ANIMATIONS ─────────────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .sign-card {
+      animation: fadeUp 0.4s ease both;
+    }
+    .sign-card:nth-child(1) { animation-delay: 0.05s; }
+    .sign-card:nth-child(2) { animation-delay: 0.12s; }
+    .sign-card:nth-child(3) { animation-delay: 0.19s; }
+    .sign-card:nth-child(4) { animation-delay: 0.26s; }
+    .sign-card:nth-child(5) { animation-delay: 0.33s; }
+
+    /* ─── VALIDATION ─────────────────────────────────────────────────────── */
+    .form-group input.error {
+      border-color: #e53e3e;
+      box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.12);
+    }
+
+    .error-msg {
+      font-size: 11.5px;
+      color: #e53e3e;
+      margin-top: 5px;
+      display: none;
+    }
+
+    .form-group input.error + .error-msg {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ════════════════════════════════════════════════════════════
+       GATEWAY OVERLAY
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="gateway" aria-modal="true" role="dialog" aria-label="Unlock your free audit checklist">
+    <div class="gateway-card">
+
+      <!-- Logo -->
+      <div class="gateway-logo">
+        <!-- Traffic Radius SVG Logo — faithful recreation -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 70" height="52" aria-label="Traffic Radius">
+          <!-- Bar chart icon -->
+          <!-- Bar 1: Black (tallest on left – shortest) -->
+          <rect x="4" y="38" width="9" height="22" rx="1.5" fill="#1A1A1A"/>
+          <!-- Bar 2: Sky Blue (medium) -->
+          <rect x="17" y="26" width="9" height="34" rx="1.5" fill="#45B8D8"/>
+          <!-- Bar 3: Green (tallest) -->
+          <rect x="30" y="10" width="9" height="50" rx="1.5" fill="#8DC63F"/>
+          <!-- "Traffic" bold dark -->
+          <text x="50" y="48" font-family="'Sora', 'Arial Black', sans-serif" font-weight="700" font-size="36" fill="#333333" letter-spacing="-0.5">Traffic</text>
+          <!-- "Radius" lighter -->
+          <text x="202" y="48" font-family="'Sora', Arial, sans-serif" font-weight="400" font-size="36" fill="#555555" letter-spacing="-0.5">Radius</text>
+          <!-- dot on the "i" in Radius — blue -->
+          <circle cx="268" cy="13" r="3.2" fill="#45B8D8"/>
+          <!-- Tagline -->
+          <text x="50" y="65" font-family="'Inter', Georgia, serif" font-style="italic" font-size="12" fill="#555555" letter-spacing="0.2">Growing Your Business the Smart Way!</text>
+        </svg>
+      </div>
+
+      <div class="gateway-eyebrow">Free Meta Ads Audit Checklist</div>
+
+      <h1 class="gateway-title">Do You Recognise These 5 Early Warning Signs That Your Meta Ads Are About to Fail?</h1>
+
+      <p class="gateway-subtitle">
+        Most Meta Ad campaigns don't fail overnight — they send signals weeks beforehand. This free checklist shows you exactly what to look for, before it costs you more budget.
+      </p>
+
+      <!-- Teaser preview -->
+      <div class="gateway-teaser">
+        <div class="gateway-teaser-item">
+          <span class="teaser-icon">1</span>
+          <span>Your frequency is climbing past the danger zone</span>
+        </div>
+        <div class="gateway-teaser-item">
+          <span class="teaser-icon">2</span>
+          <span>Your cost per result creeping up week over week</span>
+        </div>
+        <div class="gateway-teaser-item">
+          <span class="teaser-icon">3</span>
+          <span>Your CTR is dropping — but impressions hold steady</span>
+        </div>
+        <div class="gateway-teaser-item" style="color:#b0bac9;">
+          <span class="teaser-icon" style="background:var(--grey-light);color:var(--grey-mid);">+</span>
+          <span style="color:#b0bac9;">2 more warning signs inside…</span>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <form id="gateway-form" novalidate>
+        <div class="form-group">
+          <label for="g-name">Your Name</label>
+          <input type="text" id="g-name" name="name" placeholder="e.g. Sarah Mitchell" autocomplete="given-name" required />
+          <div class="error-msg">Please enter your name.</div>
+        </div>
+        <div class="form-group">
+          <label for="g-email">Business Email</label>
+          <input type="email" id="g-email" name="email" placeholder="e.g. sarah@yourbusiness.com.au" autocomplete="email" required />
+          <div class="error-msg">Please enter a valid email address.</div>
+        </div>
+        <div class="form-group">
+          <label for="g-website">Your Website URL</label>
+          <input type="url" id="g-website" name="website" placeholder="e.g. https://yourbusiness.com.au" autocomplete="url" />
+        </div>
+
+        <button type="submit" class="gateway-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Unlock My Free Audit Checklist
+        </button>
+      </form>
+
+      <!-- Social proof strip -->
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px;padding:10px 0;border-top:1px solid var(--grey-light);">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span style="font-size:11.5px;color:var(--grey);font-weight:600;">400+ businesses trust Traffic Radius</span>
+        </div>
+        <div style="width:1px;height:14px;background:var(--grey-light);"></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span style="font-size:11.5px;color:var(--grey);font-weight:600;">Award-winning Melbourne agency</span>
+        </div>
+      </div>
+      <p class="gateway-privacy">
+        🔒 Zero spam — ever. Your details are only used to deliver this checklist and occasional expert Meta Ads insights. <a href="https://trafficradius.com.au/privacy-policy" target="_blank">Privacy Policy</a>.
+      </p>
+
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       MAIN CONTENT PAGE
+  ═══════════════════════════════════════════════════════════════ -->
+  <div id="content-page">
+
+    <!-- HEADER -->
+    <header class="page-header">
+      <div class="header-top">
+        <!-- Logo -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 70" height="44" aria-label="Traffic Radius">
+          <rect x="4" y="38" width="9" height="22" rx="1.5" fill="#ffffff"/>
+          <rect x="17" y="26" width="9" height="34" rx="1.5" fill="#45B8D8"/>
+          <rect x="30" y="10" width="9" height="50" rx="1.5" fill="#8DC63F"/>
+          <text x="50" y="48" font-family="'Sora', 'Arial Black', sans-serif" font-weight="700" font-size="36" fill="#ffffff" letter-spacing="-0.5">Traffic</text>
+          <text x="202" y="48" font-family="'Sora', Arial, sans-serif" font-weight="400" font-size="36" fill="rgba(255,255,255,0.75)" letter-spacing="-0.5">Radius</text>
+          <circle cx="233" cy="13" r="3.2" fill="#45B8D8"/>
+          <text x="50" y="65" font-family="'Inter', Georgia, serif" font-style="italic" font-size="12" fill="rgba(255,255,255,0.45)" letter-spacing="0.2">Growing Your Business the Smart Way!</text>
+        </svg>
+        <div class="header-cta-small">
+          Questions? <a href="https://trafficradius.com.au/contact" target="_blank">Talk to an expert →</a>
+        </div>
+      </div>
+
+      <!-- HERO -->
+      <div class="hero-band">
+        <div class="hero-eyebrow">Free Meta Ads Audit Checklist</div>
+        <h1 class="hero-title">Do You Recognise These <span class="highlight">5 Early Warning Signs</span> That Your Meta Ads Are About to Fail?</h1>
+        <p class="hero-desc">
+          Most business owners discover their Meta Ads have been haemorrhaging budget only after the damage is done. These five signals appear weeks before a campaign collapses — and they're hiding in plain sight inside your Ads Manager right now.
+        </p>
+        <div class="hero-meta-row">
+          <div class="hero-meta-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            5-minute read
+          </div>
+          <div class="hero-meta-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Interactive audit checklist
+          </div>
+          <div class="hero-meta-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Built for business owners managing ads without an agency
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- PROGRESS BAR -->
+    <div class="progress-strip">
+      <div class="progress-inner">
+        <div class="progress-label">Your Audit Progress: <span id="progress-count">0 of 5</span> signs reviewed</div>
+        <div class="overall-bar-track">
+          <div class="overall-bar-fill" id="overall-bar"></div>
+        </div>
+        <div class="progress-status" id="progress-status">Tick each warning sign as you review it</div>
+      </div>
+    </div>
+
+    <!-- BODY -->
+    <main class="page-body">
+
+      <!-- INTRO -->
+      <div class="intro-box">
+        <strong>Here's the hard truth:</strong> Meta Ads don't fail suddenly — they fail slowly, then all at once. The warning signs are always there, but most business owners don't know what they're looking at until they've already wasted thousands in budget. This checklist gives you the same diagnostic framework Traffic Radius uses when auditing client accounts. Work through each of the five signs below, check off the items that apply, and calculate your risk score at the end.
+      </div>
+
+      <!-- SECTION HEADER -->
+      <div class="section-label">The 5 Warning Signs</div>
+      <h2 class="section-title">Your Meta Ads Failure Audit</h2>
+      <p class="section-desc">For each warning sign, review the checklist items. Tick anything that's currently true for your account. The more you tick, the more urgent the action needed.</p>
+
+      <!-- SIGNS LIST -->
+      <div class="signs-list" id="signs-list">
+
+        <!-- ─ SIGN 1 ─────────────────────────────────────────────── -->
+        <div class="sign-card" data-sign="1">
+          <div class="sign-card-header">
+            <div class="sign-number">01</div>
+            <div class="sign-header-content">
+              <div class="sign-badge">⚠ Audience Fatigue</div>
+              <h3 class="sign-title">Your Frequency Is Climbing Above 3.0</h3>
+            </div>
+          </div>
+          <div class="sign-card-body">
+            <p class="sign-description">
+              Frequency is the average number of times one person has seen your ad. Once it climbs past <strong>3.0 — and especially above 3.5</strong> — the law of diminishing returns kicks in hard. The people most likely to buy have already made their decision. You're now paying to annoy the same audience repeatedly, and Meta's algorithm is starting to penalise your relevance ranking in response.
+            </p>
+
+            <div class="checklist-label">Audit Checklist</div>
+            <ul class="checklist" data-sign-checks="1">
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My campaign frequency in Ads Manager is above 3.0 over a 7-day window</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I haven't refreshed my creative (images, copy, or video) in the last 3–4 weeks</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My cost-per-click (CPC) has risen by more than 15% over the past fortnight</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I'm running to the same saved or custom audience without rotation or exclusion lists</span>
+              </li>
+            </ul>
+
+            <div class="action-block">
+              <div class="action-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+              </div>
+              <div class="action-content">
+                <div class="action-label">What To Do Now</div>
+                <div class="action-text">Pause the fatigued ad set. Launch a fresh creative variant with a new angle or hook. Exclude converters and add a lookalike audience to expand your reach and reset frequency.</div>
+              </div>
+            </div>
+
+            <div class="danger-row">
+              <span class="danger-label">Risk Level</span>
+              <div class="danger-bar-track">
+                <div class="danger-bar-fill" style="width: 85%; background: linear-gradient(90deg, #FF5C2B, #c93d12);"></div>
+              </div>
+              <span class="danger-value" style="color: var(--orange);">High</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─ SIGN 2 ─────────────────────────────────────────────── -->
+        <div class="sign-card" data-sign="2">
+          <div class="sign-card-header">
+            <div class="sign-number">02</div>
+            <div class="sign-header-content">
+              <div class="sign-badge">⚠ Spend Efficiency</div>
+              <h3 class="sign-title">Your Cost Per Result Is Rising Every Week</h3>
+            </div>
+          </div>
+          <div class="sign-card-body">
+            <p class="sign-description">
+              A week-over-week increase of <strong>10–20% in your Cost Per Lead (CPL) or Cost Per Purchase</strong> isn't random variation — it's a reliable signal of audience saturation. The prospects most predisposed to convert have already done so. Meta is now working harder to find buyers in a pool that's increasingly resistant. Left unchecked, your CPL will continue to rise until the campaign becomes unviable.
+            </p>
+
+            <div class="checklist-label">Audit Checklist</div>
+            <ul class="checklist" data-sign-checks="2">
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My CPL or cost per purchase has increased by 10% or more in the last two weeks</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My total ad spend is consistent or growing, but results are staying flat or declining</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I haven't expanded my audience targeting or tested a new audience segment recently</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I'm using a manual bid strategy without reviewing it against current market CPMs</span>
+              </li>
+            </ul>
+
+            <div class="action-block">
+              <div class="action-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+              </div>
+              <div class="action-content">
+                <div class="action-label">What To Do Now</div>
+                <div class="action-text">Expand your audience — test a 3–5% lookalike from your best customer list. Consider broadening age ranges or interests. Review your bid cap strategy and switch to Advantage+ if you've been manual bidding for more than 30 days.</div>
+              </div>
+            </div>
+
+            <div class="danger-row">
+              <span class="danger-label">Risk Level</span>
+              <div class="danger-bar-track">
+                <div class="danger-bar-fill" style="width: 78%; background: linear-gradient(90deg, #FF5C2B, #c93d12);"></div>
+              </div>
+              <span class="danger-value" style="color: var(--orange);">High</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─ SIGN 3 ─────────────────────────────────────────────── -->
+        <div class="sign-card" data-sign="3">
+          <div class="sign-card-header">
+            <div class="sign-number">03</div>
+            <div class="sign-header-content">
+              <div class="sign-badge">⚠ Creative Fatigue</div>
+              <h3 class="sign-title">CTR Is Dropping — But Impressions Are Holding Steady</h3>
+            </div>
+          </div>
+          <div class="sign-card-body">
+            <p class="sign-description">
+              When your click-through rate (CTR) falls while your impressions stay the same or grow, your audience has seen your ad — and stopped caring. <strong>This is classic creative fatigue.</strong> Meta's algorithm will continue to serve your ad because you've set the budget, but it's progressively showing it to lower-quality portions of your audience. A declining CTR below 0.9% on cold audiences is a red flag demanding immediate creative intervention.
+            </p>
+
+            <div class="checklist-label">Audit Checklist</div>
+            <ul class="checklist" data-sign-checks="3">
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My link CTR has dropped more than 20% from its peak over the past 14 days</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I'm running the same primary image or video creative for more than 4 weeks</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My 3-second video view rate or thumb-stop ratio has declined noticeably</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I have no active A/B test running against my current best-performing creative</span>
+              </li>
+            </ul>
+
+            <div class="action-block">
+              <div class="action-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              </div>
+              <div class="action-content">
+                <div class="action-label">What To Do Now</div>
+                <div class="action-text">Launch two new creative variants with different angles: one problem-focused (\"Are your Meta Ads wasting budget?\") and one social-proof-led (results, testimonials, numbers). Use Dynamic Creative Testing within the same ad set to let Meta identify the winner.</div>
+              </div>
+            </div>
+
+            <div class="danger-row">
+              <span class="danger-label">Risk Level</span>
+              <div class="danger-bar-track">
+                <div class="danger-bar-fill" style="width: 65%; background: linear-gradient(90deg, #f6a623, #e07b0a);"></div>
+              </div>
+              <span class="danger-value" style="color: #e07b0a;">Medium–High</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─ SIGN 4 ─────────────────────────────────────────────── -->
+        <div class="sign-card" data-sign="4">
+          <div class="sign-card-header">
+            <div class="sign-number">04</div>
+            <div class="sign-header-content">
+              <div class="sign-badge">⚠ Conversion Disconnect</div>
+              <h3 class="sign-title">You're Getting Clicks — But Leads Have Dried Up</h3>
+            </div>
+          </div>
+          <div class="sign-card-body">
+            <p class="sign-description">
+              Clicks without conversions is one of the most confusing (and expensive) failure modes. The ad is doing its job — it's generating interest. But somewhere between the click and the form, the funnel is broken. <strong>The problem is usually a mismatch</strong> between what the ad promises and what the landing page delivers, or you've accidentally drifted into targeting an audience that's curious but not ready to buy.
+            </p>
+
+            <div class="checklist-label">Audit Checklist</div>
+            <ul class="checklist" data-sign-checks="4">
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My landing page conversion rate has dropped below 2% despite healthy click volume</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">The headline and offer on my landing page differ from the ad that drove the click</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My ad set targeting has broadened recently (Advantage+ audience expansion switched on)</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My landing page load time is above 3 seconds on mobile (tested recently)</span>
+              </li>
+            </ul>
+
+            <div class="action-block">
+              <div class="action-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              </div>
+              <div class="action-content">
+                <div class="action-label">What To Do Now</div>
+                <div class="action-text">Audit the message match between your ad and landing page — the headline, offer, and visual must be consistent. Check page speed with Google PageSpeed Insights. If targeting has broadened significantly, manually define your audience and disable Advantage+ expansion temporarily.</div>
+              </div>
+            </div>
+
+            <div class="danger-row">
+              <span class="danger-label">Risk Level</span>
+              <div class="danger-bar-track">
+                <div class="danger-bar-fill" style="width: 72%; background: linear-gradient(90deg, #FF5C2B, #c93d12);"></div>
+              </div>
+              <span class="danger-value" style="color: var(--orange);">High</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─ SIGN 5 ─────────────────────────────────────────────── -->
+        <div class="sign-card" data-sign="5">
+          <div class="sign-card-header">
+            <div class="sign-number">05</div>
+            <div class="sign-header-content">
+              <div class="sign-badge">⚠ Strategic Stagnation</div>
+              <h3 class="sign-title">You Haven't Tested a New Creative in Over 30 Days</h3>
+            </div>
+          </div>
+          <div class="sign-card-body">
+            <p class="sign-description">
+              Meta's algorithm actively rewards accounts that test, learn, and iterate. When an account runs the same creative for more than 4–6 weeks without introducing new variants, it enters what experienced media buyers call a <strong>"slow death spiral"</strong> — CPL creeps up, relevance dips, and the campaign quietly underperforms against the auction. Worse, the business owner often doesn't notice because the numbers move gradually, not dramatically.
+            </p>
+
+            <div class="checklist-label">Audit Checklist</div>
+            <ul class="checklist" data-sign-checks="5">
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I cannot recall the last time I launched a brand-new creative into an active campaign</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">I have no structured creative testing calendar or testing cadence in place</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My top-performing ads have been "winning" for more than 6 weeks without a challenger</span>
+              </li>
+              <li data-check>
+                <span class="check-box"></span>
+                <span class="check-text">My Quality Ranking in Ads Manager shows "Average" or "Below Average" on active ads</span>
+              </li>
+            </ul>
+
+            <div class="action-block">
+              <div class="action-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+              <div class="action-content">
+                <div class="action-label">What To Do Now</div>
+                <div class="action-text">Adopt a fortnightly creative testing rhythm: introduce at least two new variants every two weeks. Test one variable at a time — headline, image, hook, or offer. Archive underperformers after 7–10 days and promote winners to your primary ad set.</div>
+              </div>
+            </div>
+
+            <div class="danger-row">
+              <span class="danger-label">Risk Level</span>
+              <div class="danger-bar-track">
+                <div class="danger-bar-fill" style="width: 58%; background: linear-gradient(90deg, #f6a623, #e07b0a);"></div>
+              </div>
+              <span class="danger-value" style="color: #e07b0a;">Medium–High</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- / .signs-list -->
+
+      <!-- SCORE SUMMARY -->
+      <div class="score-summary">
+        <div class="score-text">
+          <h3>Your Meta Ads Risk Score</h3>
+          <p id="score-interpretation">Tick the checklist items above to generate your personalised risk score. The more items that apply to your account, the more urgently you need to act.</p>
+        </div>
+        <div class="score-display">
+          <span class="score-number" id="score-number">0</span>
+          <div class="score-label">of 20 ticked</div>
+        </div>
+      </div>
+
+      <!-- CTA SECTION -->
+      <div class="cta-section">
+        <div>
+          <div class="cta-eyebrow">Free Strategy Call</div>
+          <h2 class="cta-title">Not Sure What to Fix First?<br>Let's Audit Your Account Together.</h2>
+          <p class="cta-desc">
+            Book a free, no-obligation Meta Ads strategy call with the Traffic Radius team. We'll review your active campaigns, diagnose the exact warning signs from this checklist, and give you a clear, prioritised action plan — at no cost.
+          </p>
+        </div>
+        <a href="https://trafficradius.com.au/contact" target="_blank" class="cta-button">
+          Book My Free Strategy Call
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="page-footer">
+      <div class="footer-inner">
+        <div class="footer-text">
+          © 2026 Traffic Radius. All rights reserved. Melbourne, Australia.<br />
+          <a href="https://trafficradius.com.au" target="_blank">trafficradius.com.au</a>
+        </div>
+        <div class="footer-links">
+          <a href="https://trafficradius.com.au/privacy-policy" target="_blank">Privacy Policy</a>
+          <a href="https://trafficradius.com.au/contact" target="_blank">Contact</a>
+          <a href="https://trafficradius.com.au" target="_blank">Visit Website</a>
+        </div>
+      </div>
+    </footer>
+
+  </div><!-- / #content-page -->
+
+
+  <!-- ════════════════════════════════════════════════════════════
+       JAVASCRIPT
+  ═══════════════════════════════════════════════════════════════ -->
+  <script>
+    /* ─── GATEWAY FORM ─────────────────────────────────────────── */
+    const gateway      = document.getElementById('gateway');
+    const contentPage  = document.getElementById('content-page');
+    const gatewayForm  = document.getElementById('gateway-form');
+    const nameInput    = document.getElementById('g-name');
+    const emailInput   = document.getElementById('g-email');
+
+    function validateEmail(v) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    }
+
+    gatewayForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      let valid = true;
+
+      // Validate name
+      if (!nameInput.value.trim()) {
+        nameInput.classList.add('error');
+        valid = false;
+      } else {
+        nameInput.classList.remove('error');
+      }
+
+      // Validate email
+      if (!validateEmail(emailInput.value.trim())) {
+        emailInput.classList.add('error');
+        valid = false;
+      } else {
+        emailInput.classList.remove('error');
+      }
+
+      if (!valid) return;
+
+      // Store lead data (in memory — ready for webhook/CRM integration)
+      const lead = {
+        name:    nameInput.value.trim(),
+        email:   emailInput.value.trim(),
+        website: document.getElementById('g-website').value.trim(),
+        ts:      new Date().toISOString(),
+        source:  'meta-lead-magnet-5-warning-signs'
+      };
+
+      // Personalise the hero (optional: use name)
+      const firstName = lead.name.split(' ')[0];
+
+      // Reveal content
+      gateway.style.display = 'none';
+      contentPage.style.display = 'block';
+      document.body.style.overflow = '';
+      window.scrollTo(0, 0);
+
+      // Console log for CRM/webhook integration
+      console.log('[Traffic Radius Lead]', JSON.stringify(lead));
+    });
+
+    /* ─── CHECKLIST INTERACTION ────────────────────────────────── */
+    const overallBar   = document.getElementById('overall-bar');
+    const progressCount = document.getElementById('progress-count');
+    const progressStatus = document.getElementById('progress-status');
+    const scoreNumber  = document.getElementById('score-number');
+    const scoreInterp  = document.getElementById('score-interpretation');
+
+    let totalChecked   = 0;
+    const totalItems   = 20; // 4 per sign × 5 signs
+
+    function updateProgress() {
+      const pct = Math.round((totalChecked / totalItems) * 100);
+      overallBar.style.width = pct + '%';
+
+      // Count how many signs have been fully reviewed
+      const signsReviewed = Array.from(document.querySelectorAll('[data-sign]')).filter(s => {
+        const items = s.querySelectorAll('[data-check]');
+        return Array.from(items).some(i => i.classList.contains('checked'));
+      }).length;
+
+      progressCount.textContent = signsReviewed + ' of 5';
+      scoreNumber.textContent   = totalChecked;
+
+      // Status messages
+      if (totalChecked === 0) {
+        progressStatus.textContent = 'Tick each warning sign as you review it';
+        scoreInterp.textContent    = 'Tick the checklist items above to generate your personalised risk score. The more items that apply to your account, the more urgently you need to act.';
+      } else if (totalChecked <= 4) {
+        progressStatus.textContent = 'Low immediate risk — but keep monitoring';
+        scoreInterp.innerHTML      = 'Your account shows <strong>' + totalChecked + ' risk indicators</strong>. Your campaigns may be holding for now, but these early signals deserve attention before they compound. Book a call to get ahead of it.';
+      } else if (totalChecked <= 9) {
+        progressStatus.textContent = 'Moderate risk — action recommended within 7 days';
+        scoreInterp.innerHTML      = '<strong>' + totalChecked + ' risk indicators identified.</strong> Your campaigns are showing meaningful warning signs. Without intervention, expect your CPL to continue rising over the next 2–4 weeks. A campaign audit is strongly recommended.';
+      } else if (totalChecked <= 14) {
+        progressStatus.textContent = '⚠ High risk — your budget is likely being wasted right now';
+        scoreInterp.innerHTML      = '<strong>' + totalChecked + ' risk indicators active.</strong> This is a significant number of warning signs. It\'s highly likely your Meta Ads are currently underperforming and wasting budget. Immediate action — and an expert audit — is strongly recommended.';
+      } else {
+        progressStatus.textContent = '🚨 Critical — stop overspending before it gets worse';
+        scoreInterp.innerHTML      = '<strong>' + totalChecked + ' out of 20 risk indicators.</strong> Your Meta Ads campaigns are in a critical state. Every day you continue spending without addressing these issues, you\'re burning budget that could be generating qualified leads. Please book your free strategy call today.';
+      }
+    }
+
+    document.addEventListener('click', function(e) {
+      const checkBox = e.target.closest('.check-box');
+      if (!checkBox) return;
+
+      const li = checkBox.closest('li[data-check]');
+      if (!li) return;
+
+      if (li.classList.contains('checked')) {
+        li.classList.remove('checked');
+        totalChecked = Math.max(0, totalChecked - 1);
+      } else {
+        li.classList.add('checked');
+        totalChecked++;
+      }
+      updateProgress();
+    });
+
+    // Initial call
+    updateProgress();
+  </script>
+
+</body>
+</html>

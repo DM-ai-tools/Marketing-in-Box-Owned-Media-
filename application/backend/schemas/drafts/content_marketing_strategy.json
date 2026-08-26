@@ -1,0 +1,184 @@
+{
+  "asset_id": "content_marketing_strategy",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Content-Marketing-Strategy-Architect-Prompt.md",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry_niche",
+      "label": "Industry / Niche",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_country",
+      "label": "Region / Country",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — determines currency, compliance body, and localisation requirements"
+    },
+    {
+      "field_id": "prepared_by_agency_name_optional",
+      "label": "Prepared By / Agency Name (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "plan_date_version_optional",
+      "label": "Plan Date / Version (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "primary_service_pillar_page_being_supported",
+      "label": "Primary Service / Pillar Page Being Supported",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — the single hub page this entire content strategy is built to surround and support, e.g. \"Google Ads Management,\" trafficradius.com.au/google-ads-management. If it doesn't exist yet, state the target slug."
+    },
+    {
+      "field_id": "existing_content_assets_optional",
+      "label": "Existing Content Assets (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "unresolved_context_key",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — reference any Plan of Action, funnel document, lead magnet, ROI calculator, or ICP solution-aware document already built for this service, so this strategy folds them into the cluster architecture rather than re-briefing them from scratch. If nothing exists, say \"greenfield.\""
+    },
+    {
+      "field_id": "icp_buyer_personas",
+      "label": "ICP / Buyer Personas",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — paste, attach, or say \"use the ICP established earlier in this conversation.\" If you want 2-3 distinct personas (primary/secondary/tertiary) derived from a single ICP rather than supplied directly, say so — e.g. a primary decision-maker, a secondary internal champion/coordinator, and a tertiary \"already has a provider but frustrated\" switcher persona."
+    },
+    {
+      "field_id": "cro_brand_voice_framework_optional",
+      "label": "CRO / Brand Voice Framework (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the CRO audit / tone-of-voice already established, so every content brief inherits consistent voice and any locked terminology."
+    },
+    {
+      "field_id": "competitor_list",
+      "label": "Competitor List",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "competitor_analysis_content_marketing",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — attach or reference 3-5 direct content-marketing competitors in this industry and region. Include quantified footprint data if you have it (monthly visits, service page count, case study count, educational/blog page count, paid landing page count, bounce rate) from a tool such as Ahrefs/SEMrush/Similarweb. If you don't have this data, name the competitors anyway and state \"no traffic/page-count data available — competitor content gaps will be assessed qualitatively only.\" Now sourced from the paired Competitor Analysis — Content Marketing stage (06_Content_Marketing.md) when available; falls back to asking the user for a manual list."
+    },
+    {
+      "field_id": "keyword_search_volume_data_source_optional",
+      "label": "Keyword / Search Volume Data Source (optional)",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER — attach or reference a keyword research export (Ahrefs, SEMrush, Google Keyword Planner) covering this service in this region. If left blank, state estimated monthly search volumes using judgement and clearly label every volume figure as an estimate, not verified data.",
+      "fallback_instruction": "If left blank, state estimated monthly search volumes using judgement and clearly label every volume figure as an estimate, not verified data."
+    },
+    {
+      "field_id": "regulated_field_advertising_compliance_body",
+      "label": "Regulated Field / Advertising Compliance Body",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — name the relevant advertising/consumer-protection body for this region and industry, e.g. ACCC (Australia), FTC (US), ASA (UK), or \"None — general commercial content only.\" This governs the claims and evidencing standard applied throughout."
+    },
+    {
+      "field_id": "content_production_capacity",
+      "label": "Content Production Capacity",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — realistic weekly/monthly output, e.g. \"2 long-form + 2 mid-form + 1 video + 3 social posts per week\" or \"1 blog post every 2 weeks, no video capacity.\" If left blank, infer a conservative cadence from the stated Team Roles Available below.",
+      "fallback_instruction": "If left blank, infer a conservative cadence from the stated Team Roles Available."
+    },
+    {
+      "field_id": "editorial_calendar_length",
+      "label": "Editorial Calendar Length",
+      "kind": "number",
+      "required": true,
+      "source": "user_input",
+      "default": 12,
+      "raw_explanation": "YOUR ANSWER — number of weeks to plan in the detailed calendar, default 12"
+    },
+    {
+      "field_id": "kpi_horizon",
+      "label": "KPI Horizon",
+      "kind": "number",
+      "required": true,
+      "source": "user_input",
+      "default": 12,
+      "raw_explanation": "YOUR ANSWER — default 12 months, with a mid-point check-in, matching the Editorial Calendar's cadence"
+    },
+    {
+      "field_id": "team_roles_available",
+      "label": "Team Roles Available",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — which roles are actually staffed or budgeted: Content Manager, SEO Lead, Writer(s), Video Producer, Designer, Social Lead, Growth Lead, Founder/CEO thought-leadership time. If a role is unavailable, its responsibilities must be folded into another named role or explicitly marked as out of scope for this plan — do not assign work to a role that doesn't exist."
+    },
+    {
+      "field_id": "distribution_channels_available",
+      "label": "Distribution Channels Available",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — which of organic/SEO, email/newsletter, LinkedIn, other paid social, Google Ads retargeting, PR/backlink outreach, podcast are actually available to this client. Do not assume a channel that wasn't confirmed."
+    },
+    {
+      "field_id": "flagship_signature_asset_optional",
+      "label": "Flagship Signature Asset (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "If left blank, one is proposed based on the competitor and keyword research.",
+      "raw_explanation": "YOUR ANSWER — an idea for the one flagship data/report asset this content programme should be built around (e.g. an annual benchmark report), or leave blank to have one proposed based on the competitor and keyword research."
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    }
+  ]
+}

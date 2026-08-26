@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing-in-a-Box — System Architecture & Engine Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-dark: #0b1110;
+    --bg-card: #131c19;
+    --bg-card-hover: #1b2723;
+    --bg-accent: #192b25;
+    --text-main: #ecf0ed;
+    --text-muted: #94a39d;
+    --text-dim: #60726a;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-accent: rgba(79, 209, 169, 0.25);
+    
+    --primary: #2dd4bf;
+    --primary-glow: rgba(45, 212, 191, 0.15);
+    --secondary: #fbbf24;
+    --secondary-glow: rgba(251, 191, 36, 0.15);
+    --accent-blue: #38bdf8;
+    --accent-purple: #c084fc;
+    --accent-pink: #f472b6;
+    --accent-green: #4ade80;
+    
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-mono: 'Fira Code', monospace;
+
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] {
+    --bg-dark: #f4f6f4;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f8faf8;
+    --bg-accent: #e8f0ec;
+    --text-main: #111a17;
+    --text-muted: #4b5e56;
+    --text-dim: #7d9188;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-accent: rgba(20, 140, 110, 0.25);
+    
+    --primary: #0d9488;
+    --primary-glow: rgba(13, 148, 136, 0.1);
+    --secondary: #d97706;
+    --secondary-glow: rgba(217, 119, 6, 0.1);
+    --accent-blue: #0284c7;
+    --accent-purple: #9333ea;
+    --accent-pink: #db2777;
+    --accent-green: #16a34a;
+
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Utility classes */
+  .mono { font-family: var(--font-mono); }
+  .serif { font-family: var(--font-serif); }
+  
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  header {
+    background: color-mix(in srgb, var(--bg-dark) 90%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .nav-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 70px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    color: var(--text-main);
+    text-decoration: none;
+  }
+
+  .logo-badge {
+    background: linear-gradient(135deg, var(--primary), var(--accent-blue));
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover {
+    color: var(--primary);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-main);
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: #051c16;
+    border-color: var(--primary);
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 15px var(--primary-glow);
+  }
+
+  /* Hero Section */
+  .hero {
+    padding: 70px 0 50px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    right: -100px;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+    background: var(--primary-glow);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border-accent);
+    margin-bottom: 20px;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 5vw, 54px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, var(--text-main) 60%, var(--text-muted));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero p {
+    font-size: 18px;
+    color: var(--text-muted);
+    max-width: 800px;
+    line-height: 1.6;
+    margin-bottom: 30px;
+  }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 40px;
+  }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .stat-num {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--primary);
+    font-family: var(--font-mono);
+  }
+
+  .stat-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Section Styling */
+  section {
+    padding: 70px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header {
+    margin-bottom: 40px;
+  }
+
+  .section-tag {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  .section-title {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .section-desc {
+    color: var(--text-muted);
+    font-size: 16px;
+    margin-top: 8px;
+    max-width: 750px;
+  }
+
+  /* Layer Architecture Visualization */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 30px;
+  }
+
+  .arch-layer {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .arch-layer:hover, .arch-layer.active {
+    border-color: var(--border-accent);
+    background: var(--bg-card-hover);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+
+  .arch-layer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .layer-title-grp {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .layer-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--primary-glow);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    border: 1px solid var(--border-accent);
+  }
+
+  .layer-name {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .layer-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+
+  .layer-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .layer-box {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    padding: 14px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .layer-box-title {
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .layer-box-desc {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  /* Funnel Matrix Pipeline */
+  .funnel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+  }
+
+  .stage-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.25s ease;
+  }
+
+  .stage-card:hover {
+    border-color: var(--border-accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+  }
+
+  .stage-num-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--secondary);
+    background: var(--secondary-glow);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .stage-header-grp {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .stage-card-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .stage-meta-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .stage-tag {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--bg-accent);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .stage-desc {
+    font-size: 13.5px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .stage-dep-list {
+    border-top: 1px dashed var(--border);
+    padding-top: 12px;
+    font-size: 12px;
+  }
+
+  .stage-dep-title {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    margin-bottom: 4px;
+  }
+
+  .stage-dep-val {
+    color: var(--accent-blue);
+    font-family: var(--font-mono);
+  }
+
+  /* Dynamic Client Simulator */
+  .simulator-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-accent);
+    border-radius: 12px;
+    padding: 30px;
+    margin-top: 30px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+  }
+
+  .sim-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .sim-tab {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-dark);
+    color: var(--text-muted);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .sim-tab.active {
+    background: var(--primary);
+    color: #051c16;
+    border-color: var(--primary);
+  }
+
+  .sim-display {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  @media (max-width: 900px) {
+    .sim-display { grid-template-columns: 1fr; }
+  }
+
+  .sim-panel {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .sim-panel-title {
+    font-size: 13px;
+    font-family: var(--font-mono);
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sim-field {
+    margin-bottom: 12px;
+  }
+
+  .sim-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+  }
+
+  .sim-value {
+    font-size: 14px;
+    color: var(--text-main);
+    font-weight: 500;
+  }
+
+  /* Code / Schema Viewers */
+  .code-viewer {
+    background: #060908;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--accent-green);
+    overflow-x: auto;
+    max-height: 350px;
+  }
+
+  /* Master Catalogue Table */
+  .table-responsive {
+    overflow-x: auto;
+    margin-top: 24px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 13.5px;
+  }
+
+  th {
+    background: var(--bg-accent);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  tr:hover td {
+    background: var(--bg-card-hover);
+    color: var(--text-main);
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+
+  .status-completed {
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--accent-green);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+  }
+
+  .status-planned {
+    background: rgba(251, 191, 36, 0.15);
+    color: var(--secondary);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+  }
+
+  /* Footer */
+  footer {
+    padding: 50px 0;
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="container nav-inner">
+    <a href="#" class="logo">
+      <span>Marketing-in-a-Box</span>
+      <span class="logo-badge">Engine Arch</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#architecture">5-Layer System</a></li>
+      <li><a href="#pipeline">Funnel Pipeline</a></li>
+      <li><a href="#simulator">Client Simulator</a></li>
+      <li><a href="#catalogue">27-Item Catalogue</a></li>
+      <li><a href="#schemas">API Schemas</a></li>
+    </ul>
+    <button class="btn" onclick="toggleTheme()" id="themeBtn">☀️ Light Theme</button>
+  </div>
+</header>
+
+<!-- Hero -->
+<section class="hero" id="overview">
+  <div class="container">
+    <div class="hero-eyebrow">
+      <span>SYSTEM ARCHITECTURE SPECIFICATION v1.0</span>
+    </div>
+    <h1>Dynamic Client Marketing Engine</h1>
+    <p>Translating the TrafficRadius Google Ads Phase 1 & Phase 2 research playbook into an automated, multi-client software system that generates, validates, and deploys high-converting funnels dynamically for any client archetype.</p>
+    
+    <div class="hero-stats">
+      <div class="stat-card">
+        <div class="stat-num">16 + 6</div>
+        <div class="stat-label">Phase 1 & Phase 2 Funnel Stages</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">27</div>
+        <div class="stat-label">Master Agency Asset Catalogue Items</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">100%</div>
+        <div class="stat-label">Dynamic Client Reusability</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">HITL</div>
+        <div class="stat-label">Strategist Review & Approval Gateways</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- System Architecture Section -->
+<section id="architecture">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">CORE ARCHITECTURE</div>
+      <h2 class="section-title">The 5-Layer Software Engine</h2>
+      <p class="section-desc">How raw client inputs move through DAG-orchestrated AI pipelines, strategist review gates, and production rendering engines.</p>
+    </div>
+
+    <div class="arch-diagram">
+      
+      <!-- Layer 1 -->
+      <div class="arch-layer active" onclick="selectLayer(1)">
+        <div class="arch-layer-header">
+          <div class="layer-title-grp">
+            <div class="layer-badge">L1</div>
+            <div>
+              <div class="layer-name">Client Context & Ingestion Engine</div>
+              <div class="layer-sub">Ingestion & Grounding Engine</div>
+            </div>
+          </div>
+          <span class="mono" style="color: var(--primary);">[Active]</span>
+        </div>
+        <div class="layer-body">
+          <div class="layer-box">
+            <div class="layer-box-title">🌐 Site Scraper & Auditor</div>
+            <div class="layer-box-desc">Extracts hero headlines, value props, pricing, and UX friction points from client URL.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">🎯 ICP Extractor</div>
+            <div class="layer-box-desc">Parses solution-aware buyer profiles, pain points, objections, and buying triggers.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">📊 Competitor Intelligence</div>
+            <div class="layer-box-desc">Crawls competitor ad copy, landing pages, and positioning strategies.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 2 -->
+      <div class="arch-layer" onclick="selectLayer(2)">
+        <div class="arch-layer-header">
+          <div class="layer-title-grp">
+            <div class="layer-badge">L2</div>
+            <div>
+              <div class="layer-name">DAG Pipeline Orchestrator</div>
+              <div class="layer-sub">State Machine & Execution Graph</div>
+            </div>
+          </div>
+          <span class="mono" style="color: var(--text-dim);">[Idle]</span>
+        </div>
+        <div class="layer-body">
+          <div class="layer-box">
+            <div class="layer-box-title">⚡ Prerequisite Enforcer</div>
+            <div class="layer-box-desc">Prevents downstream generation (e.g. Pillar Page) until upstream assets (ICP & CRO) are approved.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">🔄 Phase 1 & 2 Execution Graph</div>
+            <div class="layer-box-desc">Schedules execution across all 22 funnel stages in topological dependency order.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">💾 State & Artifact Store</div>
+            <div class="layer-box-desc">Persists versions, prompts, structured JSON outputs, and draft states.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 3 -->
+      <div class="arch-layer" onclick="selectLayer(3)">
+        <div class="arch-layer-header">
+          <div class="layer-title-grp">
+            <div class="layer-badge">L3</div>
+            <div>
+              <div class="layer-name">Multi-Agent Prompt & Generation Engine</div>
+              <div class="layer-sub">LLM Prompt Recipe Library & JSON Schemas</div>
+            </div>
+          </div>
+          <span class="mono" style="color: var(--text-dim);">[Idle]</span>
+        </div>
+        <div class="layer-body">
+          <div class="layer-box">
+            <div class="layer-box-title">📜 Prompt Recipe Library</div>
+            <div class="layer-box-desc">Executes standardized recipes derived from TrafficRadius prompts for each asset type.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">🛡️ Structured Schema Guard</div>
+            <div class="layer-box-desc">Validates JSON structure for copy, code, calculators, and automated messaging.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">🤖 Specialized LLM Agents</div>
+            <div class="layer-box-desc">Copywriter Agent, CRO Audit Agent, Code Generator Agent, Sequence Builder Agent.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 4 -->
+      <div class="arch-layer" onclick="selectLayer(4)">
+        <div class="arch-layer-header">
+          <div class="layer-title-grp">
+            <div class="layer-badge">L4</div>
+            <div>
+              <div class="layer-name">Human-in-the-Loop (HITL) Strategist Dashboard</div>
+              <div class="layer-sub">Oversight & Quality Gateways</div>
+            </div>
+          </div>
+          <span class="mono" style="color: var(--text-dim);">[Idle]</span>
+        </div>
+        <div class="layer-body">
+          <div class="layer-box">
+            <div class="layer-box-title">👀 Draft Inspector</div>
+            <div class="layer-box-desc">Side-by-side view of generated asset, upstream context, and live preview.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">✏️ Inline Editor & AI Re-Prompt</div>
+            <div class="layer-box-desc">Allows manual tweaks or targeted prompt adjustments for asset refinement.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">✅ Gatekeeper Approval</div>
+            <div class="layer-box-desc">Unlocks dependent downstream pipeline stages once strategist approves draft.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 5 -->
+      <div class="arch-layer" onclick="selectLayer(5)">
+        <div class="arch-layer-header">
+          <div class="layer-title-grp">
+            <div class="layer-badge">L5</div>
+            <div>
+              <div class="layer-name">Multi-Format Production Asset Renderer</div>
+              <div class="layer-sub">Deployment & Bundle Generation</div>
+            </div>
+          </div>
+          <span class="mono" style="color: var(--text-dim);">[Idle]</span>
+        </div>
+        <div class="layer-body">
+          <div class="layer-box">
+            <div class="layer-box-title">💻 Interactive Web Assets</div>
+            <div class="layer-box-desc">Standalone HTML/CSS/JS Landing Pages and dynamic Lead Magnet Calculators.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">📱 CRM & Automation Bundles</div>
+            <div class="layer-box-desc">GoHighLevel / HubSpot / Zapier SMS & Email automation campaign payloads.</div>
+          </div>
+          <div class="layer-box">
+            <div class="layer-box-title">📄 Strategic Documents</div>
+            <div class="layer-box-desc">DOCX / PDF / HTML Mindmaps, Action Trees, Webinars, and Book Blueprints.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Funnel Stage Pipeline Matrix -->
+<section id="pipeline">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">FUNNEL MATRIX</div>
+      <h2 class="section-title">Phase 1 & Phase 2 Execution Pipelines</h2>
+      <p class="section-desc">Complete breakdown of all 22 funnel stages, mapping inputs, LLM recipes, deliverables, and downstream dependencies.</p>
+    </div>
+
+    <div class="funnel-grid">
+      
+      <!-- Phase 1 Card 1 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 01</span>
+            <span class="stage-tag">Phase 1 · Foundation</span>
+          </div>
+          <div class="stage-card-title">ICP (Solution-Aware Buyer Persona)</div>
+          <div class="stage-desc">Maps target audience demographics, core pain points, solution awareness, buying triggers, and objection frameworks.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Client Brief Ingestion, Domain Scraper</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 2 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 02</span>
+            <span class="stage-tag">Phase 1 · Foundation</span>
+          </div>
+          <div class="stage-card-title">CRO Audit & Persuasion Copy</div>
+          <div class="stage-desc">Audits client site UX friction, copywriting drop-offs, trust signals, and maps conversion optimization recommendations.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 01 (ICP), URL HTML Scraping</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 3 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 03</span>
+            <span class="stage-tag">Phase 1 · Core Funnel</span>
+          </div>
+          <div class="stage-card-title">Pillar Landing Page (HTML/CSS)</div>
+          <div class="stage-desc">Generates production-grade HTML landing page with conversion copy, hero CTA, social proof, and value proposition.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 01 (ICP) + Stage 02 (CRO Audit)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 4 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 04</span>
+            <span class="stage-tag">Phase 1 · Core Funnel</span>
+          </div>
+          <div class="stage-card-title">Customer Value Journey (CVJ) Funnel</div>
+          <div class="stage-desc">Maps psychological buyer journey from ad click to lead capture, nurture, booking, and conversion.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 01 (ICP) + Stage 03 (Pillar Page)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 5 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 05</span>
+            <span class="stage-tag">Phase 1 · Core Funnel</span>
+          </div>
+          <div class="stage-card-title">Offer Value Ladder & Tiers</div>
+          <div class="stage-desc">Structures multi-tier offer architecture: Lead Magnet -> Tripwire -> Core Offer -> High-Ticket Retainer.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 01 (ICP) + Stage 04 (Funnel Blueprint)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 6 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 06</span>
+            <span class="stage-tag">Phase 1 · Core Funnel</span>
+          </div>
+          <div class="stage-card-title">Lead Magnet (ROI Calculator HTML)</div>
+          <div class="stage-desc">Generates interactive JavaScript tool (e.g. ROI Calculator) to capture leads by providing immediate tailored estimates.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 03 (Pillar Page) + Stage 05 (Offers)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 7 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 07</span>
+            <span class="stage-tag">Phase 1 · Nurture Content</span>
+          </div>
+          <div class="stage-card-title">High-Intent Educational Blog</div>
+          <div class="stage-desc">Drafts decision-stage educational guide (e.g., Budget Planning / Buyer Checklist) targeting high-intent traffic.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 01 (ICP) + Stage 03 (Pillar Page)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 8 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 08</span>
+            <span class="stage-tag">Phase 1 · Nurture Content</span>
+          </div>
+          <div class="stage-card-title">Automated SMS/Text Nurture Sequence</div>
+          <div class="stage-desc">Creates multi-step automated follow-up SMS copy for lead magnet downloaders and unbooked leads.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 05 (Offers) + Stage 06 (Lead Magnet)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 9 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 09</span>
+            <span class="stage-tag">Phase 1 · SEO & Authority</span>
+          </div>
+          <div class="stage-card-title">SEO Focused Pillar Page (v2)</div>
+          <div class="stage-desc">Generates comprehensive long-form SEO pillar content optimized for search intent and organic keyword ranking.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 03 (Pillar Page) + Stage 07 (Blog)</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 10 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 10</span>
+            <span class="stage-tag">Phase 1 · Operations</span>
+          </div>
+          <div class="stage-card-title">Plan of Action & Mindmap Tree</div>
+          <div class="stage-desc">Generates interactive HTML asset mindmaps, execution action trees, and owned media distribution roadmaps.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stages 01–09 Synthesis</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 11-15 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 11-15</span>
+            <span class="stage-tag">Phase 1 · Content & Social</span>
+          </div>
+          <div class="stage-card-title">Content Strategy & Competitor Audits</div>
+          <div class="stage-desc">Analyzes competitor strategies (Ignite, KlientBoost, SmartSites) and builds multi-channel social post strategies.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Stage 01 (ICP) + Competitor Scraping</div>
+        </div>
+      </div>
+
+      <!-- Phase 1 Card 16-22 -->
+      <div class="stage-card">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge">STAGE 16-22</span>
+            <span class="stage-tag">Phase 1 · Enterprise Assets</span>
+          </div>
+          <div class="stage-card-title">Webinars, Book Blueprint & Podcast</div>
+          <div class="stage-desc">Generates high-ticket webinar scripts, 10-chapter book index outlines, and podcast intelligence transcripts.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Full Phase 1 Funnel Completion</div>
+        </div>
+      </div>
+
+      <!-- Phase 2 Card 17-22 -->
+      <div class="stage-card" style="border-color: var(--secondary); background: var(--bg-card-hover);">
+        <div>
+          <div class="stage-header-grp">
+            <span class="stage-num-badge" style="background: var(--primary-glow); color: var(--primary);">PHASE 2</span>
+            <span class="stage-tag">Remarketing Funnel Engine</span>
+          </div>
+          <div class="stage-card-title">Remarketing Funnel & Re-engagement</div>
+          <div class="stage-desc">Re-uses exact same funnel DAG to build retargeting pillar pages, lost-customer ROI estimators, and churn prevention SMS sequences.</div>
+        </div>
+        <div class="stage-dep-list">
+          <div class="stage-dep-title">Prerequisites:</div>
+          <div class="stage-dep-val">Phase 1 Completion + Retargeting Pixel Data</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Interactive Client Simulator -->
+<section id="simulator">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">DYNAMIC ENGINE SIMULATOR</div>
+      <h2 class="section-title">Multi-Client Execution Demonstrator</h2>
+      <p class="section-desc">Select a client archetype to observe how the exact same 16-stage funnel architecture dynamically adapts its prompts, copy, calculators, and automation flows.</p>
+    </div>
+
+    <div class="simulator-box">
+      <div class="sim-controls">
+        <button class="sim-tab active" onclick="runSim('saas')">💻 Client A: B2B SaaS (CloudScale)</button>
+        <button class="sim-tab" onclick="runSim('dental')">🦷 Client B: Dental Practice (Apex Dental)</button>
+        <button class="sim-tab" onclick="runSim('ecom')">🛍️ Client C: E-Commerce (Luminary Home)</button>
+      </div>
+
+      <div class="sim-display">
+        
+        <!-- Left Column: Context & Inputs -->
+        <div class="sim-panel">
+          <div class="sim-panel-title">
+            <span>Client Context Object</span>
+            <span id="simClientTag" class="mono" style="color: var(--primary);">[B2B SaaS]</span>
+          </div>
+          
+          <div class="sim-field">
+            <div class="sim-label">Client Name</div>
+            <div class="sim-value" id="simName">CloudScale AI</div>
+          </div>
+          <div class="sim-field">
+            <div class="sim-label">Target ICP</div>
+            <div class="sim-value" id="simICP">VP of Engineering / DevOps Lead at mid-market tech companies ($10M-$50M ARR)</div>
+          </div>
+          <div class="sim-field">
+            <div class="sim-label">Core Pain Point</div>
+            <div class="sim-value" id="simPain">Unpredictable AWS/Cloud bills and manual Kubernetes cluster provisioning</div>
+          </div>
+          <div class="sim-field">
+            <div class="sim-label">Primary Offer</div>
+            <div class="sim-value" id="simOffer">Automated Cloud Infrastructure Audit & 30-Day Cost Reduction Guarantee</div>
+          </div>
+        </div>
+
+        <!-- Right Column: Generated Stage Outputs -->
+        <div class="sim-panel">
+          <div class="sim-panel-title">
+            <span>Generated Funnel Outputs</span>
+            <span class="mono" style="color: var(--accent-green);">[DAG Executed]</span>
+          </div>
+
+          <div class="sim-field">
+            <div class="sim-label">Stage 03: Pillar Landing Page Headline</div>
+            <div class="sim-value" id="simHeadline" style="color: var(--primary); font-weight: 700;">"Cut Your AWS Cloud Bill by 35% in 14 Days — Without Rewriting a Single Line of Infrastructure Code."</div>
+          </div>
+          <div class="sim-field">
+            <div class="sim-label">Stage 06: Lead Magnet Tool</div>
+            <div class="sim-value" id="simTool">Interactive Cloud Savings Calculator (Outputs estimated yearly AWS waste)</div>
+          </div>
+          <div class="sim-field">
+            <div class="sim-label">Stage 08: SMS Nurture Sequence Hook</div>
+            <div class="sim-value" id="simSMS">"Hey [Name], your cloud audit showed $4,200/mo in idle EC2 instances. Want our DevOps lead to walk you through the 1-click cleanup?"</div>
+          </div>
+          <div class="sim-field">
+            <div class="sim-label">Phase 2: Remarketing Offer</div>
+            <div class="sim-value" id="simRemarketing">Free Cloud Security & Performance Benchmark Assessment</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 27-Point Master Asset Catalogue -->
+<section id="catalogue">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">AGENCY CATALOGUE</div>
+      <h2 class="section-title">27-Point Master Asset Matrix</h2>
+      <p class="section-desc">From the 'rithin.ls@dotmappers.in' sheet: The 27 standardized deliverables that can be dynamically assembled for any client account.</p>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Deliverable Asset Name</th>
+            <th>Funnel Role</th>
+            <th>TrafficRadius Benchmark</th>
+            <th>Dynamic Engine Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">01</td>
+            <td>Brand Identity</td>
+            <td>Foundation</td>
+            <td>Not Done</td>
+            <td><span class="status-badge status-planned">Dynamic Config</span></td>
+          </tr>
+          <tr>
+            <td class="mono">02</td>
+            <td>Positioning & Angle</td>
+            <td>Foundation</td>
+            <td>Not Done</td>
+            <td><span class="status-badge status-planned">Dynamic Config</span></td>
+          </tr>
+          <tr>
+            <td class="mono">03</td>
+            <td>Core Messaging Matrix</td>
+            <td>Foundation</td>
+            <td>Not Done</td>
+            <td><span class="status-badge status-planned">Dynamic Config</span></td>
+          </tr>
+          <tr>
+            <td class="mono">04</td>
+            <td>Brand Storytelling Framework</td>
+            <td>Foundation</td>
+            <td>Not Done</td>
+            <td><span class="status-badge status-planned">Dynamic Config</span></td>
+          </tr>
+          <tr>
+            <td class="mono">05</td>
+            <td>CRO / Persuasion - ICP Halo Strategy</td>
+            <td>Foundation</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 02</span></td>
+          </tr>
+          <tr>
+            <td class="mono">06</td>
+            <td>Landing / Pillar Pages</td>
+            <td>Core Funnel</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 03</span></td>
+          </tr>
+          <tr>
+            <td class="mono">07</td>
+            <td>Customer Value Journey Funnels</td>
+            <td>Core Funnel</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 04</span></td>
+          </tr>
+          <tr>
+            <td class="mono">08</td>
+            <td>Offer Value Ladder</td>
+            <td>Core Funnel</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 05</span></td>
+          </tr>
+          <tr>
+            <td class="mono">09</td>
+            <td>Lead Magnets (Interactive Tools)</td>
+            <td>Core Funnel</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 06</span></td>
+          </tr>
+          <tr>
+            <td class="mono">10</td>
+            <td>SEO Focused Pillar Pages</td>
+            <td>SEO & Organic</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 09</span></td>
+          </tr>
+          <tr>
+            <td class="mono">11</td>
+            <td>Website Content Blueprint</td>
+            <td>Web Core</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Pipeline</span></td>
+          </tr>
+          <tr>
+            <td class="mono">12</td>
+            <td>Client Use Cases & Case Studies</td>
+            <td>Proof</td>
+            <td>Not Explicitly</td>
+            <td><span class="status-badge status-planned">LLM Agent Stage</span></td>
+          </tr>
+          <tr>
+            <td class="mono">13</td>
+            <td>Email Marketing Sequences</td>
+            <td>Nurture</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated GHL Bundle</span></td>
+          </tr>
+          <tr>
+            <td class="mono">14</td>
+            <td>Text / SMS Follow-up Sequences</td>
+            <td>Nurture</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stage 08</span></td>
+          </tr>
+          <tr>
+            <td class="mono">15-20</td>
+            <td>Content Strategy, Blogs, Social, Webinars</td>
+            <td>Authority</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stages 11-16</span></td>
+          </tr>
+          <tr>
+            <td class="mono">21-27</td>
+            <td>Trust Signals, Publications, Books, Podcasts</td>
+            <td>Enterprise</td>
+            <td>Completed</td>
+            <td><span class="status-badge status-completed">Automated DAG Stages 18-22</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- API & Developer Schemas -->
+<section id="schemas">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-tag">DEVELOPER SPECS</div>
+      <h2 class="section-title">System Schemas & API Contracts</h2>
+      <p class="section-desc">JSON Data Models for engine implementation, client profiling, DAG pipeline state, and HITL decision gates.</p>
+    </div>
+
+    <div class="sim-display">
+      <div>
+        <div class="sim-label" style="margin-bottom: 8px;">ClientProfileContext Schema (JSON)</div>
+        <div class="code-viewer">{
+  "clientId": "client_9942a",
+  "companyName": "CloudScale AI",
+  "domainUrl": "https://cloudscale.io",
+  "industry": "B2B SaaS / DevOps",
+  "icpDefinition": {
+    "targetTitle": "VP of Engineering",
+    "companySize": "50-500 employees",
+    "primaryPainPoint": "High AWS costs",
+    "solutionAwareness": "High"
+  },
+  "offerTiers": {
+    "leadMagnet": "AWS ROI Calculator",
+    "tripwire": "Cloud Audit Report",
+    "coreService": "Managed Cloud Optimization"
+  }
+}</div>
+      </div>
+
+      <div>
+        <div class="sim-label" style="margin-bottom: 8px;">ExecutionGraphState Schema (JSON)</div>
+        <div class="code-viewer">{
+  "pipelineId": "pipe_phase1_cloudscale",
+  "status": "IN_PROGRESS",
+  "currentStage": "STAGE_03_PILLAR_PAGE",
+  "completedStages": [
+    "STAGE_01_ICP",
+    "STAGE_02_CRO_AUDIT"
+  ],
+  "hitlReviewState": {
+    "stageId": "STAGE_03_PILLAR_PAGE",
+    "draftArtifactUrl": "/drafts/pillar_page_v1.html",
+    "strategistStatus": "PENDING_APPROVAL"
+  }
+}</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <p>Marketing-in-a-Box System Architecture · Developed for dotmappers & TrafficRadius Playbook Engine</p>
+  </div>
+</footer>
+
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('themeBtn');
+  if (html.getAttribute('data-theme') === 'dark') {
+    html.setAttribute('data-theme', 'light');
+    btn.innerHTML = '🌙 Dark Theme';
+  } else {
+    html.setAttribute('data-theme', 'dark');
+    btn.innerHTML = '☀️ Light Theme';
+  }
+}
+
+function selectLayer(index) {
+  const layers = document.querySelectorAll('.arch-layer');
+  layers.forEach((l, i) => {
+    if (i + 1 === index) {
+      l.classList.add('active');
+      l.querySelector('.mono').style.color = 'var(--primary)';
+      l.querySelector('.mono').innerText = '[Active]';
+    } else {
+      l.classList.remove('active');
+      l.querySelector('.mono').style.color = 'var(--text-dim)';
+      l.querySelector('.mono').innerText = '[Idle]';
+    }
+  });
+}
+
+const simData = {
+  saas: {
+    tag: '[B2B SaaS]',
+    name: 'CloudScale AI',
+    icp: 'VP of Engineering / DevOps Lead at mid-market tech companies ($10M-$50M ARR)',
+    pain: 'Unpredictable AWS/Cloud bills and manual Kubernetes cluster provisioning',
+    offer: 'Automated Cloud Infrastructure Audit & 30-Day Cost Reduction Guarantee',
+    headline: '"Cut Your AWS Cloud Bill by 35% in 14 Days — Without Rewriting Infrastructure Code."',
+    tool: 'Interactive Cloud Savings Calculator (Outputs estimated yearly AWS waste)',
+    sms: '"Hey [Name], your cloud audit showed $4,200/mo in idle EC2 instances. Want our DevOps lead to walk you through the 1-click cleanup?"',
+    remarketing: 'Free Cloud Security & Performance Benchmark Assessment'
+  },
+  dental: {
+    tag: '[Local Healthcare]',
+    name: 'Apex Dental Specialists',
+    icp: 'Patients aged 35-65 seeking permanent tooth replacement or full-mouth restoration',
+    pain: 'Fear of painful procedures, uncertain costs, and embarrassment over damaged teeth',
+    offer: 'Complimentary 3D Dental Implant Scan & Precision Virtual Smile Blueprint',
+    headline: '"Regain Your Confident Smile in 1 Day — Painless Precision Dental Implants in Austin."',
+    tool: 'Virtual Dental Implant Cost & Financing Estimator',
+    sms: '"Hi [Name], Dr. Sarah has 2 slots left this week for the free 3D Dental Scan. Reply YES to claim yours before they fill up!"',
+    remarketing: 'VIP Patient VIP Savings Voucher & Interest-Free Financing Guide'
+  },
+  ecom: {
+    tag: '[E-Commerce]',
+    name: 'Luminary Goods',
+    icp: 'Design-conscious homeowners and interior architects looking for sustainable luxury lighting',
+    pain: 'Cheaply made mass-market lamps that break easily and look generic',
+    offer: 'Artisanal Handcrafted Brass Pendant Light + 15% Architectural Bundle Discount',
+    headline: '"Elevate Every Room with Hand-Poured Artisanal Brass Lighting Engineered for Life."',
+    tool: 'Interactive Room Lighting Style & Lumens Matcher',
+    sms: '"Your cart saved an extra 10% for the next 2 hours! Tap here to complete your Luminary collection: [Link]"',
+    remarketing: 'Exclusive Back-in-Stock VIP Access & Free White-Glove Shipping'
+  }
+};
+
+function runSim(type) {
+  const tabs = document.querySelectorAll('.sim-tab');
+  tabs.forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const data = simData[type];
+  document.getElementById('simClientTag').innerText = data.tag;
+  document.getElementById('simName').innerText = data.name;
+  document.getElementById('simICP').innerText = data.icp;
+  document.getElementById('simPain').innerText = data.pain;
+  document.getElementById('simOffer').innerText = data.offer;
+  document.getElementById('simHeadline').innerText = data.headline;
+  document.getElementById('simTool').innerText = data.tool;
+  document.getElementById('simSMS').innerText = data.sms;
+  document.getElementById('simRemarketing').innerText = data.remarketing;
+}
+</script>
+
+</body>
+</html>

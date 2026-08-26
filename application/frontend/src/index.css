@@ -1,0 +1,337 @@
+@import "tailwindcss";
+
+/*
+  Strict dual-tone palette: everything on screen is a tint, shade, or opacity
+  step of exactly two hues — ink (near-black) and paper (warm off-white).
+  Light mode: paper background, ink foreground. Dark mode: roles swap.
+  No third hue is introduced anywhere in the UI.
+*/
+@theme {
+  --color-ink: #16150f;
+  --color-ink-2: #2b2a22;
+  --color-paper: #f6f3ec;
+  --color-paper-2: #ece7da;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+/*
+  TrafficRadius brand tokens — used ONLY by the Phase 1 pipeline UI (App.tsx and its
+  components) as state-encoding accents layered on top of the dual-tone ink/paper base above.
+  Electric Blue = "processing / live"; Signal Orange = "needs human review"; the green is a
+  conventional success color for the "done / saved" state (not a named brand token).
+*/
+:root {
+  --color-electric-blue: #0b5fff;
+  --color-signal-orange: #ff6a00;
+  --color-signal-green: #16a34a;
+
+  --electric-blue-fg: #ffffff;
+  --signal-orange-fg: #ffffff;
+  --signal-green-fg: #ffffff;
+}
+
+:root {
+  --bg: var(--color-paper);
+  --bg-raised: color-mix(in srgb, var(--color-paper) 92%, var(--color-ink) 8%);
+  --bg-sunken: color-mix(in srgb, var(--color-paper) 96%, var(--color-ink) 4%);
+  --fg: var(--color-ink);
+  --fg-muted: color-mix(in srgb, var(--color-ink) 62%, var(--color-paper) 38%);
+  --fg-faint: color-mix(in srgb, var(--color-ink) 38%, var(--color-paper) 62%);
+  --border: color-mix(in srgb, var(--color-ink) 14%, var(--color-paper) 86%);
+  --border-strong: color-mix(in srgb, var(--color-ink) 28%, var(--color-paper) 72%);
+  --hover: color-mix(in srgb, var(--color-ink) 7%, var(--color-paper) 93%);
+  --active: color-mix(in srgb, var(--color-ink) 12%, var(--color-paper) 88%);
+  --accent: var(--color-ink);
+  --accent-fg: var(--color-paper);
+  --shadow-color: 22 21 15;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--color-ink);
+    --bg-raised: color-mix(in srgb, var(--color-ink) 88%, var(--color-paper) 12%);
+    --bg-sunken: color-mix(in srgb, var(--color-ink) 94%, var(--color-paper) 6%);
+    --fg: var(--color-paper);
+    --fg-muted: color-mix(in srgb, var(--color-paper) 66%, var(--color-ink) 34%);
+    --fg-faint: color-mix(in srgb, var(--color-paper) 42%, var(--color-ink) 58%);
+    --border: color-mix(in srgb, var(--color-paper) 16%, var(--color-ink) 84%);
+    --border-strong: color-mix(in srgb, var(--color-paper) 30%, var(--color-ink) 70%);
+    --hover: color-mix(in srgb, var(--color-paper) 9%, var(--color-ink) 91%);
+    --active: color-mix(in srgb, var(--color-paper) 14%, var(--color-ink) 86%);
+    --accent: var(--color-paper);
+    --accent-fg: var(--color-ink);
+    --shadow-color: 0 0 0;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--color-ink);
+  --bg-raised: color-mix(in srgb, var(--color-ink) 88%, var(--color-paper) 12%);
+  --bg-sunken: color-mix(in srgb, var(--color-ink) 94%, var(--color-paper) 6%);
+  --fg: var(--color-paper);
+  --fg-muted: color-mix(in srgb, var(--color-paper) 66%, var(--color-ink) 34%);
+  --fg-faint: color-mix(in srgb, var(--color-paper) 42%, var(--color-ink) 58%);
+  --border: color-mix(in srgb, var(--color-paper) 16%, var(--color-ink) 84%);
+  --border-strong: color-mix(in srgb, var(--color-paper) 30%, var(--color-ink) 70%);
+  --hover: color-mix(in srgb, var(--color-paper) 9%, var(--color-ink) 91%);
+  --active: color-mix(in srgb, var(--color-paper) 14%, var(--color-ink) 86%);
+  --accent: var(--color-paper);
+  --accent-fg: var(--color-ink);
+  --shadow-color: 0 0 0;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/*
+  Adaptive base scale. Every size in the UI is expressed in rem (Tailwind's spacing scale
+  included), so the root size is the one dial that rescales type *and* chrome together.
+
+  Held at 16px up to 1280px — phones and laptops keep the density the layout was designed for,
+  and mobile compactness is bought with breakpoint utilities instead of shrunken text, which
+  would only make small screens harder to read. Above 1280px it grows to 18px so a 4K monitor
+  gets a proportionally larger interface rather than the same UI marooned in whitespace.
+*/
+html {
+  font-size: clamp(16px, calc(16px + (100vw - 1280px) * 0.003125), 18px);
+}
+
+/*
+  Every scrollable pane in the shell. `contain` stops a pane that has hit its end from handing the
+  scroll to the page behind it (which on mobile means pull-to-refresh firing mid-transcript), and
+  the touch flag keeps momentum scrolling on iOS.
+*/
+.pane-scroll {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Pointer-driven affordances — a row action that appears on hover — have no hover to appear on
+   with a finger, so they are permanently visible there instead. */
+@media (hover: hover) and (pointer: fine) {
+  .hover-reveal {
+    opacity: 0;
+  }
+  .group:hover .hover-reveal,
+  .hover-reveal:focus-visible {
+    opacity: 1;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Long unbroken tokens are routine here — pasted URLs, slugs, generated IDs. Left alone they
+     widen a flex card past its container and take the whole pane's layout with them. */
+  overflow-wrap: break-word;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--fg) 22%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.stream-cursor {
+  display: inline-block;
+  width: 0.5em;
+  margin-left: 1px;
+  animation: blink-cursor 1s step-end infinite;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.msg-rise {
+  animation: rise-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---------------------------------------------------------------------------------------
+   Pipeline animation vocabulary — each animation encodes exactly one state, never decorative.
+   All timing uses ease-out-cubic (cubic-bezier(0.33, 1, 0.68, 1)) unless noted otherwise.
+--------------------------------------------------------------------------------------- */
+
+@keyframes breathing-glow {
+  0%, 100% { box-shadow: 0 0 0 1px var(--color-electric-blue), 0 0 0px color-mix(in srgb, var(--color-electric-blue) 45%, transparent); }
+  50% { box-shadow: 0 0 0 1px var(--color-electric-blue), 0 0 18px 3px color-mix(in srgb, var(--color-electric-blue) 45%, transparent); }
+}
+.node-running {
+  animation: breathing-glow 2.2s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+@keyframes hitl-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--color-signal-orange), 0 0 0px color-mix(in srgb, var(--color-signal-orange) 40%, transparent); }
+  50% { box-shadow: 0 0 0 1px var(--color-signal-orange), 0 0 14px 2px color-mix(in srgb, var(--color-signal-orange) 40%, transparent); }
+}
+.node-hitl {
+  animation: hitl-pulse 2.8s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+@keyframes icon-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.icon-rotating {
+  display: inline-block;
+  animation: icon-rotate 3.2s linear infinite;
+}
+
+@keyframes shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.progress-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, white 55%, transparent) 50%,
+    transparent 70%
+  );
+  animation: shimmer-sweep 1.35s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+@keyframes signal-travel {
+  0% { top: -15%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.connector-active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -15%;
+  width: 8px;
+  height: 22%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-electric-blue) 85%, transparent);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--color-electric-blue) 60%, transparent);
+  animation: signal-travel 1.4s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.badge-pulsing {
+  animation: badge-pulse 1.6s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.82); }
+}
+.dot-pulsing {
+  animation: dot-pulse 1.5s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-running,
+  .node-hitl,
+  .icon-rotating,
+  .progress-shimmer::after,
+  .connector-active::after,
+  .badge-pulsing,
+  .dot-pulsing,
+  .stream-cursor,
+  .msg-rise {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------
+   Generated-content overflow. A stage's markdown is authored by the model, not by this UI, so
+   its widest element is unknown at build time — a 9-column comparison table, a 200-character
+   URL, a fenced code block. Each is given its own horizontal scroll so it can be read at full
+   width without ever widening the pane it sits in.
+--------------------------------------------------------------------------------------- */
+
+.md-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+
+  /*
+    Scroll shadows, so "there is more table to the right" is visible standing still. Necessary
+    because the platforms that most need the hint are the ones that show no scrollbar until you
+    are already scrolling.
+
+    The mechanism: the two cover gradients are `local`, so they travel with the content and sit over
+    the shadow at whichever end is fully scrolled; the two shadows are `scroll`, pinned to the box.
+    A shadow is therefore visible on exactly the sides that have content hidden beyond them, with no
+    JavaScript and nothing to keep in sync. The covers must match the card behind the table.
+  */
+  background:
+    linear-gradient(to right, var(--bg-raised), transparent) 0 0 / 1.75rem 100% no-repeat,
+    linear-gradient(to left, var(--bg-raised), transparent) 100% 0 / 1.75rem 100% no-repeat,
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--fg) 18%, transparent), transparent) 0 0 /
+      0.6rem 100% no-repeat,
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--fg) 18%, transparent), transparent) 100% 0 /
+      0.6rem 100% no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* Inside a scroller the table stops squeezing itself to fit and takes the width its content
+   needs — a squashed table is harder to read than one you scroll. */
+.md-scroll > table {
+  width: auto;
+  min-width: 100%;
+}
+
+/*
+  The floor that makes the scroller do anything. Without it the table still fits: the layout
+  algorithm just wraps every cell down to whatever width is left, and a four-column matrix on a
+  phone becomes four columns six characters wide — technically no overflow, unreadable in practice.
+  With it, a table wider than the pane keeps legible columns and scrolls sideways instead. The value
+  is small enough that ordinary two- and three-column tables are untouched on any screen.
+*/
+.md-scroll th,
+.md-scroll td {
+  min-width: 5.5rem;
+}
+
+.prose-block pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.prose-block a {
+  word-break: break-word;
+}

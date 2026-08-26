@@ -1,0 +1,94 @@
+Metadata-Version: 2.4
+Name: marketing-in-a-box-backend
+Version: 0.1.0
+Summary: Marketing-in-a-Box orchestrator API: DAG pipeline, Claude-based generation, HITL review.
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.111
+Requires-Dist: uvicorn[standard]>=0.29
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: alembic>=1.13
+Requires-Dist: psycopg[binary]>=3.1
+Requires-Dist: pydantic>=2.7
+Requires-Dist: pydantic-settings>=2.2
+Requires-Dist: celery>=5.4
+Requires-Dist: redis>=5.0
+Requires-Dist: anthropic>=0.34
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: networkx>=3.3
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: httpx>=0.27; extra == "dev"
+
+# Marketing-in-a-Box — Backend
+
+FastAPI orchestrator for the Marketing-in-a-Box DAG pipeline (L2/L3 in the 5-Layer Engine):
+dependency-aware asset generation via the Anthropic Messages API, with a human-in-the-loop
+review gate. See `docs/Marketing_in_a_Box_Session_Context.md` and
+`docs/Conversational_Intake_Engine_Design.md` at the repo root for the full architecture and
+field-schema spec this service implements.
+
+## Status
+
+Skeleton only. `app/db/` (SQLAlchemy models) and `alembic/` (migrations) are intentionally left
+empty here — they are owned by a separate database-architect pass to avoid merge collisions.
+
+## Requirements
+
+- Python 3.11+
+- Postgres (for `DATABASE_URL`)
+- Redis (for `REDIS_URL` — Celery broker/backend and short-TTL draft storage)
+- An Anthropic API key (for `ANTHROPIC_API_KEY`)
+
+## Setup
+
+```bash
+cd application/backend
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+cp .env.example .env             # then fill in real values — never commit .env
+```
+
+## Run the API
+
+```bash
+uvicorn app.main:app --reload
+```
+
+The app starts on http://127.0.0.1:8000 by default. Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Interactive API docs (Swagger UI) are auto-served at http://127.0.0.1:8000/docs.
+
+## Run tests
+
+```bash
+pytest
+```
+
+## Project layout
+
+```
+app/
+  main.py            FastAPI app entrypoint + health check route
+  routers/            API route modules (empty package — populated per feature)
+  services/           Business/service-layer logic (empty package — populated per feature)
+  db/                 SQLAlchemy models + session setup (owned by database-architect pass)
+scripts/
+  parse_recipes_to_schema.py   One-time migration: manual_execution/*.md -> Field Schema Registry drafts
+schemas/
+  drafts/              Generated draft Field Schema Registry JSON files (Day-1 output, needs human review)
+```
+
+## Architecture note
+
+Layered: **Controller (routers) -> Service (services) -> Repository (db)**. Routers depend only on
+services; services depend only on repository/db interfaces — never the other way around. All I/O
+(DB, Redis, Anthropic calls) is async. All external input is validated through Pydantic v2 models
+before it reaches a service. No secrets are hardcoded — everything sensitive comes from environment
+variables (see `.env.example`).

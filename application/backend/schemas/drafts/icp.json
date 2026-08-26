@@ -1,0 +1,117 @@
+{
+  "asset_id": "icp",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/ICP.md",
+  "fields": [
+    {
+      "field_id": "company_name",
+      "label": "Company Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "website_url",
+      "label": "Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "company_type",
+      "label": "Company Type",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": ["Agency / Service provider", "Business selling direct", "Product manufacturer", "Other: specify"],
+      "raw_explanation": "Agency / Service provider · Business selling direct · Product manufacturer · Other: specify"
+    },
+    {
+      "field_id": "audience_type_icp_orientation",
+      "label": "Audience Type (ICP Orientation)",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": ["Direct Buyer of the Offer", "Client's Target Customer", "Channel / Partner Buyer"],
+      "raw_explanation": "Direct Buyer of the Offer · Client's Target Customer · Channel / Partner Buyer"
+    },
+    {
+      "field_id": "maturity_tier",
+      "label": "Maturity Tier",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": ["Newbie", "Intermediate", "Advanced"],
+      "raw_explanation": "Newbie · Intermediate · Advanced"
+    },
+    {
+      "field_id": "industry",
+      "label": "Industry (of the ICP you are targeting)",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "offer_type",
+      "label": "Offer Type",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "service_product_price_terms",
+      "label": "Service/Product + Price/Terms",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "fallback_instruction": "If not specified, write \"not specified (quote required)\" rather than leaving blank.",
+      "raw_explanation": "YOUR ANSWER — or write \"not specified (quote required)\""
+    },
+    {
+      "field_id": "market_region_country",
+      "label": "Market/Region/Country",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "business_model",
+      "label": "Business Model",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": ["B2C", "B2B"],
+      "raw_explanation": "B2C · B2B"
+    },
+    {
+      "field_id": "awareness_level",
+      "label": "Awareness Level",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": ["Unaware", "Only Problem-Aware", "Only Solution-Aware", "Product/Service-Aware", "Most Aware"],
+      "raw_explanation": "Unaware · Only Problem-Aware · Only Solution-Aware · Product/Service-Aware · Most Aware"
+    },
+    {
+      "field_id": "company_size_revenue_or_household_income",
+      "label": "Company Size / Revenue Band (B2B) or Household Income Reality (B2C)",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "notes_constraints_optional",
+      "label": "Notes/Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    }
+  ]
+}

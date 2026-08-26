@@ -1,0 +1,69 @@
+{
+  "asset_id": "competitor_analysis_cro",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Competitor Analysis/01_CRO.md",
+  "paired_main_asset_id": "cro",
+  "fields": [
+    {
+      "field_id": "target_url",
+      "label": "Target URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "{TARGET_URL} — the company/page you're benchmarking against (required)."
+    },
+    {
+      "field_id": "service",
+      "label": "Service",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "default": "conversion rate optimisation (CRO)",
+      "fallback_instruction": "Fixed to \"conversion rate optimisation (CRO)\" for this stage; only include companies with a genuine, identifiable CRO offering (dedicated CRO service page, described process such as audits/A-B testing/landing page optimisation/funnel analysis, or case studies with concrete conversion-lift results) — a page that only mentions \"conversion\" in passing does not count.",
+      "raw_explanation": "service: \"conversion rate optimisation (CRO)\" — only include companies with a genuine, identifiable CRO offering."
+    },
+    {
+      "field_id": "niche",
+      "label": "Niche",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "If not specified, infer the target's core industry from the site and match competitors within it. If explicitly left open, do not restrict by niche.",
+      "raw_explanation": "{NICHE} — the target's industry/vertical (e.g. the same industry as {TARGET_URL})."
+    },
+    {
+      "field_id": "location",
+      "label": "Location",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "default": "Australia-wide",
+      "fallback_instruction": "Defaults to Australia-wide if not specified. If provided, prioritise competitors based in or explicitly serving that location, and rank local leaders higher.",
+      "raw_explanation": "{LOCATION}, or Australia-wide if not specified."
+    },
+    {
+      "field_id": "competitor_type",
+      "label": "Competitor Type",
+      "kind": "enum_choice",
+      "required": false,
+      "source": "user_input",
+      "choices": [
+        "niche_specialist",
+        "full_stack_niche"
+      ],
+      "fallback_instruction": "If missing or empty, include both types.",
+      "raw_explanation": "\"niche_specialist\" = a company specialised in the target's core service/industry, offering CRO as part of that specialism. \"full_stack_niche\" = a full-service company in the same industry as the target that prominently offers CRO as one of several services."
+    },
+    {
+      "field_id": "excluded_competitors",
+      "label": "Excluded Competitors",
+      "kind": "text",
+      "required": false,
+      "source": "auto_from_context",
+      "fallback_instruction": "Auto-populated from this same competitor-analysis stage's own prior output(s) for this client (system-managed dedup), per REVIEW_NEEDED_V2.md item 7 resolution -- the user does not manually retype domains. If no prior run exists for this client/stage, treated as an empty list rather than prompting the user.",
+      "raw_explanation": "excluded_competitors: [list any domains already sourced in prior runs]",
+      "context_key": "competitor_analysis_cro",
+      "fallback": "treat_as_empty_if_missing"
+    }
+  ]
+}

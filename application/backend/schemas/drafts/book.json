@@ -1,0 +1,181 @@
+{
+  "asset_id": "book",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Webinar-to-Book-Architect-Prompt.md",
+  "notes": "Field content confirmed unchanged from the prior manual_execution/-sourced draft — the new canonical file's INPUTS block matches verbatim. Only source_prompt_file and the context_reference fields below were added/adjusted in this pass.",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry_niche",
+      "label": "Industry / Niche",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_country",
+      "label": "Region / Country",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "source_transcript_recording",
+      "label": "Source Transcript / Recording",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "webinar_script",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — attach or reference the actual webinar transcript, recording notes, or recorded-speech source this book is being built from. This is mandatory: the whole point of this prompt is converting real, already-delivered spoken content into a book, not writing a book from a blank page. If no transcript exists yet, say \"no transcript — build from the outline/bullet points below\" and supply those instead. Normally auto-resolved from the Webinar stage's output; falls back to asking the user for a manual transcript/outline if that stage hasn't been run."
+    },
+    {
+      "field_id": "book_topic_working_title",
+      "label": "Book Topic / Working Title",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER — or leave blank to have one derived from the source transcript's own framing"
+    },
+    {
+      "field_id": "book_format",
+      "label": "Book Format",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — short lead-magnet ebook (3,000-6,000 words), full-length business book (25,000-50,000+ words), or workbook/guide with exercises. Governs chapter count and depth."
+    },
+    {
+      "field_id": "target_length",
+      "label": "Target Length",
+      "kind": "number",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — total word count target, or leave blank to default to the Book Format's typical range",
+      "fallback_instruction": "Leave blank to default to the Book Format's typical word-count range."
+    },
+    {
+      "field_id": "icp_reader_profile",
+      "label": "ICP / Reader Profile",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — paste, attach, or say \"use the ICP established earlier in this conversation.\" The book must read as if written specifically for this reader, not a generic business-book audience."
+    },
+    {
+      "field_id": "brand_voice_tone_reference_optional",
+      "label": "Brand Voice / Tone Reference (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the CRO/brand-voice framework already established, so the book sounds like this client's other content, not a generic ghostwriter voice."
+    },
+    {
+      "field_id": "approved_proof_points_optional",
+      "label": "Approved Proof Points (optional)",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER or leave blank — stats, client results, and case studies that are approved for use beyond what's already in the source transcript itself. Anything not in the transcript or listed here must not appear in the book as fact."
+    },
+    {
+      "field_id": "primary_conversion_goal",
+      "label": "Primary Conversion Goal",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — what the reader should do after finishing the book, e.g. book a consultation, request an audit, join a mailing list. Drives the book's closing chapter and any embedded CTAs."
+    },
+    {
+      "field_id": "author_presenter_attribution",
+      "label": "Author / Presenter Attribution",
+      "kind": "file_attach",
+      "required": true,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER — whose voice/name the book is written in. If the transcript has multiple speakers, state whether the book should be written in one unified authorial voice (most common for books) or preserve a multi-voice/interview structure."
+    },
+    {
+      "field_id": "regulated_field_advertising_compliance_body_optional",
+      "label": "Regulated Field / Advertising Compliance Body (optional)",
+      "kind": "file_attach",
+      "required": false,
+      "source": "user_input",
+      "accepted_types": [
+        "file",
+        "text"
+      ],
+      "raw_explanation": "YOUR ANSWER — e.g. ACCC (Australia), FTC (US), ASA (UK), or \"None.\" Governs how confidently any stat or claim from the transcript can be restated in print."
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    },
+    {
+      "field_id": "content_marketing_strategy_optional",
+      "label": "Content Marketing Strategy (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "content_marketing_strategy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "Per Marketing_in_a_Box_Session_Context.md §6, Book reads content_marketing_strategy. Step 6 (Repurposing Map) references this indirectly: \"consistent with the 'one asset feeds many derivative assets' principle already established for this client's content programme, if one exists in this conversation.\""
+    },
+    {
+      "field_id": "plan_of_action_summary_optional",
+      "label": "Plan of Action Summary (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "plan_of_action_summary",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "Per Marketing_in_a_Box_Session_Context.md §6, Book reads plan_of_action_summary. Not explicitly named as an input field in this prompt file's own text; retained from the previously established DAG wiring for continuity — see REVIEW_NEEDED_V2.md."
+    },
+    {
+      "field_id": "competitor_analysis_book",
+      "label": "Competitor Analysis — Book",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "competitor_analysis_book",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "Synthesized field — sourced from the paired Competitor Analysis — Book stage (09_Book.md). Not referenced anywhere in this prompt's own text (which has no competitor-benchmarking step at all), added purely to wire the pairing per the new asset architecture."
+    }
+  ]
+}

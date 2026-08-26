@@ -1,0 +1,240 @@
+{
+  "asset_id": "offers",
+  "version": 2,
+  "source_prompt_file": "application/backend/assets/Prompts/Master_Prompt_Universal_Value_Ladder_v2.md",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry",
+      "label": "Industry",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_location",
+      "label": "Region / Location",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — city/state/country; note if local-only, national, or global"
+    },
+    {
+      "field_id": "business_model_type",
+      "label": "Business Model Type",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": [
+        "PRACTITIONER / PERSONAL BRAND",
+        "AGENCY / B2B SERVICES",
+        "LOCAL TRADE / FIELD SERVICE",
+        "PRODUCT / RETAIL / MANUFACTURING",
+        "SAAS / SOFTWARE PLATFORM",
+        "PROFESSIONAL REGULATED FIRM",
+        "FRANCHISE / MULTI-LOCATION NETWORK"
+      ],
+      "raw_explanation": "PRACTITIONER / PERSONAL BRAND · AGENCY / B2B SERVICES · LOCAL TRADE / FIELD SERVICE · PRODUCT / RETAIL / MANUFACTURING · SAAS / SOFTWARE PLATFORM · PROFESSIONAL REGULATED FIRM · FRANCHISE / MULTI-LOCATION NETWORK — pick the closest fit, or \"MIXED\" and describe"
+    },
+    {
+      "field_id": "delivery_capacity",
+      "label": "Delivery Capacity",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — solo operator, small team (size), agency, product/manufacturing line, platform/software, franchise network; roughly how many clients or units can be served at once at each level of hands-on involvement"
+    },
+    {
+      "field_id": "team_credentials_licences_certifications",
+      "label": "Team Credentials / Licences / Certifications",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Leave blank if none — the Genie will not assume any.",
+      "raw_explanation": "YOUR ANSWER — anything the business, its team, or its product actually holds today. Leave blank if none — the Genie will not assume any"
+    },
+    {
+      "field_id": "claim_substantiation_tier",
+      "label": "Claim Substantiation Tier",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": [
+        "0 GENERAL COMMERCIAL",
+        "1 CONSUMER-LAW SENSITIVE",
+        "2 PROFESSIONALLY REGULATED (legal, financial, accounting, migration, insurance, real estate, education)",
+        "3 HEALTH/THERAPEUTIC (medical, dental, allied health, cosmetic, veterinary)",
+        "UNSURE"
+      ],
+      "raw_explanation": "0 GENERAL COMMERCIAL · 1 CONSUMER-LAW SENSITIVE · 2 PROFESSIONALLY REGULATED (legal, financial, accounting, migration, insurance, real estate, education) · 3 HEALTH/THERAPEUTIC (medical, dental, allied health, cosmetic, veterinary) · UNSURE — Genie will assess from Industry"
+    },
+    {
+      "field_id": "target_service_offer_to_ladder",
+      "label": "Target Service / Offer to Ladder",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "required_if": { "field": "wish_mode", "equals": "Wish 6 (Single Offer Type Laddered)" },
+      "fallback_instruction": "Optional for other Wishes, where the Genie draws from the full catalogue if left blank. REQUIRED only when Wish / Mode = Wish 6.",
+      "raw_explanation": "YOUR ANSWER — required for Wish 6, optional for other Wishes, where the Genie draws from the full catalogue if left blank"
+    },
+    {
+      "field_id": "icp_document",
+      "label": "ICP Document",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "PASTE / ATTACH / \"use the ICP established earlier in this conversation\" — avatar, demographics, psychographics, pains and fears, goals, decision criteria, awareness level, objections, and actual language used"
+    },
+    {
+      "field_id": "cro_messaging_framework",
+      "label": "CRO / Messaging Framework",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "PASTE / ATTACH / \"use the framework established earlier in this conversation\" / NONE — used to reuse terminology, tone, and any locked names already in play"
+    },
+    {
+      "field_id": "competitor_analysis",
+      "label": "Competitor Analysis",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "competitor_analysis_offers",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "PASTE / ATTACH / \"use the analysis established earlier\" / NONE — what competitors sell at each price point, over/under-pricing, unclaimed gaps. Sourced from the paired Competitor Analysis — Offers stage (02_Offers.md) when available."
+    },
+    {
+      "field_id": "existing_offers_already_in_market",
+      "label": "Existing Offers Already in Market",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "LIST, at any price point, so the ladder extends rather than duplicates / NONE"
+    },
+    {
+      "field_id": "word_for_the_buyer",
+      "label": "Word for the buyer",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_terminology_map",
+      "sub_key": "word_for_the_reader",
+      "fallback": "ask_user_if_missing",
+      "fallback_instruction": "Per REVIEW_NEEDED_V2.md item 4 resolution, auto-pulled from cro_terminology_map (CRO's \"word_for_the_reader\") instead of being re-entered; if that stage hasn't run yet, derive from the ICP, CRO framework, or Industry as the section header originally stated.",
+      "raw_explanation": "e.g. patient / client / customer / homeowner / operator"
+    },
+    {
+      "field_id": "word_for_the_offer_unit",
+      "label": "Word for the offer unit",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_terminology_map",
+      "sub_key": "word_for_the_thing_being_chosen_between",
+      "fallback": "ask_user_if_missing",
+      "fallback_instruction": "Auto-pulled from cro_terminology_map (CRO's \"word_for_the_thing_being_chosen_between\"); if missing, derive from the ICP, CRO framework, or Industry.",
+      "raw_explanation": "e.g. treatment / package / tier / plan / product line"
+    },
+    {
+      "field_id": "word_for_the_first_commitment_step",
+      "label": "Word for the first commitment step",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_terminology_map",
+      "sub_key": "word_for_the_first_commitment_step",
+      "fallback": "ask_user_if_missing",
+      "fallback_instruction": "Auto-pulled from cro_terminology_map; if missing, derive from the ICP, CRO framework, or Industry.",
+      "raw_explanation": "e.g. consultation / quote / demo / call / site visit"
+    },
+    {
+      "field_id": "annual_value_of_the_outcome_to_the_customer",
+      "label": "Annual value of the outcome to the customer",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Leave blank and the Genie states its assumption.",
+      "raw_explanation": "revenue gained, cost avoided, hours saved × hourly rate, or risk removed — leave blank and the Genie states its assumption"
+    },
+    {
+      "field_id": "customer_s_typical_budget_or_spend_norms_for_this_category",
+      "label": "Customer's typical budget or spend norms for this category",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER / NONE"
+    },
+    {
+      "field_id": "currency",
+      "label": "Currency",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Defaults to USD if blank.",
+      "raw_explanation": "e.g. AUD, USD, GBP — defaults to USD if blank"
+    },
+    {
+      "field_id": "local_market_price_norms_if_known",
+      "label": "Local market price norms (if known)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER / NONE"
+    },
+    {
+      "field_id": "wish_mode",
+      "label": "Wish / Mode",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": [
+        "Wish 1 (Free/Lead Gen)",
+        "Wish 2 (Low-Ticket)",
+        "Wish 3 (Mid-Range)",
+        "Wish 4 (High-Ticket)",
+        "Wish 5 (Premium)",
+        "Wish 6 (Single Offer Type Laddered)",
+        "Wish 7 (Full Ladder Blueprint)"
+      ],
+      "raw_explanation": "Wish 1 (Free/Lead Gen) · Wish 2 (Low-Ticket) · Wish 3 (Mid-Range) · Wish 4 (High-Ticket) · Wish 5 (Premium) · Wish 6 (Single Offer Type Laddered) · Wish 7 (Full Ladder Blueprint)"
+    },
+    {
+      "field_id": "number_of_items_optional_override",
+      "label": "Number of Items (optional override)",
+      "kind": "number",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Leave blank for the mode default.",
+      "raw_explanation": "YOUR ANSWER / leave blank for the mode default"
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER / NONE"
+    }
+  ]
+}

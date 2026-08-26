@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The 3-Stage Meta Ads Funnel Template | Traffic Radius</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+
+    /* ─── TOKENS ──────────────────────────────────────────────────── */
+    :root {
+      --navy:        #0D1F3C;
+      --navy-mid:    #152e55;
+      --navy-light:  #1e3a6e;
+      --blue:        #1B62FF;
+      --blue-light:  #4d87ff;
+      --orange:      #FF5C2B;
+      --orange-dark: #e84214;
+      --white:       #F5F7FA;
+      --grey:        #4A5568;
+      --grey-light:  #E2E8F0;
+      --grey-mid:    #8492A6;
+      /* stage colours */
+      --s1-col:  #1B62FF;
+      --s2-col:  #8B5CF6;
+      --s3-col:  #FF5C2B;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      font-family: 'Inter', sans-serif;
+      background: var(--white);
+      color: var(--navy);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── GATEWAY ──────────────────────────────────────────────────── */
+    #gateway {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(13, 31, 60, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .gw-card {
+      background: #fff;
+      border-radius: 22px;
+      width: 100%;
+      max-width: 540px;
+      padding: 0;
+      box-shadow: 0 40px 100px rgba(13,31,60,0.30), 0 0 0 1px rgba(27,98,255,0.07);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* top accent stripe with gradient */
+    .gw-stripe {
+      height: 5px;
+      background: linear-gradient(90deg, var(--blue) 0%, var(--s2-col) 50%, var(--orange) 100%);
+    }
+
+    .gw-body {
+      padding: 40px 48px 36px;
+    }
+
+    /* stage pill preview in gateway */
+    .gw-stage-preview {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 22px;
+      align-items: center;
+    }
+
+    .gw-stage-pip {
+      height: 5px;
+      border-radius: 100px;
+      flex: 1;
+    }
+    .gw-stage-pip.s1 { background: var(--s1-col); }
+    .gw-stage-pip.s2 { background: var(--s2-col); }
+    .gw-stage-pip.s3 { background: var(--s3-col); }
+
+    .gw-stage-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--grey-mid);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .gw-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--orange);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+    .gw-eyebrow::before {
+      content: '';
+      width: 20px; height: 2px;
+      background: var(--orange);
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .gw-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 21px;
+      font-weight: 800;
+      line-height: 1.28;
+      color: var(--navy);
+      margin-bottom: 10px;
+    }
+
+    .gw-subtitle {
+      font-size: 13.5px;
+      color: var(--grey);
+      line-height: 1.65;
+      margin-bottom: 22px;
+    }
+
+    /* what's inside teaser */
+    .gw-inside {
+      background: var(--white);
+      border: 1px solid var(--grey-light);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .gw-inside-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--grey);
+      font-weight: 500;
+    }
+
+    .gw-pip-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* form */
+    .form-row { margin-bottom: 13px; }
+
+    .form-row label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+
+    .form-row input {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border: 1.5px solid var(--grey-light);
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--navy);
+      background: #fff;
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+    .form-row input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(27,98,255,0.12);
+    }
+    .form-row input::placeholder { color: #b0bac9; }
+    .form-row input.err { border-color:#e53e3e; box-shadow:0 0 0 3px rgba(229,62,62,.10); }
+    .err-msg { font-size:11.5px; color:#e53e3e; margin-top:4px; display:none; }
+    .form-row input.err + .err-msg { display:block; }
+
+    .gw-btn {
+      width: 100%;
+      height: 54px;
+      background: linear-gradient(135deg, var(--orange) 0%, var(--orange-dark) 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      letter-spacing: 0.01em;
+      transition: transform .15s, box-shadow .2s;
+      box-shadow: 0 6px 20px rgba(255,92,43,0.30);
+    }
+    .gw-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(255,92,43,.38); }
+    .gw-btn:active { transform: translateY(0); }
+
+    /* social proof bar */
+    .gw-proof {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 0 0;
+      border-top: 1px solid var(--grey-light);
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .gw-proof-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      color: var(--grey-mid);
+      font-weight: 600;
+    }
+
+    .gw-privacy {
+      text-align: center;
+      font-size: 11px;
+      color: var(--grey-mid);
+      margin-top: 10px;
+      line-height: 1.5;
+      padding-bottom: 4px;
+    }
+    .gw-privacy a { color: var(--blue); text-decoration: none; }
+
+    /* ─── CONTENT PAGE ─────────────────────────────────────────────── */
+    #content-page { display: none; min-height: 100vh; }
+
+    /* HEADER */
+    .site-header {
+      background: var(--navy);
+    }
+
+    .hdr-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 52px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+
+    .hdr-cta {
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      font-weight: 500;
+    }
+    .hdr-cta a { color: var(--orange); text-decoration: none; font-weight: 700; }
+
+    /* HERO */
+    .hero {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 54px 52px 60px;
+    }
+
+    .hero-eyebrow {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--orange);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .hero-eyebrow::before {
+      content: ''; width: 22px; height: 2px;
+      background: var(--orange); border-radius: 2px; display: inline-block;
+    }
+
+    .hero-title {
+      font-family: 'Sora', sans-serif;
+      font-size: clamp(26px, 3.8vw, 46px);
+      font-weight: 800;
+      line-height: 1.18;
+      color: #fff;
+      max-width: 840px;
+      margin-bottom: 18px;
+    }
+    .hero-title .hl { color: var(--orange); }
+
+    .hero-desc {
+      font-size: 15.5px;
+      color: rgba(255,255,255,0.68);
+      line-height: 1.72;
+      max-width: 660px;
+      margin-bottom: 30px;
+    }
+
+    .hero-meta {
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+    }
+    .hero-meta-item {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12.5px; color: rgba(255,255,255,0.50); font-weight: 500;
+    }
+
+    /* FUNNEL FLOW VISUAL */
+    .funnel-flow-band {
+      background: var(--white);
+      border-bottom: 1px solid var(--grey-light);
+      padding: 0 52px;
+    }
+    .funnel-flow-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      padding: 20px 0;
+      gap: 0;
+      overflow-x: auto;
+    }
+    .flow-stage {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    .flow-stage-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 100px;
+      border: 1.5px solid;
+      font-size: 12.5px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .flow-stage-chip.s1 { border-color: var(--s1-col); color: var(--s1-col); background: rgba(27,98,255,0.06); }
+    .flow-stage-chip.s1:hover, .flow-stage-chip.s1.active { background: var(--s1-col); color: white; }
+    .flow-stage-chip.s2 { border-color: var(--s2-col); color: var(--s2-col); background: rgba(139,92,246,0.06); }
+    .flow-stage-chip.s2:hover, .flow-stage-chip.s2.active { background: var(--s2-col); color: white; }
+    .flow-stage-chip.s3 { border-color: var(--s3-col); color: var(--s3-col); background: rgba(255,92,43,0.06); }
+    .flow-stage-chip.s3:hover, .flow-stage-chip.s3.active { background: var(--s3-col); color: white; }
+
+    .flow-arrow {
+      width: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--grey-light);
+      flex-shrink: 0;
+    }
+
+    .flow-summary {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--grey-mid);
+      font-weight: 500;
+      flex-shrink: 0;
+      white-space: nowrap;
+      padding-left: 20px;
+    }
+    .flow-summary strong { color: var(--navy); }
+
+    /* MAIN BODY */
+    .page-body {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 56px 52px 80px;
+    }
+
+    /* INTRO CALLOUT */
+    .intro-callout {
+      background: var(--navy);
+      border-radius: 16px;
+      padding: 30px 36px;
+      margin-bottom: 52px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .intro-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      background: rgba(255,92,43,0.15);
+      border: 1px solid rgba(255,92,43,0.25);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .intro-callout h3 {
+      font-family: 'Sora', sans-serif;
+      font-size: 17px; font-weight: 700;
+      color: #fff; margin-bottom: 8px;
+    }
+    .intro-callout p {
+      font-size: 14px; color: rgba(255,255,255,0.65); line-height: 1.7;
+    }
+    .intro-callout strong { color: rgba(255,255,255,0.90); }
+
+    /* SECTION HEADER */
+    .sec-label {
+      font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--orange);
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .sec-label::after { content:''; flex:1; height:1px; background: var(--grey-light); }
+
+    .sec-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 26px; font-weight: 700;
+      color: var(--navy); margin-bottom: 8px; line-height: 1.25;
+    }
+    .sec-desc {
+      font-size: 14.5px; color: var(--grey); line-height: 1.68;
+      margin-bottom: 36px; max-width: 680px;
+    }
+
+    /* ─── STAGE CARDS ──────────────────────────────────────────────── */
+    .stages-list {
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+      margin-bottom: 60px;
+    }
+
+    .stage-card {
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid var(--grey-light);
+      box-shadow: 0 4px 20px rgba(13,31,60,0.06);
+    }
+
+    /* STAGE HEADER */
+    .stage-hdr {
+      padding: 26px 36px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 20px;
+      align-items: center;
+    }
+    .stage-hdr.s1-bg { background: linear-gradient(135deg, #0d2a5c 0%, #1e3a8a 100%); }
+    .stage-hdr.s2-bg { background: linear-gradient(135deg, #2d1b6e 0%, #4c1d95 100%); }
+    .stage-hdr.s3-bg { background: linear-gradient(135deg, #7c1d06 0%, #991b1b 100%); }
+
+    .stage-num-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .stage-num {
+      font-family: 'Sora', sans-serif;
+      font-size: 52px; font-weight: 800; line-height: 1;
+      letter-spacing: -2px;
+    }
+    .s1-bg .stage-num { color: rgba(96,165,250,0.30); }
+    .s2-bg .stage-num { color: rgba(167,139,250,0.30); }
+    .s3-bg .stage-num { color: rgba(252,165,165,0.30); }
+
+    .stage-word {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .s1-bg .stage-word { color: rgba(96,165,250,0.60); }
+    .s2-bg .stage-word { color: rgba(167,139,250,0.60); }
+    .s3-bg .stage-word { color: rgba(252,165,165,0.60); }
+
+    .stage-title-col {}
+    .stage-badge {
+      display: inline-block;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 0.10em; text-transform: uppercase;
+      padding: 3px 9px; border-radius: 4px;
+      margin-bottom: 7px;
+    }
+    .s1-bg .stage-badge { background: rgba(96,165,250,0.15); color: #93c5fd; border: 1px solid rgba(96,165,250,0.25); }
+    .s2-bg .stage-badge { background: rgba(167,139,250,0.15); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.25); }
+    .s3-bg .stage-badge { background: rgba(252,165,165,0.15); color: #fca5a5; border: 1px solid rgba(252,165,165,0.25); }
+
+    .stage-name {
+      font-family: 'Sora', sans-serif;
+      font-size: 22px; font-weight: 700; color: #fff; line-height: 1.25;
+    }
+
+    .stage-temp {
+      text-align: right; flex-shrink: 0;
+    }
+    .stage-temp-icon {
+      font-size: 28px; line-height: 1; display: block; margin-bottom: 4px;
+    }
+    .stage-temp-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
+      text-transform: uppercase; color: rgba(255,255,255,0.40);
+    }
+
+    /* STAGE BODY */
+    .stage-body {
+      background: #fff;
+      padding: 32px 36px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+    }
+
+    @media (max-width: 720px) {
+      .stage-body { grid-template-columns: 1fr; }
+      .stage-hdr { grid-template-columns: auto 1fr; }
+      .stage-temp { display: none; }
+    }
+
+    /* column */
+    .stage-col {}
+    .col-label {
+      font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.10em; text-transform: uppercase;
+      color: var(--navy); margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .col-label::after { content:''; flex:1; height:1px; background: var(--grey-light); }
+
+    /* blueprint list */
+    .bp-list {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    .bp-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13.5px; color: var(--navy); line-height: 1.55;
+    }
+    .bp-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      margin-top: 5px; flex-shrink: 0;
+    }
+    .s1 .bp-dot { background: var(--s1-col); }
+    .s2 .bp-dot { background: var(--s2-col); }
+    .s3 .bp-dot { background: var(--s3-col); }
+
+    /* metric chips */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .metric-chip {
+      background: var(--white);
+      border: 1px solid var(--grey-light);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .metric-chip-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--grey-mid); margin-bottom: 4px;
+    }
+    .metric-chip-val {
+      font-family: 'Sora', sans-serif;
+      font-size: 17px; font-weight: 700; color: var(--navy);
+    }
+    .metric-chip-note {
+      font-size: 11px; color: var(--grey-mid); margin-top: 2px;
+    }
+
+    /* budget bar */
+    .budget-bar-wrap {
+      margin-top: 14px; padding-top: 14px;
+      border-top: 1px solid var(--grey-light);
+    }
+    .budget-bar-label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11.5px; font-weight: 600; color: var(--grey);
+      margin-bottom: 7px;
+    }
+    .budget-pct {
+      font-family: 'Sora', sans-serif;
+      font-size: 15px; font-weight: 700;
+    }
+    .s1 .budget-pct { color: var(--s1-col); }
+    .s2 .budget-pct { color: var(--s2-col); }
+    .s3 .budget-pct { color: var(--s3-col); }
+
+    .budget-track {
+      height: 8px; background: var(--grey-light);
+      border-radius: 100px; overflow: hidden;
+    }
+    .budget-fill {
+      height: 100%; border-radius: 100px;
+    }
+    .s1 .budget-fill { background: var(--s1-col); }
+    .s2 .budget-fill { background: var(--s2-col); }
+    .s3 .budget-fill { background: var(--s3-col); }
+
+    /* action strip */
+    .stage-action {
+      background: var(--white);
+      border-top: 1px solid var(--grey-light);
+      padding: 18px 36px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .action-icon-sq {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .s1 .action-icon-sq { background: var(--s1-col); }
+    .s2 .action-icon-sq { background: var(--s2-col); }
+    .s3 .action-icon-sq { background: var(--s3-col); }
+
+    .action-lbl {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em;
+      text-transform: uppercase; margin-bottom: 3px;
+    }
+    .s1 .action-lbl { color: var(--s1-col); }
+    .s2 .action-lbl { color: var(--s2-col); }
+    .s3 .action-lbl { color: var(--s3-col); }
+
+    .action-txt {
+      font-size: 13.5px; color: var(--navy); line-height: 1.55; font-weight: 500;
+    }
+
+    /* ─── CONNECTOR ────────────────────────────────────────────────── */
+    .stage-connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 4px 0;
+      position: relative;
+    }
+    .connector-line {
+      width: 2px; height: 36px;
+      background: linear-gradient(180deg, transparent, var(--grey-light), transparent);
+      margin: 0 auto;
+      border-radius: 2px;
+    }
+    .connector-badge {
+      position: absolute;
+      left: 50%; transform: translateX(-50%);
+      background: #fff;
+      border: 1px solid var(--grey-light);
+      border-radius: 100px;
+      padding: 4px 14px;
+      font-size: 11px; font-weight: 700; color: var(--grey-mid);
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+
+    /* ─── BUDGET OVERVIEW ──────────────────────────────────────────── */
+    .budget-overview {
+      background: var(--navy);
+      border-radius: 16px;
+      padding: 34px 40px;
+      margin-bottom: 48px;
+    }
+    .budget-ov-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 18px; font-weight: 700; color: #fff;
+      margin-bottom: 4px;
+    }
+    .budget-ov-sub {
+      font-size: 13.5px; color: rgba(255,255,255,0.55);
+      margin-bottom: 24px; line-height: 1.6;
+    }
+    .budget-ov-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .bov-row {
+      display: grid;
+      grid-template-columns: 110px 1fr 56px;
+      align-items: center;
+      gap: 14px;
+    }
+    .bov-label {
+      font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.65);
+      text-align: right;
+    }
+    .bov-track {
+      height: 10px; background: rgba(255,255,255,0.10);
+      border-radius: 100px; overflow: hidden;
+    }
+    .bov-fill { height: 100%; border-radius: 100px; }
+    .bov-fill.s1 { background: var(--s1-col); width: 40%; }
+    .bov-fill.s2 { background: var(--s2-col); width: 35%; }
+    .bov-fill.s3 { background: var(--s3-col); width: 25%; }
+    .bov-pct {
+      font-family: 'Sora', sans-serif;
+      font-size: 14px; font-weight: 700; color: #fff;
+    }
+
+    /* ─── QUICK-START CHECKLIST ────────────────────────────────────── */
+    .quickstart {
+      background: #fff;
+      border: 1px solid var(--grey-light);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 48px;
+      box-shadow: 0 2px 12px rgba(13,31,60,0.04);
+    }
+    .qs-header {
+      background: var(--white);
+      border-bottom: 1px solid var(--grey-light);
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .qs-header h3 {
+      font-family: 'Sora', sans-serif;
+      font-size: 17px; font-weight: 700; color: var(--navy);
+    }
+    .qs-header p {
+      font-size: 13px; color: var(--grey-mid);
+    }
+    .qs-progress-label {
+      font-size: 13px; font-weight: 600; color: var(--blue);
+    }
+    .qs-body { padding: 24px 28px; }
+
+    .qs-section { margin-bottom: 22px; }
+    .qs-section:last-child { margin-bottom: 0; }
+    .qs-section-label {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.10em; text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .qs-section-label.l1 { color: var(--s1-col); }
+    .qs-section-label.l2 { color: var(--s2-col); }
+    .qs-section-label.l3 { color: var(--s3-col); }
+
+    .qs-list {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    .qs-list li {
+      display: flex; align-items: flex-start; gap: 11px;
+      font-size: 13.5px; color: var(--navy); line-height: 1.55;
+      cursor: pointer;
+    }
+    .qs-box {
+      width: 20px; height: 20px;
+      border: 2px solid var(--grey-light);
+      border-radius: 5px; flex-shrink: 0; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .18s; background: #fff;
+    }
+    li.qs-done .qs-box {
+      background: var(--blue); border-color: var(--blue);
+    }
+    li.qs-done .qs-box::after {
+      content: '';
+      width: 9px; height: 5.5px;
+      border-left: 2.5px solid white; border-bottom: 2.5px solid white;
+      transform: rotate(-45deg) translateY(-1px);
+      display: block;
+    }
+    li.qs-done .qs-txt {
+      color: var(--grey-mid);
+      text-decoration: line-through;
+      text-decoration-color: var(--grey-light);
+    }
+
+    /* overall qs progress */
+    .qs-footer {
+      border-top: 1px solid var(--grey-light);
+      padding: 16px 28px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .qs-footer-label { font-size: 12px; font-weight: 600; color: var(--grey); }
+    .qs-bar-track { flex: 1; height: 7px; background: var(--grey-light); border-radius: 100px; overflow: hidden; }
+    .qs-bar-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--orange)); border-radius: 100px; width: 0%; transition: width .35s ease; }
+    .qs-pct { font-size: 12.5px; font-weight: 700; color: var(--navy); }
+
+    /* ─── REMINDER BOX ─────────────────────────────────────────────── */
+    .reminder-box {
+      background: linear-gradient(135deg, rgba(27,98,255,0.06) 0%, rgba(139,92,246,0.06) 100%);
+      border: 1px solid rgba(27,98,255,0.15);
+      border-radius: 14px;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .reminder-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--blue); display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .reminder-box h4 {
+      font-family: 'Sora', sans-serif;
+      font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px;
+    }
+    .reminder-box p {
+      font-size: 13.5px; color: var(--grey); line-height: 1.65;
+    }
+    .reminder-box strong { color: var(--navy); }
+
+    /* ─── CTA SECTION ──────────────────────────────────────────────── */
+    .cta-block {
+      background: linear-gradient(135deg, var(--navy) 0%, #1e3a6e 100%);
+      border-radius: 20px;
+      padding: 50px 48px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 32px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-block::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--s2-col), var(--orange));
+    }
+    .cta-block::after {
+      content: '';
+      position: absolute; bottom: -60px; right: -30px;
+      width: 220px; height: 220px; border-radius: 50%;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .cta-eyebrow {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(255,255,255,0.50);
+      display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+    }
+    .cta-eyebrow::before {
+      content: ''; width: 18px; height: 2px;
+      background: var(--orange); border-radius: 2px;
+    }
+    .cta-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 28px; font-weight: 800; color: #fff;
+      line-height: 1.22; margin-bottom: 12px;
+    }
+    .cta-title .hl { color: var(--orange); }
+    .cta-desc {
+      font-size: 14.5px; color: rgba(255,255,255,0.65);
+      line-height: 1.68; max-width: 520px;
+    }
+
+    .cta-btn-group {
+      display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
+    }
+    .cta-btn-primary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      background: var(--orange); color: #fff;
+      font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700;
+      padding: 16px 28px; border-radius: 10px; text-decoration: none;
+      white-space: nowrap; transition: transform .15s, box-shadow .2s;
+      box-shadow: 0 6px 20px rgba(255,92,43,0.35);
+    }
+    .cta-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(255,92,43,0.45); }
+
+    .cta-btn-secondary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75);
+      font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600;
+      padding: 12px 24px; border-radius: 8px; text-decoration: none;
+      white-space: nowrap; border: 1px solid rgba(255,255,255,0.12);
+      transition: background .2s;
+    }
+    .cta-btn-secondary:hover { background: rgba(255,255,255,0.14); }
+
+    /* ─── FOOTER ───────────────────────────────────────────────────── */
+    .site-footer {
+      background: var(--navy);
+      padding: 30px 52px;
+      margin-top: 0;
+    }
+    .footer-inner {
+      max-width: 1120px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 20px; flex-wrap: wrap;
+    }
+    .footer-text { font-size: 12.5px; color: rgba(255,255,255,0.35); line-height: 1.6; }
+    .footer-text a { color: rgba(255,255,255,0.45); text-decoration: none; }
+    .footer-links { display: flex; gap: 18px; }
+    .footer-links a {
+      font-size: 12.5px; color: rgba(255,255,255,0.40); text-decoration: none;
+      transition: color .15s;
+    }
+    .footer-links a:hover { color: rgba(255,255,255,0.70); }
+
+    /* ─── RESPONSIVE ───────────────────────────────────────────────── */
+    @media (max-width: 700px) {
+      .gw-body { padding: 30px 24px 26px; }
+      .hdr-top { padding: 16px 20px; }
+      .hero { padding: 36px 20px 44px; }
+      .funnel-flow-band { padding: 0 20px; }
+      .page-body { padding: 36px 20px 60px; }
+      .stage-hdr { padding: 20px; }
+      .stage-body { padding: 20px; }
+      .stage-action { padding: 14px 20px; }
+      .budget-overview { padding: 24px 20px; }
+      .bov-row { grid-template-columns: 80px 1fr 48px; }
+      .cta-block { grid-template-columns: 1fr; padding: 32px 24px; }
+      .cta-btn-group { flex-direction: row; flex-wrap: wrap; }
+      .site-footer { padding: 22px 20px; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+      .intro-callout { grid-template-columns: 1fr; }
+      .reminder-box { grid-template-columns: 1fr; }
+    }
+
+    /* ─── ANIMATIONS ───────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(18px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .stage-card { animation: fadeUp .45s ease both; }
+    .stage-card:nth-child(1) { animation-delay: .05s; }
+    .stage-card:nth-child(3) { animation-delay: .12s; }
+    .stage-card:nth-child(5) { animation-delay: .19s; }
+
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     GATEWAY OVERLAY
+══════════════════════════════════════════════════════════════ -->
+<div id="gateway" role="dialog" aria-modal="true" aria-label="Access your free funnel template">
+  <div class="gw-card">
+    <div class="gw-stripe"></div>
+    <div class="gw-body">
+
+      <!-- Logo -->
+      <div style="margin-bottom:22px;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 70" height="48" aria-label="Traffic Radius">
+          <rect x="4" y="38" width="9" height="22" rx="1.5" fill="#1A1A1A"/>
+          <rect x="17" y="26" width="9" height="34" rx="1.5" fill="#45B8D8"/>
+          <rect x="30" y="10" width="9" height="50" rx="1.5" fill="#8DC63F"/>
+          <text x="50" y="48" font-family="'Sora','Arial Black',sans-serif" font-weight="700" font-size="36" fill="#333333" letter-spacing="-0.5">Traffic</text>
+          <text x="202" y="48" font-family="'Sora',Arial,sans-serif" font-weight="400" font-size="36" fill="#555555" letter-spacing="-0.5">Radius</text>
+          <circle cx="268" cy="13" r="3.2" fill="#45B8D8"/>
+          <text x="50" y="65" font-family="'Inter',Georgia,serif" font-style="italic" font-size="12" fill="#555555" letter-spacing="0.2">Growing Your Business the Smart Way!</text>
+        </svg>
+      </div>
+
+      <!-- Stage pill preview -->
+      <div class="gw-stage-preview">
+        <div class="gw-stage-pip s1"></div>
+        <div class="gw-stage-pip s2"></div>
+        <div class="gw-stage-pip s3"></div>
+        <span class="gw-stage-label">3-Stage Funnel Blueprint</span>
+      </div>
+
+      <div class="gw-eyebrow">Free Targeting Blueprint</div>
+
+      <h1 class="gw-title">The 3-Stage Meta Ads Funnel Template That Turns Cold Strangers Into Paying Clients</h1>
+
+      <p class="gw-subtitle">
+        Running awareness ads with no follow-up funnel is like fishing with no net — you attract interest and watch it disappear. This blueprint shows you exactly how to structure all three stages of your Meta funnel, who to target at each level, and what to spend.
+      </p>
+
+      <!-- What's inside -->
+      <div class="gw-inside">
+        <div class="gw-inside-item">
+          <span class="gw-pip-dot" style="background:var(--s1-col);"></span>
+          <span><strong style="color:var(--navy);">Stage 1 — Awareness:</strong> Targeting blueprint for cold audiences</span>
+        </div>
+        <div class="gw-inside-item">
+          <span class="gw-pip-dot" style="background:var(--s2-col);"></span>
+          <span><strong style="color:var(--navy);">Stage 2 — Consideration:</strong> Retargeting warm audiences with precision</span>
+        </div>
+        <div class="gw-inside-item">
+          <span class="gw-pip-dot" style="background:var(--s3-col);"></span>
+          <span><strong style="color:var(--navy);">Stage 3 — Conversion:</strong> Converting hot audiences into paying clients</span>
+        </div>
+        <div class="gw-inside-item" style="color:var(--grey-mid);">
+          <span class="gw-pip-dot" style="background:var(--grey-light);"></span>
+          <span style="color:var(--grey-mid);">+ Budget split guide, key metrics &amp; quick-start checklist</span>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <form id="gw-form" novalidate>
+        <div class="form-row">
+          <label for="gf-name">Your Name</label>
+          <input type="text" id="gf-name" placeholder="e.g. James Hartley" autocomplete="given-name" required />
+          <div class="err-msg">Please enter your name.</div>
+        </div>
+        <div class="form-row">
+          <label for="gf-email">Business Email</label>
+          <input type="email" id="gf-email" placeholder="e.g. james@yourbusiness.com.au" autocomplete="email" required />
+          <div class="err-msg">Please enter a valid email address.</div>
+        </div>
+        <div class="form-row">
+          <label for="gf-website">Website URL</label>
+          <input type="url" id="gf-website" placeholder="e.g. https://yourbusiness.com.au" autocomplete="url" />
+        </div>
+
+        <button type="submit" class="gw-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Unlock My Free Funnel Template
+        </button>
+      </form>
+
+      <!-- Social proof + privacy -->
+      <div class="gw-proof">
+        <div class="gw-proof-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          400+ Australian businesses
+        </div>
+        <div style="width:1px;height:12px;background:var(--grey-light);"></div>
+        <div class="gw-proof-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Award-winning Melbourne agency
+        </div>
+      </div>
+      <p class="gw-privacy">🔒 Zero spam. <a href="https://trafficradius.com.au/privacy-policy" target="_blank">Privacy Policy</a>.</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CONTENT PAGE
+══════════════════════════════════════════════════════════════ -->
+<div id="content-page">
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="hdr-top">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 70" height="42" aria-label="Traffic Radius">
+        <rect x="4" y="38" width="9" height="22" rx="1.5" fill="#ffffff"/>
+        <rect x="17" y="26" width="9" height="34" rx="1.5" fill="#45B8D8"/>
+        <rect x="30" y="10" width="9" height="50" rx="1.5" fill="#8DC63F"/>
+        <text x="50" y="48" font-family="'Sora','Arial Black',sans-serif" font-weight="700" font-size="36" fill="#ffffff" letter-spacing="-0.5">Traffic</text>
+        <text x="202" y="48" font-family="'Sora',Arial,sans-serif" font-weight="400" font-size="36" fill="rgba(255,255,255,0.72)" letter-spacing="-0.5">Radius</text>
+        <circle cx="268" cy="13" r="3.2" fill="#45B8D8"/>
+        <text x="50" y="65" font-family="'Inter',Georgia,serif" font-style="italic" font-size="12" fill="rgba(255,255,255,0.38)" letter-spacing="0.2">Growing Your Business the Smart Way!</text>
+      </svg>
+      <div class="hdr-cta">Ready to implement this? <a href="https://trafficradius.com.au/contact" target="_blank">Book a free strategy call →</a></div>
+    </div>
+
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-eyebrow">Free Meta Ads Targeting Blueprint</div>
+      <h1 class="hero-title">The <span class="hl">3-Stage Meta Ads Funnel Template</span> That Turns Cold Strangers Into Paying Clients</h1>
+      <p class="hero-desc">
+        Most business owners run one campaign to one audience and wonder why their results plateau. A structured three-stage funnel fixes this — systematically moving people from never heard of you to ready to buy, with targeted messaging and audiences for each step of the journey.
+      </p>
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.50)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          8-minute read
+        </div>
+        <div class="hero-meta-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.50)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Full targeting blueprint
+        </div>
+        <div class="hero-meta-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.50)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Interactive implementation checklist
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- FUNNEL FLOW NAV -->
+  <div class="funnel-flow-band">
+    <div class="funnel-flow-inner">
+      <div class="flow-stage">
+        <div class="flow-stage-chip s1 active" data-stage="1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Stage 1: Awareness
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </div>
+      <div class="flow-stage">
+        <div class="flow-stage-chip s2" data-stage="2">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Stage 2: Consideration
+        </div>
+      </div>
+      <div class="flow-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </div>
+      <div class="flow-stage">
+        <div class="flow-stage-chip s3" data-stage="3">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Stage 3: Conversion
+        </div>
+      </div>
+      <div class="flow-summary">Budget split: <strong>40% / 35% / 25%</strong></div>
+    </div>
+  </div>
+
+  <!-- MAIN BODY -->
+  <main class="page-body">
+
+    <!-- INTRO CALLOUT -->
+    <div class="intro-callout">
+      <div class="intro-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div>
+        <h3>Why single-stage campaigns fail — and what to do instead</h3>
+        <p>If you're running Meta Ads to cold audiences and sending them straight to a purchase page, <strong>you're skipping the most important part of the buying journey</strong>. Cold audiences need to know, like, and trust you before they buy. A three-stage funnel builds that relationship systematically — so by the time you make your offer, you're speaking to people who are genuinely ready to say yes.</p>
+      </div>
+    </div>
+
+    <!-- SECTION HEADER -->
+    <div class="sec-label">The Full Blueprint</div>
+    <h2 class="sec-title">Your 3-Stage Meta Ads Funnel</h2>
+    <p class="sec-desc">Each stage below is a complete targeting blueprint — audiences, creative direction, budget allocation, and the key metric that tells you whether that stage is working. Follow the sequence in order.</p>
+
+    <!-- STAGES -->
+    <div class="stages-list">
+
+      <!-- ── STAGE 1: AWARENESS ───────────────────────────────────── -->
+      <div class="stage-card s1">
+        <div class="stage-hdr s1-bg">
+          <div class="stage-num-wrap">
+            <span class="stage-num">01</span>
+            <span class="stage-word">Stage</span>
+          </div>
+          <div class="stage-title-col">
+            <div class="stage-badge">TOFU — Top of Funnel</div>
+            <h3 class="stage-name">Awareness — Reaching Cold Audiences Who've Never Heard of You</h3>
+          </div>
+          <div class="stage-temp">
+            <span class="stage-temp-icon">🧊</span>
+            <span class="stage-temp-label">Cold Traffic</span>
+          </div>
+        </div>
+
+        <div class="stage-body s1">
+          <!-- LEFT COL: targeting blueprint -->
+          <div class="stage-col">
+            <div class="col-label">Targeting Blueprint</div>
+            <ul class="bp-list s1">
+              <li><span class="bp-dot"></span><span><strong>Lookalike audiences:</strong> 1–3% lookalike based on your existing customer list or email subscribers (minimum 500 contacts recommended)</span></li>
+              <li><span class="bp-dot"></span><span><strong>Advantage+ Audience:</strong> Enable with broad targeting signals — let Meta's algorithm find your best-fit audience in a cold pool</span></li>
+              <li><span class="bp-dot"></span><span><strong>Interest-based:</strong> Layer 3–5 highly specific interest clusters relevant to your service (not generic interests)</span></li>
+              <li><span class="bp-dot"></span><span><strong>Geo:</strong> Australia-wide or state-specific depending on your service area. Radius targeting for local businesses</span></li>
+              <li><span class="bp-dot"></span><span><strong>Age/gender:</strong> Broad initially — narrow only once you have 2+ weeks of conversion data to guide you</span></li>
+              <li><span class="bp-dot"></span><span><strong>Placements:</strong> Advantage+ placements for scale; manually exclude Audience Network if quality leads are the goal</span></li>
+            </ul>
+
+            <div class="budget-bar-wrap s1">
+              <div class="budget-bar-label">
+                <span>Recommended budget allocation</span>
+                <span class="budget-pct">40% of total spend</span>
+              </div>
+              <div class="budget-track"><div class="budget-fill" style="width:40%;"></div></div>
+            </div>
+          </div>
+
+          <!-- RIGHT COL: creative + metrics -->
+          <div class="stage-col">
+            <div class="col-label">Creative Direction</div>
+            <ul class="bp-list s1" style="margin-bottom:20px;">
+              <li><span class="bp-dot"></span><span><strong>Format:</strong> Short-form video (15–30 sec) — problem-focused hook in first 3 seconds</span></li>
+              <li><span class="bp-dot"></span><span><strong>Message:</strong> Problem awareness. Don't sell — educate. Lead with a pain point your ideal client feels daily</span></li>
+              <li><span class="bp-dot"></span><span><strong>CTA:</strong> "Learn more" or "Watch now" — soft, low-friction actions only</span></li>
+              <li><span class="bp-dot"></span><span><strong>Objective:</strong> Video views, reach, or awareness campaign objective — build your retargeting pool</span></li>
+            </ul>
+
+            <div class="col-label">Key Metrics to Watch</div>
+            <div class="metric-grid">
+              <div class="metric-chip">
+                <div class="metric-chip-label">CPM Target</div>
+                <div class="metric-chip-val">$8–$18</div>
+                <div class="metric-chip-note">Cost per 1,000 impressions</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">Video View Rate</div>
+                <div class="metric-chip-val">&gt; 25%</div>
+                <div class="metric-chip-note">3-second view rate</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">CTR (all)</div>
+                <div class="metric-chip-val">&gt; 1.5%</div>
+                <div class="metric-chip-note">All clicks on ad</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">Frequency</div>
+                <div class="metric-chip-val">&lt; 2.5</div>
+                <div class="metric-chip-note">Refresh creative above 2.5</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-action s1">
+          <div class="action-icon-sq s1">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <div class="action-lbl s1">Stage 1 Goal</div>
+            <div class="action-txt">Build a warm retargeting pool of at least 1,000–5,000 people who have engaged with your video or visited your website. Do not move to Stage 2 until this pool exists — without it, your retargeting audiences will be too small to be effective.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="stage-connector">
+        <div class="connector-line"></div>
+        <div class="connector-badge">Warm audience built → advance to Stage 2</div>
+      </div>
+
+      <!-- ── STAGE 2: CONSIDERATION ───────────────────────────────── -->
+      <div class="stage-card s2">
+        <div class="stage-hdr s2-bg">
+          <div class="stage-num-wrap">
+            <span class="stage-num">02</span>
+            <span class="stage-word">Stage</span>
+          </div>
+          <div class="stage-title-col">
+            <div class="stage-badge">MOFU — Middle of Funnel</div>
+            <h3 class="stage-name">Consideration — Nurturing Warm Audiences Who've Engaged But Haven't Converted</h3>
+          </div>
+          <div class="stage-temp">
+            <span class="stage-temp-icon">🌡</span>
+            <span class="stage-temp-label">Warm Traffic</span>
+          </div>
+        </div>
+
+        <div class="stage-body s2">
+          <div class="stage-col">
+            <div class="col-label">Targeting Blueprint</div>
+            <ul class="bp-list s2">
+              <li><span class="bp-dot"></span><span><strong>Video viewers:</strong> 25%, 50%, or 75% video view audiences from your Stage 1 ads (build these custom audiences in Ads Manager)</span></li>
+              <li><span class="bp-dot"></span><span><strong>Page engagers:</strong> People who interacted with your Facebook Page or Instagram profile in the last 180 days</span></li>
+              <li><span class="bp-dot"></span><span><strong>Website visitors:</strong> All website visitors (last 90–180 days) — exclude existing customers and recent leads</span></li>
+              <li><span class="bp-dot"></span><span><strong>Lead form openers:</strong> People who opened but did not submit a previous lead gen form</span></li>
+              <li><span class="bp-dot"></span><span><strong>Exclusion rule:</strong> Always exclude Stage 3 audiences (purchasers, confirmed leads) from Stage 2 targeting</span></li>
+            </ul>
+
+            <div class="budget-bar-wrap s2">
+              <div class="budget-bar-label">
+                <span>Recommended budget allocation</span>
+                <span class="budget-pct">35% of total spend</span>
+              </div>
+              <div class="budget-track"><div class="budget-fill" style="width:35%;"></div></div>
+            </div>
+          </div>
+
+          <div class="stage-col">
+            <div class="col-label">Creative Direction</div>
+            <ul class="bp-list s2" style="margin-bottom:20px;">
+              <li><span class="bp-dot"></span><span><strong>Format:</strong> Testimonials, case studies, carousel ads showcasing results, explainer videos, "how it works" content</span></li>
+              <li><span class="bp-dot"></span><span><strong>Message:</strong> Trust and social proof. Address the objections stopping warm audiences from taking action</span></li>
+              <li><span class="bp-dot"></span><span><strong>CTA:</strong> "Download the free guide", "Watch the webinar", "Get a free audit" — medium-friction, value-led offers</span></li>
+              <li><span class="bp-dot"></span><span><strong>Objective:</strong> Lead generation, traffic, or engagement. Lead Gen forms work exceptionally well here</span></li>
+            </ul>
+
+            <div class="col-label">Key Metrics to Watch</div>
+            <div class="metric-grid">
+              <div class="metric-chip">
+                <div class="metric-chip-label">Link CTR</div>
+                <div class="metric-chip-val">&gt; 2.0%</div>
+                <div class="metric-chip-note">Warm audiences click more</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">CPL Target</div>
+                <div class="metric-chip-val">$15–$45</div>
+                <div class="metric-chip-note">Cost per lead (service biz)</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">Lead Form Rate</div>
+                <div class="metric-chip-val">&gt; 10%</div>
+                <div class="metric-chip-note">Of people who open form</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">Frequency</div>
+                <div class="metric-chip-val">3–6</div>
+                <div class="metric-chip-note">Higher acceptable for warm</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-action s2">
+          <div class="action-icon-sq s2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <div class="action-lbl s2">Stage 2 Goal</div>
+            <div class="action-txt">Capture leads — names, emails, and website URLs — and move them into your CRM or email nurture sequence. Stage 2 is where you establish authority. Every touchpoint should reinforce one idea: Traffic Radius gets results for businesses like yours.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="stage-connector">
+        <div class="connector-line"></div>
+        <div class="connector-badge">Leads captured → advance to Stage 3</div>
+      </div>
+
+      <!-- ── STAGE 3: CONVERSION ──────────────────────────────────── -->
+      <div class="stage-card s3">
+        <div class="stage-hdr s3-bg">
+          <div class="stage-num-wrap">
+            <span class="stage-num">03</span>
+            <span class="stage-word">Stage</span>
+          </div>
+          <div class="stage-title-col">
+            <div class="stage-badge">BOFU — Bottom of Funnel</div>
+            <h3 class="stage-name">Conversion — Closing Hot Audiences Who Are Ready to Become Paying Clients</h3>
+          </div>
+          <div class="stage-temp">
+            <span class="stage-temp-icon">🔥</span>
+            <span class="stage-temp-label">Hot Traffic</span>
+          </div>
+        </div>
+
+        <div class="stage-body s3">
+          <div class="stage-col">
+            <div class="col-label">Targeting Blueprint</div>
+            <ul class="bp-list s3">
+              <li><span class="bp-dot"></span><span><strong>Lead magnet downloaders:</strong> Custom audience of people who downloaded a lead magnet or submitted a Stage 2 lead form — last 30 days</span></li>
+              <li><span class="bp-dot"></span><span><strong>High-intent website visitors:</strong> People who visited your pricing page, contact page, or services page in the last 14–30 days</span></li>
+              <li><span class="bp-dot"></span><span><strong>Email list upload:</strong> Upload your CRM contact list as a Custom Audience — target those not yet converted</span></li>
+              <li><span class="bp-dot"></span><span><strong>Abandoned enquiries:</strong> People who started but didn't complete a contact form or booking</span></li>
+              <li><span class="bp-dot"></span><span><strong>Exclusion rule:</strong> Exclude existing paying clients and recent converts to prevent wasted spend and audience overlap</span></li>
+            </ul>
+
+            <div class="budget-bar-wrap s3">
+              <div class="budget-bar-label">
+                <span>Recommended budget allocation</span>
+                <span class="budget-pct">25% of total spend</span>
+              </div>
+              <div class="budget-track"><div class="budget-fill" style="width:25%;"></div></div>
+            </div>
+          </div>
+
+          <div class="stage-col">
+            <div class="col-label">Creative Direction</div>
+            <ul class="bp-list s3" style="margin-bottom:20px;">
+              <li><span class="bp-dot"></span><span><strong>Format:</strong> Direct response offers — limited-time consultations, specific guarantees, results-focused testimonials with strong proof</span></li>
+              <li><span class="bp-dot"></span><span><strong>Message:</strong> Remove final objections. Urgency, specificity, and a clear outcome statement. "Book your free 30-min Meta Ads audit this week."</span></li>
+              <li><span class="bp-dot"></span><span><strong>CTA:</strong> "Book now", "Book your free call", "Get started today" — direct and action-focused</span></li>
+              <li><span class="bp-dot"></span><span><strong>Objective:</strong> Conversions, calls, or lead gen with your highest-value offer</span></li>
+            </ul>
+
+            <div class="col-label">Key Metrics to Watch</div>
+            <div class="metric-grid">
+              <div class="metric-chip">
+                <div class="metric-chip-label">Conv. Rate</div>
+                <div class="metric-chip-val">&gt; 15%</div>
+                <div class="metric-chip-note">Of landing page visits</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">Cost per Booking</div>
+                <div class="metric-chip-val">$20–$80</div>
+                <div class="metric-chip-note">Varies by service value</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">ROAS Target</div>
+                <div class="metric-chip-val">3–8×</div>
+                <div class="metric-chip-note">Return on ad spend</div>
+              </div>
+              <div class="metric-chip">
+                <div class="metric-chip-label">Frequency</div>
+                <div class="metric-chip-val">6–12</div>
+                <div class="metric-chip-note">High repetition is fine here</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-action s3">
+          <div class="action-icon-sq s3">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div>
+            <div class="action-lbl s3">Stage 3 Goal</div>
+            <div class="action-txt">Convert warm, nurtured leads into booked consultations, enquiries, or direct purchases. At this stage, frequency is your friend — a hot prospect who has seen your offer 8–10 times and not yet acted often needs just one more well-timed, well-framed touchpoint to convert.</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /stages-list -->
+
+    <!-- BUDGET OVERVIEW -->
+    <div class="budget-overview">
+      <div class="budget-ov-title">Recommended Budget Split</div>
+      <div class="budget-ov-sub">Based on a $3,000/month total Meta Ads budget. Scale the percentages — not the ratios — as you grow.</div>
+      <div class="budget-ov-bars">
+        <div class="bov-row">
+          <span class="bov-label">Stage 1 — Awareness</span>
+          <div class="bov-track"><div class="bov-fill s1"></div></div>
+          <span class="bov-pct">40%</span>
+        </div>
+        <div class="bov-row">
+          <span class="bov-label">Stage 2 — Consideration</span>
+          <div class="bov-track"><div class="bov-fill s2"></div></div>
+          <span class="bov-pct">35%</span>
+        </div>
+        <div class="bov-row">
+          <span class="bov-label">Stage 3 — Conversion</span>
+          <div class="bov-track"><div class="bov-fill s3"></div></div>
+          <span class="bov-pct">25%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPORTANT NOTE -->
+    <div class="reminder-box">
+      <div class="reminder-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div>
+        <h4>One critical rule before you build this funnel</h4>
+        <p>Your Stage 2 and Stage 3 audiences <strong>only work if you have enough people in them</strong>. Meta requires a minimum of roughly 1,000 people in a custom audience before it can optimise delivery effectively. If you're starting from scratch, run Stage 1 exclusively for 2–4 weeks and let your pixel and engagement audiences grow before activating Stages 2 and 3. Patience here directly translates to lower CPLs and better ROAS downstream.</p>
+      </div>
+    </div>
+
+    <!-- QUICK-START CHECKLIST -->
+    <div class="quickstart">
+      <div class="qs-header">
+        <div>
+          <h3>Funnel Implementation Checklist</h3>
+          <p>Tick each item as you set up your funnel — track your progress below</p>
+        </div>
+        <div class="qs-progress-label" id="qs-progress-label">0 / 12 done</div>
+      </div>
+      <div class="qs-body">
+
+        <div class="qs-section">
+          <div class="qs-section-label l1">Stage 1 — Awareness Setup</div>
+          <ul class="qs-list" id="qs-list">
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Meta Pixel installed and firing correctly on your website (verify in Events Manager)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Customer email list uploaded as a Custom Audience (minimum 500 emails recommended)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">1–3% lookalike audience created from your customer list custom audience</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Stage 1 video creative produced (15–30 seconds, problem-focused hook)</span></li>
+          </ul>
+        </div>
+
+        <div class="qs-section">
+          <div class="qs-section-label l2">Stage 2 — Consideration Setup</div>
+          <ul class="qs-list">
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Video view custom audiences created (25%, 50%, 75% viewers from Stage 1)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Website visitor custom audience created (180-day window)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Facebook/Instagram page engager audience built (180-day window)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Stage 2 creative ready: testimonial, case study, or trust-building content</span></li>
+          </ul>
+        </div>
+
+        <div class="qs-section">
+          <div class="qs-section-label l3">Stage 3 — Conversion Setup</div>
+          <ul class="qs-list">
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">High-intent page visitor audience created (pricing/contact/services page — 30 days)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Lead magnet/Stage 2 submitter audience created for Stage 3 retargeting</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Exclusion audiences set up (existing clients excluded from all stages)</span></li>
+            <li data-qs class="qs-item"><span class="qs-box"></span><span class="qs-txt">Stage 3 direct-response offer and creative approved and ready to launch</span></li>
+          </ul>
+        </div>
+
+      </div>
+      <div class="qs-footer">
+        <span class="qs-footer-label">Implementation progress</span>
+        <div class="qs-bar-track"><div class="qs-bar-fill" id="qs-bar"></div></div>
+        <span class="qs-pct" id="qs-pct">0%</span>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-block">
+      <div>
+        <div class="cta-eyebrow">Free Strategy Call</div>
+        <h2 class="cta-title">Want Us to <span class="hl">Build This Funnel</span><br>For Your Business?</h2>
+        <p class="cta-desc">
+          The Traffic Radius team builds and manages three-stage Meta Ads funnels for Australian businesses every day. Book a free, no-obligation strategy call and we'll review your current campaigns, identify exactly where your funnel is leaking, and map out what a full build would look like for your business.
+        </p>
+      </div>
+      <div class="cta-btn-group">
+        <a href="https://trafficradius.com.au/contact" target="_blank" class="cta-btn-primary">
+          Book My Free Strategy Call
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+        <a href="https://trafficradius.com.au" target="_blank" class="cta-btn-secondary">
+          Visit trafficradius.com.au →
+        </a>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-text">
+        © 2026 Traffic Radius. All rights reserved. Melbourne, Australia.<br/>
+        <a href="https://trafficradius.com.au" target="_blank">trafficradius.com.au</a>
+      </div>
+      <div class="footer-links">
+        <a href="https://trafficradius.com.au/privacy-policy" target="_blank">Privacy Policy</a>
+        <a href="https://trafficradius.com.au/contact" target="_blank">Contact</a>
+        <a href="https://trafficradius.com.au" target="_blank">Visit Website</a>
+      </div>
+    </div>
+  </footer>
+
+</div><!-- /content-page -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════════ -->
+<script>
+  /* ─── GATEWAY ─────────────────────────────────────────────────────── */
+  const gateway     = document.getElementById('gateway');
+  const contentPage = document.getElementById('content-page');
+  const gwForm      = document.getElementById('gw-form');
+  const gfName      = document.getElementById('gf-name');
+  const gfEmail     = document.getElementById('gf-email');
+
+  function validEmail(v) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+
+  gwForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    let ok = true;
+
+    if (!gfName.value.trim()) {
+      gfName.classList.add('err'); ok = false;
+    } else { gfName.classList.remove('err'); }
+
+    if (!validEmail(gfEmail.value.trim())) {
+      gfEmail.classList.add('err'); ok = false;
+    } else { gfEmail.classList.remove('err'); }
+
+    if (!ok) return;
+
+    const lead = {
+      name:    gfName.value.trim(),
+      email:   gfEmail.value.trim(),
+      website: document.getElementById('gf-website').value.trim(),
+      ts:      new Date().toISOString(),
+      source:  'meta-lead-magnet-3-stage-funnel'
+    };
+    console.log('[Traffic Radius Lead]', JSON.stringify(lead));
+
+    gateway.style.display = 'none';
+    contentPage.style.display = 'block';
+    window.scrollTo(0, 0);
+  });
+
+  /* ─── FUNNEL FLOW NAV ──────────────────────────────────────────────── */
+  document.querySelectorAll('.flow-stage-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.flow-stage-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const idx = parseInt(chip.dataset.stage);
+      const cards = document.querySelectorAll('.stage-card');
+      if (cards[idx - 1]) {
+        cards[idx - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  /* ─── CHECKLIST ────────────────────────────────────────────────────── */
+  let doneCount = 0;
+  const totalQs = document.querySelectorAll('[data-qs]').length;
+  const qsBar   = document.getElementById('qs-bar');
+  const qsPct   = document.getElementById('qs-pct');
+  const qsLabel = document.getElementById('qs-progress-label');
+
+  document.querySelectorAll('[data-qs]').forEach(li => {
+    li.addEventListener('click', () => {
+      if (li.classList.contains('qs-done')) {
+        li.classList.remove('qs-done');
+        doneCount = Math.max(0, doneCount - 1);
+      } else {
+        li.classList.add('qs-done');
+        doneCount++;
+      }
+      const pct = Math.round((doneCount / totalQs) * 100);
+      qsBar.style.width = pct + '%';
+      qsPct.textContent = pct + '%';
+      qsLabel.textContent = doneCount + ' / ' + totalQs + ' done';
+    });
+  });
+</script>
+
+</body>
+</html>

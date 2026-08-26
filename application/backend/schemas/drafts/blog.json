@@ -1,0 +1,33 @@
+{
+  "asset_id": "blog",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/universal-blog-generation-prompt.md",
+  "notes": "This prompt's declared INPUTS block is much thinner than its actual context dependencies — Client Name/Website/Industry/ICP/CRO/Pillar Page/Competitor Analysis are never declared as fillable fields; they are pulled implicitly in the prompt's own Step 1 ('Read Context From This Conversation'). The context_reference fields below make those implicit reads explicit for the Context Resolver.",
+  "fields": [
+    { "field_id": "blog_topic_working_title", "label": "Blog Topic / Working Title", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "primary_keyword", "label": "Primary Keyword", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "secondary_supporting_keywords_optional", "label": "Secondary / Supporting Keywords (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+    { "field_id": "blog_type", "label": "Blog Type", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "target_awareness_level", "label": "Target Awareness Level", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "target_word_count", "label": "Target Word Count", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "internal_links_to_include_optional", "label": "Internal Links to Include (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+    { "field_id": "cta_goal_for_this_blog_optional", "label": "CTA Goal for This Blog (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+    { "field_id": "compliance_sensitivity", "label": "Compliance Sensitivity", "kind": "enum_choice", "required": true, "source": "user_input",
+      "choices": ["Healthcare", "Financial", "Legal", "Other regulated field: specify", "None"],
+      "raw_explanation": "Healthcare / Financial / Legal / Other regulated field: specify / None" },
+    { "field_id": "additional_notes_optional", "label": "Additional Notes (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+
+    { "field_id": "icp_document", "label": "ICP Document", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "icp_*", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1B: full avatar profile from the ICP output — name, archetype, demographics, psychographics, core pains and fears, goals, objections, awareness level, decision criteria, and exact language/phrases." },
+    { "field_id": "cro_rewritten_copy", "label": "CRO / Brand Voice Framework", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1A: brand voice and tone as demonstrated in approved pillar page and funnel copy; any locked terminology/product/service names established earlier." },
+    { "field_id": "pillar_page_html", "label": "Pillar Page", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "pillar_page_html", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1A: \"The pillar page topic and structure — this blog must support and link back to it.\" Step 5 checklist requires a minimum of 1 internal link to the pillar page." },
+    { "field_id": "competitor_analysis_blog", "label": "Competitor Analysis — Blog", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "competitor_analysis_blog", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1C: \"Pull competitor content patterns from earlier in this conversation.\" Sourced from the paired Competitor Analysis — Blog stage (04_Blog.md) when available." }
+  ]
+}

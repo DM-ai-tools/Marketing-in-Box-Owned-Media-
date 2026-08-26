@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Google Ads Beyond Retail: A Playbook for Trades, Construction & Professional Services | Traffic Radius</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,500;1,600&family=Kanit:wght@500;600;700&family=Nunito+Sans:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ═══ VERIFIED BRAND TOKENS ═══ */
+:root{
+  --g:#A4D36B; --gd:#4E7E1E; --gl:#EBF7D3; --gm:#C8E89A;
+  --b:#209FD7; --bl:#E6F4FC; --bd:#1678A0;
+  --dark:#171717; --ink:#2E3340; --dim:#5E6878;
+  --bg:#F4F6F2; --card:#FFFFFF; --line:#E0E7D8;
+  --red:#C23B3B; --amber:#C87C10; --al:#FEF6E7;
+  --pill:30px;
+  --fh:'Montserrat',sans-serif;
+  --fn:'Nunito Sans',sans-serif;
+  --fc:'Kanit',sans-serif;
+  --sh:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.07);
+  --sh2:0 2px 8px rgba(0,0,0,.1),0 8px 32px rgba(0,0,0,.09);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--fh);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;}
+
+/* ═══ TOPBAR — white bg so logo shows in original colours ═══ */
+.topbar{
+  position:sticky;top:0;z-index:300;
+  background:#FFFFFF;
+  border-bottom:2px solid var(--line);
+  padding:12px 28px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  box-shadow:0 2px 12px rgba(0,0,0,.08);
+}
+/* ↑ Logo displayed at natural size on white — NO filter, no colour change */
+.topbar img{height:36px;width:auto;display:block;}
+.topbar-right{display:flex;align-items:center;gap:14px;}
+.topbar-label{
+  font-family:var(--fn);font-size:11.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--dim);
+  border-left:2px solid var(--line);padding-left:14px;
+}
+.topbar-cta{
+  font-family:var(--fc);font-size:13.5px;font-weight:600;
+  background:var(--g);color:var(--dark);
+  border-radius:var(--pill);padding:9px 18px;
+  text-decoration:none;white-space:nowrap;
+  border:none;cursor:pointer;transition:background .15s;
+}
+.topbar-cta:hover{background:#8FBF55;}
+@media(max-width:600px){.topbar-label{display:none;}.topbar img{height:28px;}}
+
+/* ═══ HERO — dark, brand accent ═══ */
+.hero{
+  background:var(--dark);
+  padding:60px 28px 52px;
+  position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse at 8% 40%,rgba(164,211,107,.14) 0%,transparent 45%),
+    radial-gradient(ellipse at 92% 60%,rgba(32,159,215,.1) 0%,transparent 45%),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.016) 0,rgba(255,255,255,.016) 1px,transparent 1px,transparent 52px),
+    repeating-linear-gradient(rgba(255,255,255,.016) 0,rgba(255,255,255,.016) 1px,transparent 1px,transparent 52px);
+}
+.hero>*{position:relative;}
+.hero-inner{max-width:820px;margin:0 auto;}
+.hero-kicker{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(164,211,107,.12);border:1px solid rgba(164,211,107,.28);
+  color:var(--g);font-family:var(--fn);font-size:11.5px;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;
+  padding:6px 14px;border-radius:100px;margin-bottom:24px;
+}
+.kicker-dot{width:6px;height:6px;border-radius:50%;background:var(--g);animation:kdot 2.2s ease-in-out infinite;}
+@keyframes kdot{0%,100%{opacity:1;}50%{opacity:.3;}}
+.hero h1{
+  font-size:clamp(28px,4.8vw,54px);font-weight:900;
+  color:#fff;line-height:1.05;letter-spacing:-.025em;margin-bottom:18px;
+}
+.hero h1 em{font-style:normal;color:var(--g);}
+.hero-deck{font-size:clamp(14.5px,1.8vw,17px);color:#AAB4C0;line-height:1.72;max-width:600px;margin-bottom:32px;}
+.hero-meta{
+  display:flex;gap:24px;flex-wrap:wrap;
+  padding-top:28px;border-top:1px solid rgba(255,255,255,.1);
+}
+.hm-item{font-size:13px;color:#8993A8;}
+.hm-item strong{display:block;color:#fff;font-size:15px;font-weight:600;margin-bottom:2px;}
+
+/* ═══ WHAT'S INSIDE STRIP ═══ */
+.inside-strip{background:var(--dark);padding:0 28px 40px;}
+.inside-inner{max-width:820px;margin:0 auto;}
+.inside-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:12px;
+}
+@media(max-width:660px){.inside-grid{grid-template-columns:1fr;}}
+.inside-card{
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:16px 15px;
+}
+.ic-ch{font-family:var(--fn);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--g);margin-bottom:7px;}
+.ic-title{font-size:14px;font-weight:700;color:#fff;line-height:1.35;}
+.ic-desc{font-size:12px;color:#8993A8;margin-top:5px;line-height:1.55;}
+
+/* ═══ BODY ═══ */
+.page-body{max-width:820px;margin:0 auto;padding:0 24px 60px;}
+
+/* SECTION HEADER */
+.sec-head{padding:42px 0 6px;}
+.sh-eyebrow{
+  display:flex;align-items:center;gap:10px;margin-bottom:12px;
+}
+.sh-eyebrow .ch-tag{
+  font-family:var(--fn);font-size:11px;font-weight:800;
+  text-transform:uppercase;letter-spacing:.08em;
+  background:var(--dark);color:var(--g);
+  padding:4px 12px;border-radius:100px;
+}
+.sh-eyebrow .ch-rule{flex:1;height:1px;background:var(--line);}
+.sec-head h2{font-size:clamp(20px,3.2vw,30px);font-weight:800;color:var(--dark);line-height:1.15;margin-bottom:10px;}
+.sec-head p{font-size:15.5px;color:var(--dim);line-height:1.75;max-width:660px;}
+
+/* PROSE */
+.prose{font-size:15.5px;color:var(--dim);line-height:1.78;}
+.prose p{margin-bottom:1em;}
+.prose p:last-child{margin-bottom:0;}
+.prose strong{color:var(--ink);font-weight:700;}
+
+/* CALLOUT BOX */
+.callout{
+  border-radius:10px;padding:18px 20px;margin:20px 0;
+  display:flex;gap:14px;align-items:flex-start;
+}
+.callout.myth{background:var(--al);border:1px solid #F0C07A;border-left:4px solid var(--amber);}
+.callout.truth{background:var(--gl);border:1px solid var(--gm);border-left:4px solid var(--gd);}
+.callout.info{background:var(--bl);border:1px solid #99D6F5;border-left:4px solid var(--b);}
+.callout-icon{font-size:18px;flex-shrink:0;margin-top:1px;}
+.callout-body{font-size:14.5px;color:var(--ink);line-height:1.65;}
+.callout-body strong{font-weight:700;display:block;margin-bottom:3px;}
+
+/* STAT CARDS */
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0;}
+@media(max-width:580px){.stat-row{grid-template-columns:1fr;}}
+.stat-card{background:var(--card);border-radius:10px;border:1px solid var(--line);padding:18px 16px;box-shadow:var(--sh);}
+.stat-num{font-family:var(--fn);font-size:34px;font-weight:900;color:var(--dark);line-height:1;}
+.stat-num.green{color:var(--gd);}
+.stat-num.blue{color:var(--b);}
+.stat-label{font-size:12.5px;color:var(--dim);margin-top:5px;line-height:1.5;}
+.stat-card-top{border-top:3px solid var(--line);}
+.stat-card-top.g{border-top-color:var(--g);}
+.stat-card-top.b{border-top-color:var(--b);}
+
+/* COMPARISON TABLE */
+.compare-wrap{background:var(--card);border-radius:12px;border:1px solid var(--line);overflow:hidden;box-shadow:var(--sh);margin:20px 0;}
+.compare-table{width:100%;border-collapse:collapse;}
+.compare-table th{padding:11px 16px;text-align:left;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border-bottom:2px solid var(--line);}
+.compare-table th.th-retail{background:#FEF6E7;}
+.compare-table th.th-service{background:var(--gl);}
+.compare-table td{padding:12px 16px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle;}
+.compare-table tr:last-child td{border-bottom:none;}
+.compare-table td.row-label{font-weight:600;color:var(--dark);}
+.compare-table td.retail-val{background:#FEFAF3;color:var(--amber);}
+.compare-table td.service-val{background:#F5FBF0;color:var(--gd);font-weight:700;}
+
+/* INDUSTRY TABS */
+.ind-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 0;}
+.ind-tab{
+  font-family:var(--fn);font-size:13px;font-weight:700;
+  padding:9px 18px;border-radius:100px;border:1.5px solid var(--line);
+  background:var(--card);cursor:pointer;color:var(--dim);
+  transition:.15s;user-select:none;display:flex;align-items:center;gap:7px;
+}
+.ind-tab:hover{border-color:var(--g);color:var(--ink);}
+.ind-tab.active{background:var(--dark);border-color:var(--dark);color:#fff;}
+.ind-panel{display:none;margin-top:16px;animation:fadeUp .28s ease;}
+.ind-panel.active{display:block;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.ind-content{
+  background:var(--card);border-radius:12px;border:1px solid var(--line);
+  padding:24px 22px;box-shadow:var(--sh);
+}
+.ind-header{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px;}
+.ind-icon{font-size:28px;flex-shrink:0;}
+.ind-header-text h3{font-size:17px;font-weight:800;color:var(--dark);margin-bottom:4px;}
+.ind-header-text p{font-size:13.5px;color:var(--dim);line-height:1.6;}
+.ind-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:560px){.ind-cols{grid-template-columns:1fr;}}
+.ind-col h4{font-family:var(--fn);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:10px;}
+.kw-chip{
+  display:inline-block;background:var(--bg);border:1px solid var(--line);
+  border-radius:6px;padding:4px 10px;font-family:var(--fn);font-size:12.5px;
+  font-weight:700;color:var(--ink);margin:0 4px 6px 0;
+}
+.tip-item{display:flex;gap:8px;font-size:13.5px;color:var(--dim);line-height:1.55;margin-bottom:8px;}
+.tip-item::before{content:"→";color:var(--gd);font-weight:700;flex-shrink:0;margin-top:1px;}
+
+/* 4-STAGE FRAMEWORK */
+.framework-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:20px 0;}
+@media(max-width:580px){.framework-grid{grid-template-columns:1fr;}}
+.fw-card{background:var(--card);border-radius:12px;border:1px solid var(--line);padding:20px 18px;box-shadow:var(--sh);}
+.fw-num{font-family:var(--fn);font-size:11px;font-weight:900;color:var(--g);letter-spacing:.04em;margin-bottom:6px;}
+.fw-title{font-size:16px;font-weight:800;color:var(--dark);margin-bottom:8px;}
+.fw-body{font-size:13.5px;color:var(--dim);line-height:1.65;}
+.fw-example{margin-top:10px;background:var(--bg);border-radius:7px;padding:8px 12px;font-size:12.5px;color:var(--ink);font-style:italic;border-left:3px solid var(--g);}
+
+/* MISTAKES */
+.mistake-item{
+  display:grid;grid-template-columns:40px 1fr;gap:14px;
+  padding:18px 0;border-bottom:1px solid var(--line);
+}
+.mistake-item:first-child{border-top:1px solid var(--line);}
+.mi-num{font-family:var(--fn);font-size:22px;font-weight:900;color:var(--line);line-height:1;}
+.mi-body h4{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:4px;}
+.mi-body p{font-size:13.5px;color:var(--dim);line-height:1.6;}
+.mi-body .fix{margin-top:6px;font-size:13px;color:var(--gd);font-weight:600;}
+
+/* BENCHMARK TABLE */
+.bench-table-wrap{background:var(--card);border-radius:12px;border:1px solid var(--line);overflow:hidden;box-shadow:var(--sh);margin:20px 0;}
+.bench-table{width:100%;border-collapse:collapse;}
+.bench-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border-bottom:2px solid var(--line);background:var(--bg);}
+.bench-table td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px;}
+.bench-table tr:last-child td{border-bottom:none;}
+.bench-table td.metric{font-weight:600;color:var(--dark);}
+.bench-pill{display:inline-block;padding:2px 9px;border-radius:100px;font-family:var(--fn);font-size:12px;font-weight:700;}
+.bp-green{background:var(--gl);color:var(--gd);}
+.bp-blue{background:var(--bl);color:var(--bd);}
+.bp-amber{background:var(--al);color:var(--amber);}
+
+/* ═══ GATE ═══ */
+.gate-divider{
+  background:var(--dark);border-radius:14px;
+  padding:36px 30px;margin:40px 0;
+  text-align:center;position:relative;overflow:hidden;
+}
+.gate-divider::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 100%,rgba(164,211,107,.12) 0%,transparent 55%),
+    radial-gradient(ellipse at 0% 0%,rgba(32,159,215,.08) 0%,transparent 45%);
+}
+.gate-divider>*{position:relative;}
+.gate-ey{font-family:var(--fn);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#6E7A8E;margin-bottom:12px;}
+.gate-divider h2{font-size:clamp(18px,2.8vw,26px);font-weight:800;color:#fff;margin-bottom:8px;line-height:1.2;}
+.gate-divider h2 em{font-style:normal;color:var(--g);}
+.gate-divider p{font-size:14px;color:#AAB4C0;max-width:460px;margin:0 auto 24px;line-height:1.65;}
+.gate-preview{
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:14px 18px;margin-bottom:22px;
+  filter:blur(3.5px);user-select:none;pointer-events:none;
+}
+.gp-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.gp-row:last-child{margin-bottom:0;}
+.gp-num{font-family:var(--fn);font-size:20px;font-weight:900;color:rgba(255,255,255,.15);}
+.gp-text{font-size:13.5px;font-weight:700;color:rgba(255,255,255,.5);}
+.gate-form{display:flex;flex-direction:column;gap:10px;max-width:420px;margin:0 auto;}
+.gate-form input{
+  border:1.5px solid rgba(255,255,255,.15);border-radius:var(--pill);
+  padding:13px 20px;font-family:var(--fh);font-size:15px;color:#fff;
+  background:rgba(255,255,255,.08);outline:none;
+  transition:border-color .2s;
+}
+.gate-form input::placeholder{color:rgba(255,255,255,.35);}
+.gate-form input:focus{border-color:var(--g);}
+.gate-btn{
+  font-family:var(--fc);font-size:16px;font-weight:700;
+  background:var(--g);color:var(--dark);border:none;
+  border-radius:var(--pill);padding:15px;cursor:pointer;
+  transition:background .15s,transform .1s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.gate-btn:hover{background:#8FBF55;}
+.gate-btn:disabled{opacity:.7;cursor:not-allowed;}
+.gate-note{font-size:12px;color:#5E6878;margin-top:8px;}
+.gate-chapters{
+  display:flex;gap:18px;justify-content:center;flex-wrap:wrap;
+  margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.1);
+}
+.gc-item{display:flex;align-items:center;gap:6px;font-size:12.5px;color:#6E7A8E;}
+.gc-item::before{content:"✓";color:var(--g);font-weight:800;}
+
+/* ═══ LOCKED CHAPTERS ═══ */
+#lockedChapters{display:none;}
+
+/* ═══ DIVIDER ═══ */
+.ch-divider{height:1px;background:var(--line);margin:40px 0;}
+
+/* ═══ FINAL CTA ═══ */
+.final-cta{
+  background:var(--dark);border-radius:16px;padding:40px 30px;
+  text-align:center;position:relative;overflow:hidden;
+  margin-top:10px;
+}
+.final-cta::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 25% 50%,rgba(164,211,107,.14) 0%,transparent 55%),
+    radial-gradient(circle at 75% 50%,rgba(32,159,215,.09) 0%,transparent 55%);
+}
+.final-cta>*{position:relative;}
+.fc-ey{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:#6E7A8E;margin-bottom:12px;}
+.final-cta h2{font-size:clamp(20px,3vw,28px);font-weight:800;color:#fff;margin-bottom:10px;line-height:1.2;}
+.final-cta h2 em{font-style:normal;color:var(--g);}
+.final-cta p{font-size:14.5px;color:#AAB4C0;max-width:460px;margin:0 auto 24px;line-height:1.7;}
+.cta-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.btn-main{font-family:var(--fc);font-size:16px;font-weight:700;background:var(--g);color:var(--dark);border:none;border-radius:var(--pill);padding:15px 28px;cursor:pointer;text-decoration:none;display:inline-block;transition:background .15s,transform .12s;}
+.btn-main:hover{background:#8FBF55;transform:translateY(-2px);}
+.btn-ghost{font-family:var(--fc);font-size:15px;font-weight:600;background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.22);border-radius:var(--pill);padding:15px 24px;text-decoration:none;display:inline-block;transition:border-color .15s;}
+.btn-ghost:hover{border-color:rgba(255,255,255,.55);}
+.cta-proof{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:18px;}
+.cta-proof span{font-size:12px;color:#6E7A8E;display:flex;align-items:center;gap:5px;}
+.cta-proof span::before{content:"✓";color:var(--g);font-weight:800;}
+
+/* FOOTER */
+footer{background:var(--card);border-top:2px solid var(--line);padding:20px 28px;}
+footer .fw{max-width:820px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+/* ↓ footer logo also at natural colours — no filter */
+footer img{height:28px;width:auto;display:block;}
+footer p{font-size:12px;color:var(--dim);}
+footer a{color:var(--b);}
+
+/* READING PROGRESS */
+#rprog{position:fixed;top:0;left:0;height:3px;width:0%;background:var(--g);z-index:9999;pointer-events:none;transition:width .12s;}
+/* TOAST */
+.toast{position:fixed;top:72px;left:50%;transform:translateX(-50%) translateY(-8px);background:var(--gd);color:#fff;padding:10px 22px;border-radius:var(--pill);font-weight:700;z-index:9999;font-size:13.5px;box-shadow:0 4px 16px rgba(0,0,0,.25);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+/* STICKY BAR */
+#sbar{position:fixed;bottom:0;left:0;right:0;z-index:200;background:var(--card);border-top:1px solid var(--line);padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 -4px 16px rgba(0,0,0,.1);transform:translateY(110%);transition:transform .3s ease;}
+#sbar.show{transform:translateY(0);}
+#sbar .sm{font-size:13px;font-weight:700;color:var(--dark);}
+#sbar .sm small{display:block;font-size:11px;font-weight:400;color:var(--dim);}
+/* ANIM */
+.anim{opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .45s ease;}
+.anim.vis{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+<div id="rprog"></div>
+<div class="toast" id="toast"></div>
+
+<!-- ══════════════════════════════════
+     TOPBAR — white bg, logo as-is
+══════════════════════════════════ -->
+<header class="topbar">
+  <!-- Logo displayed in original colours on white background, no CSS filter applied -->
+  <a href="https://trafficradius.com.au/" target="_blank" rel="noopener">
+    <img src="data:image/png;base64,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" alt="Traffic Radius — Growing Your Business the Smart Way!">
+  </a>
+  <div class="topbar-right">
+    <span class="topbar-label">Google Ads Playbook</span>
+    <a href="https://trafficradius.com.au/contact-us/" target="_blank" rel="noopener" class="topbar-cta">Book Free Consultation</a>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════
+     HERO
+══════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-kicker"><span class="kicker-dot"></span>Free Industry Playbook · Traffic Radius</div>
+    <h1>Google Ads <em>Beyond Retail:</em><br>A Playbook for Trades,<br>Construction &amp; Professional Services</h1>
+    <p class="hero-deck">Most Google Ads case studies are written for online stores. This one isn't. This guide shows exactly why Google Ads works differently — and often better — for high-value, low-volume service businesses, and how to set one up the right way.</p>
+    <div class="hero-meta">
+      <div class="hm-item"><strong>For you if…</strong>Your average job or client is worth $2,000–$50,000+</div>
+      <div class="hm-item"><strong>Estimated value</strong>~$200 · Available free</div>
+      <div class="hm-item"><strong>Read time</strong>~12 minutes</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════
+     WHAT'S INSIDE PREVIEW
+══════════════════════════════════ -->
+<div class="inside-strip">
+  <div class="inside-inner">
+    <div class="inside-grid">
+      <div class="inside-card"><div class="ic-ch">Chapter 1 · Free</div><div class="ic-title">Why Google Ads isn't just for e-commerce</div><div class="ic-desc">The myth, the mechanism, and why service businesses actually have a structural advantage</div></div>
+      <div class="inside-card"><div class="ic-ch">Chapters 2–4 · Unlocked free</div><div class="ic-title">The industry-specific playbooks</div><div class="ic-desc">Trades · Construction · Professional Services — keywords, structure, and what "good" looks like</div></div>
+      <div class="inside-card"><div class="ic-ch">Chapters 5–6 · Unlocked free</div><div class="ic-title">Framework + benchmarks</div><div class="ic-desc">The 4-stage campaign framework, 5 common mistakes, and realistic AU benchmark numbers</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     PAGE BODY
+══════════════════════════════════ -->
+<div class="page-body" id="pageBody">
+
+  <!-- ── CHAPTER 1 (FREE) ── -->
+  <div class="sec-head anim">
+    <div class="sh-eyebrow">
+      <span class="ch-tag">Chapter 1 · Free Preview</span>
+      <div class="ch-rule"></div>
+    </div>
+    <h2>Why Google Ads isn't just for e-commerce — and never really was</h2>
+    <p>If you've had the quiet suspicion that Google Ads is mostly for online stores selling $40 products, you're not alone — and you're not entirely wrong that <em>most of the case studies</em> are written for that audience. But the platform itself has never been about transactions. It's about intent.</p>
+  </div>
+
+  <div class="prose anim">
+    <p>Every day in Australia, thousands of people search for "commercial electrician Melbourne," "structural engineer for home extension," "accountant for small business near me." These aren't window shoppers. These aren't people comparing products on a whim. <strong>These are people who have already decided they need something — and are choosing who to hire.</strong></p>
+    <p>That's a completely different buying behaviour from retail. And it's precisely the behaviour Google Search Ads were designed to capture.</p>
+  </div>
+
+  <div class="callout myth anim">
+    <span class="callout-icon">⚠️</span>
+    <div class="callout-body">
+      <strong>The belief worth questioning</strong>
+      "Google Ads works when someone can click 'buy' — my customers take weeks to decide and require a phone call and a quote. The model doesn't fit."
+    </div>
+  </div>
+
+  <div class="callout truth anim">
+    <span class="callout-icon">✅</span>
+    <div class="callout-body">
+      <strong>What the data actually shows</strong>
+      The longer and more considered the purchase, the more a business owner has been trained to search before committing. "Commercial fit-out contractor Sydney" is a higher-intent search than "blue denim jacket" — not a lower one. Google Ads captures the moment of maximum buying intent regardless of industry.
+    </div>
+  </div>
+
+  <div class="sec-head anim" style="padding-top:32px;">
+    <h2 style="font-size:clamp(18px,2.4vw,24px);">The economics work even better for high-value services</h2>
+  </div>
+
+  <div class="prose anim">
+    <p>This is where service businesses have a structural advantage that almost nobody talks about. A retailer selling a $45 product needs to acquire a customer for under $8 to make the economics work. <strong>If your average job is $6,000, you can profitably pay $300 per lead</strong> — and still produce exceptional returns on a modest ad budget.</p>
+  </div>
+
+  <div class="compare-wrap anim">
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th style="width:32%">Metric</th>
+          <th class="th-retail">🛍 Typical Retailer</th>
+          <th class="th-service">🔧 Trades/Services</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="row-label">Average order / job value</td><td class="retail-val">$40–$120</td><td class="service-val">$2,000–$15,000+</td></tr>
+        <tr><td class="row-label">Max profitable CPL</td><td class="retail-val">&lt;$8–$15</td><td class="service-val">$80–$400</td></tr>
+        <tr><td class="row-label">Max profitable CPC</td><td class="retail-val">$0.20–$0.60</td><td class="service-val">$4–$18</td></tr>
+        <tr><td class="row-label">Jobs/leads needed per month</td><td class="retail-val">Hundreds to thousands</td><td class="service-val">3–20 to be profitable</td></tr>
+        <tr><td class="row-label">Competitor saturation in Ads</td><td class="retail-val">Very high — national brands</td><td class="service-val">Often low — most haven't started</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout info anim">
+    <span class="callout-icon">💡</span>
+    <div class="callout-body">
+      <strong>The plain-English version</strong>
+      A retailer needs 200 clicks to justify their ad spend. You might need 12. That means you can afford to dominate a local market at a fraction of the volume a retailer needs — and a single won job can fund weeks of campaigns.
+    </div>
+  </div>
+
+  <!-- ── GATE ── -->
+  <div class="gate-divider anim" id="gateBox">
+    <div class="gate-ey">Chapters 2–6 · Unlock Free</div>
+    <h2>The <em>industry-specific playbooks</em> are inside</h2>
+    <p>Enter your email to unlock the complete guide — including the chapter specific to your business type, the 4-stage campaign framework, and AU benchmark numbers.</p>
+    <div class="gate-preview" aria-hidden="true">
+      <div class="gp-row"><div class="gp-num">Ch 2</div><div class="gp-text">The Industry Playbooks — Trades, Construction, Professional Services</div></div>
+      <div class="gp-row"><div class="gp-num">Ch 3</div><div class="gp-text">The 4-Stage Campaign Framework for Service Businesses</div></div>
+      <div class="gp-row"><div class="gp-num">Ch 4</div><div class="gp-text">5 Mistakes Service Businesses Make (and how to avoid them)</div></div>
+      <div class="gp-row"><div class="gp-num">Ch 5</div><div class="gp-text">What Good Numbers Look Like — AU Benchmarks for Your Sector</div></div>
+    </div>
+    <div class="gate-form">
+      <input type="email" id="gEmail" placeholder="Your work email address" autocomplete="email">
+      <button type="button" class="gate-btn" id="gBtn" onclick="unlockGuide()">
+        <span id="gBtnTxt">🔓 Unlock the Full Playbook — Free</span>
+      </button>
+    </div>
+    <p class="gate-note">No spam. No auto-enroll. Unsubscribe any time. Traffic Radius · South Melbourne, VIC.</p>
+    <div class="gate-chapters">
+      <span class="gc-item">Industry keyword lists</span>
+      <span class="gc-item">Campaign structure guide</span>
+      <span class="gc-item">AU benchmark data</span>
+      <span class="gc-item">4-stage framework</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       LOCKED CHAPTERS
+  ══════════════════════════════════ -->
+  <div id="lockedChapters">
+
+    <!-- ── CHAPTER 2: INDUSTRY PLAYBOOKS ── -->
+    <div class="sec-head">
+      <div class="sh-eyebrow">
+        <span class="ch-tag">Chapter 2</span>
+        <div class="ch-rule"></div>
+      </div>
+      <h2>The industry playbooks — trades, construction &amp; professional services</h2>
+      <p>Google Ads strategy for a plumber looks different from strategy for a structural engineer, which looks different from a business accountant. Here's what actually works in each vertical.</p>
+    </div>
+
+    <div class="ind-tabs" id="indTabs">
+      <div class="ind-tab active" data-panel="trades" onclick="switchTab(this,'trades')">🔧 Trades</div>
+      <div class="ind-tab" data-panel="construction" onclick="switchTab(this,'construction')">🏗 Construction</div>
+      <div class="ind-tab" data-panel="professional" onclick="switchTab(this,'professional')">📋 Professional Services</div>
+    </div>
+
+    <div class="ind-panel active" id="panel-trades">
+      <div class="ind-content">
+        <div class="ind-header">
+          <span class="ind-icon">🔧</span>
+          <div class="ind-header-text">
+            <h3>Trades — Electrical, Plumbing, HVAC, Refrigeration</h3>
+            <p>Trades have a dual market: emergency/reactive work (leaking pipe, no power) and planned work (renovation, new build). Each requires a different campaign structure.</p>
+          </div>
+        </div>
+        <div class="ind-cols">
+          <div class="ind-col">
+            <h4>High-intent keyword patterns</h4>
+            <div><span class="kw-chip">emergency electrician [suburb]</span><span class="kw-chip">licensed plumber near me</span><span class="kw-chip">commercial HVAC contractor [city]</span><span class="kw-chip">after hours electrician</span><span class="kw-chip">switchboard upgrade cost</span><span class="kw-chip">gas plumber [suburb]</span></div>
+          </div>
+          <div class="ind-col">
+            <h4>What actually works</h4>
+            <div class="tip-item">Split emergency and planned work into separate campaigns — different intent, different bid logic, different landing pages.</div>
+            <div class="tip-item">Call extensions and call-only ads outperform click-to-website for emergency searches — people need a phone number, not a website.</div>
+            <div class="tip-item">Location bid adjustments within 15–20km of your operating area typically lift conversion rate 25–40% vs broad geographic targeting.</div>
+            <div class="tip-item">Negative keywords like "DIY," "course," "how to," and "apprenticeship" filter out research traffic that will never convert.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ind-panel" id="panel-construction">
+      <div class="ind-content">
+        <div class="ind-header">
+          <span class="ind-icon">🏗</span>
+          <div class="ind-header-text">
+            <h3>Construction — Builders, Renovators, Commercial Fit-Out</h3>
+            <p>Construction has the longest buying cycle of any trade category — often 3–6 months from first search to signed contract. This changes campaign structure fundamentally.</p>
+          </div>
+        </div>
+        <div class="ind-cols">
+          <div class="ind-col">
+            <h4>High-intent keyword patterns</h4>
+            <div><span class="kw-chip">custom home builder [suburb]</span><span class="kw-chip">kitchen renovation quote</span><span class="kw-chip">commercial office fit-out [city]</span><span class="kw-chip">house extension builders near me</span><span class="kw-chip">warehouse construction contractor</span><span class="kw-chip">knock down rebuild [suburb]</span></div>
+          </div>
+          <div class="ind-col">
+            <h4>What actually works</h4>
+            <div class="tip-item">Remarketing is essential — with a 3–6 month decision cycle, someone who clicked your ad in month one needs to keep seeing you in months two through five.</div>
+            <div class="tip-item">A lead magnet (like this guide) works exceptionally well for construction — buyers in the research phase will trade an email for a "renovation cost guide" before they're ready to call.</div>
+            <div class="tip-item">Ad copy that disqualifies ("for projects $50k+") improves lead quality and reduces wasted quote time — even if it lowers total click volume.</div>
+            <div class="tip-item">Google Local Service Ads (LSAs) run alongside Search Ads and show a "Google Guaranteed" badge — high credibility for residential construction.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ind-panel" id="panel-professional">
+      <div class="ind-content">
+        <div class="ind-header">
+          <span class="ind-icon">📋</span>
+          <div class="ind-header-text">
+            <h3>Professional Services — Accounting, Legal, Consulting, Engineering</h3>
+            <p>Professional services buyers are typically more research-intensive, more sceptical of sales pressure, and more responsive to demonstrated expertise than to direct offers.</p>
+          </div>
+        </div>
+        <div class="ind-cols">
+          <div class="ind-col">
+            <h4>High-intent keyword patterns</h4>
+            <div><span class="kw-chip">accountant for small business [suburb]</span><span class="kw-chip">commercial lawyer near me</span><span class="kw-chip">business consultant Melbourne</span><span class="kw-chip">structural engineer residential</span><span class="kw-chip">tax accountant for trades</span><span class="kw-chip">HR consultant [city]</span></div>
+          </div>
+          <div class="ind-col">
+            <h4>What actually works</h4>
+            <div class="tip-item">Landing pages for professional services need to establish credibility first — qualifications, years of experience, types of clients — before any CTA.</div>
+            <div class="tip-item">A "free initial consultation" offer outperforms generic CTAs because it frames the first contact as low-risk and expertise-based.</div>
+            <div class="tip-item">Audience targeting by in-market segment ("small business owners," "new home buyers") combined with keyword targeting lifts relevance and reduces wasted clicks.</div>
+            <div class="tip-item">Exact match and phrase match only — professional services searches are specific enough that broad match will attract irrelevant traffic at premium CPCs.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CHAPTER 3: FRAMEWORK ── -->
+    <div class="ch-divider"></div>
+    <div class="sec-head">
+      <div class="sh-eyebrow">
+        <span class="ch-tag">Chapter 3</span>
+        <div class="ch-rule"></div>
+      </div>
+      <h2>The 4-stage campaign framework for service businesses</h2>
+      <p>Service businesses require a different campaign architecture than retail. Here's the framework that works consistently across trades, construction and professional services.</p>
+    </div>
+
+    <div class="framework-grid">
+      <div class="fw-card">
+        <div class="fw-num">STAGE 01</div>
+        <div class="fw-title">Target — Find buying intent, not browsing</div>
+        <div class="fw-body">Focus on exact and phrase match keywords that signal someone is ready to hire, not researching. Pair with tight geographic targeting — 15–25km radius from your service area. Build a negative keyword list of 100+ terms before day one.</div>
+        <div class="fw-example">"commercial electrician dandenong" — yes. "how to wire a switchboard" — excluded before launch.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-num">STAGE 02</div>
+        <div class="fw-title">Qualify — Let the ad do the filtering</div>
+        <div class="fw-body">Ad copy for service businesses should include qualifying signals that attract serious buyers and filter out price-shoppers: project minimum ("from $5,000"), experience signals ("20+ years"), and specificity about what you do and who you serve.</div>
+        <div class="fw-example">"Commercial fitouts from $80k · Licensed builder · South Melbourne — Get a quote."</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-num">STAGE 03</div>
+        <div class="fw-title">Convert — Landing page built for phone calls</div>
+        <div class="fw-body">Don't send service traffic to your homepage. A dedicated landing page with one goal (phone call or form submission), trust signals above the fold, and a frictionless CTA consistently outperforms a homepage by 2–5×. No navigation menu. One action.</div>
+        <div class="fw-example">Phone number in the header. "Get a free quote" form. 3 trust signals. No other links.</div>
+      </div>
+      <div class="fw-card">
+        <div class="fw-num">STAGE 04</div>
+        <div class="fw-title">Measure — Cost per qualified lead, not clicks</div>
+        <div class="fw-body">Set up call tracking before day one. Track calls as conversions (not just form fills). Optimise toward cost-per-qualified-lead — not CPC, not CTR. A $14 CPC that produces a $180 CPL beats a $4 CPC with a $550 CPL every time.</div>
+        <div class="fw-example">Target metric: cost per quoted job, not cost per click.</div>
+      </div>
+    </div>
+
+    <!-- ── CHAPTER 4: MISTAKES ── -->
+    <div class="ch-divider"></div>
+    <div class="sec-head">
+      <div class="sh-eyebrow">
+        <span class="ch-tag">Chapter 4</span>
+        <div class="ch-rule"></div>
+      </div>
+      <h2>5 mistakes service businesses make with Google Ads</h2>
+      <p>These five patterns appear in the vast majority of trade and service Google Ads accounts we've reviewed. Each one is fixable.</p>
+    </div>
+
+    <div class="mistake-item">
+      <div class="mi-num">01</div>
+      <div class="mi-body">
+        <h4>Running broad match keywords with no negative list</h4>
+        <p>Broad match for "plumber" will show your ad for "plumber apprenticeship jobs," "how to become a plumber," and "plumber memes." A 200-term negative keyword list built before launch eliminates most of this waste.</p>
+        <div class="fix">→ Fix: Exact and phrase match only for the first 90 days. Build negatives from search term reports weekly.</div>
+      </div>
+    </div>
+    <div class="mistake-item">
+      <div class="mi-num">02</div>
+      <div class="mi-body">
+        <h4>Sending clicks to the homepage</h4>
+        <p>A homepage has navigation, multiple messages, and asks the visitor to find their own path. For someone who just searched "emergency plumber," that friction costs conversions. A dedicated landing page removes the decision and increases conversion rate 2–5×.</p>
+        <div class="fix">→ Fix: One landing page per campaign. One goal per page. No menu navigation.</div>
+      </div>
+    </div>
+    <div class="mistake-item">
+      <div class="mi-num">03</div>
+      <div class="mi-body">
+        <h4>No call tracking — so ROI is a guess</h4>
+        <p>Most service businesses win jobs over the phone, not through website forms. Without call tracking tied to Google Ads, there's no way to know which campaigns produce revenue — so budget decisions are made on gut feel, not data.</p>
+        <div class="fix">→ Fix: Set up call tracking (Google's native or a third-party tool) before spending a dollar. Track calls as conversions.</div>
+      </div>
+    </div>
+    <div class="mistake-item">
+      <div class="mi-num">04</div>
+      <div class="mi-body">
+        <h4>Judging performance after two weeks</h4>
+        <p>Google's Smart Bidding algorithm needs a minimum of 30–50 conversions to exit the "learning phase" and optimise effectively. Pausing or restructuring campaigns in week two restarts the learning clock and produces permanently underperforming accounts.</p>
+        <div class="fix">→ Fix: Commit to a 90-day evaluation period. Optimise keywords and copy; don't restructure campaigns in the first month.</div>
+      </div>
+    </div>
+    <div class="mistake-item">
+      <div class="mi-num">05</div>
+      <div class="mi-body">
+        <h4>Optimising for clicks instead of qualified leads</h4>
+        <p>A low CPC from broad traffic that never converts is expensive, not cheap. The only number that matters for service businesses is cost per qualified lead — and the only way to get there is to track, and optimise toward, actual enquiries.</p>
+        <div class="fix">→ Fix: Set conversion actions for calls and form fills. Use Target CPA bidding with a realistic CPL target based on your average job value.</div>
+      </div>
+    </div>
+
+    <!-- ── CHAPTER 5: BENCHMARKS ── -->
+    <div class="ch-divider"></div>
+    <div class="sec-head">
+      <div class="sh-eyebrow">
+        <span class="ch-tag">Chapter 5</span>
+        <div class="ch-rule"></div>
+      </div>
+      <h2>What good numbers look like — AU benchmarks by sector</h2>
+      <p>These are realistic benchmark ranges from Australian service business Google Ads accounts. Use them to calibrate your expectations — and to identify when something is genuinely underperforming vs. simply needing more time.</p>
+    </div>
+
+    <div class="bench-table-wrap">
+      <table class="bench-table">
+        <thead>
+          <tr>
+            <th>Sector</th>
+            <th>Typical CPL</th>
+            <th>Good CPL</th>
+            <th>Avg CPC</th>
+            <th>Realistic ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="metric">Electrical</td><td><span class="bench-pill bp-amber">$95–$140</span></td><td><span class="bench-pill bp-green">$65–$95</span></td><td><span class="bench-pill bp-blue">$6–$14</span></td><td><span class="bench-pill bp-green">8–18×</span></td></tr>
+          <tr><td class="metric">Plumbing</td><td><span class="bench-pill bp-amber">$80–$130</span></td><td><span class="bench-pill bp-green">$55–$85</span></td><td><span class="bench-pill bp-blue">$5–$12</span></td><td><span class="bench-pill bp-green">10–22×</span></td></tr>
+          <tr><td class="metric">HVAC / Refrigeration</td><td><span class="bench-pill bp-amber">$100–$160</span></td><td><span class="bench-pill bp-green">$70–$110</span></td><td><span class="bench-pill bp-blue">$7–$16</span></td><td><span class="bench-pill bp-green">7–16×</span></td></tr>
+          <tr><td class="metric">Residential Construction</td><td><span class="bench-pill bp-amber">$180–$320</span></td><td><span class="bench-pill bp-green">$120–$200</span></td><td><span class="bench-pill bp-blue">$10–$22</span></td><td><span class="bench-pill bp-green">12–30×</span></td></tr>
+          <tr><td class="metric">Commercial Fit-Out</td><td><span class="bench-pill bp-amber">$220–$400</span></td><td><span class="bench-pill bp-green">$140–$240</span></td><td><span class="bench-pill bp-blue">$12–$26</span></td><td><span class="bench-pill bp-green">15–40×</span></td></tr>
+          <tr><td class="metric">Accounting / Legal</td><td><span class="bench-pill bp-amber">$130–$220</span></td><td><span class="bench-pill bp-green">$85–$150</span></td><td><span class="bench-pill bp-blue">$8–$20</span></td><td><span class="bench-pill bp-green">9–25×</span></td></tr>
+          <tr><td class="metric">Engineering / Consulting</td><td><span class="bench-pill bp-amber">$160–$280</span></td><td><span class="bench-pill bp-green">$100–$180</span></td><td><span class="bench-pill bp-blue">$10–$24</span></td><td><span class="bench-pill bp-green">11–28×</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout info">
+      <span class="callout-icon">📊</span>
+      <div class="callout-body">
+        <strong>How to read this table</strong>
+        "Good CPL" is what well-structured accounts achieve with proper keyword targeting, negative lists, and dedicated landing pages. "Typical CPL" is what most accounts see without those elements. The gap between typical and good is almost always explained by the 5 mistakes in Chapter 4.
+      </div>
+    </div>
+
+    <!-- ── FINAL CTA ── -->
+    <div class="ch-divider"></div>
+    <div class="final-cta">
+      <div class="fc-ey">Next Step — Free Strategy Consultation</div>
+      <h2>Want a campaign built around <em>your</em> numbers?</h2>
+      <p>Book a free 30-minute strategy consultation. We'll look at your average job value, your market, and your specific business type — and give you a realistic picture of what Google Ads could produce for your business, with no obligation to proceed.</p>
+      <div class="cta-btns">
+        <a href="https://trafficradius.com.au/contact-us/" target="_blank" rel="noopener" class="btn-main">📞 Book My Free Strategy Consultation</a>
+        <a href="tel:1300852340" class="btn-ghost">1300 852 340</a>
+      </div>
+      <div class="cta-proof">
+        <span>No lock-in contracts</span>
+        <span>Month-to-month from day one</span>
+        <span>Your account, always yours</span>
+        <span>Plain-English weekly reports</span>
+      </div>
+    </div>
+
+  </div><!-- /lockedChapters -->
+
+</div><!-- /page-body -->
+
+<footer>
+  <div class="fw">
+    <!-- Footer logo also in original colours — no filter applied -->
+    <a href="https://trafficradius.com.au/" target="_blank" rel="noopener">
+      <img src="data:image/png;base64,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" alt="Traffic Radius">
+    </a>
+    <p>© <span id="yr"></span> Traffic Radius · 201, 22 Kings Place, South Melbourne VIC 3205 · <a href="mailto:info@trafficradius.com.au">info@trafficradius.com.au</a> · <a href="tel:1300852340">1300 852 340</a></p>
+  </div>
+</footer>
+
+<div id="sbar">
+  <div class="sm">Ready to put this into practice?<small>Free 30-min strategy consultation · no lock-in</small></div>
+  <a href="https://trafficradius.com.au/contact-us/" target="_blank" rel="noopener" class="topbar-cta" style="flex-shrink:0;">Book Free Consultation</a>
+</div>
+
+<script>
+// ── GATE ──────────────────────────────────────────
+function unlockGuide(){
+  const email = document.getElementById('gEmail').value.trim();
+  const btn   = document.getElementById('gBtn');
+  const txt   = document.getElementById('gBtnTxt');
+  if(!email||!email.includes('@')||!email.includes('.')){
+    showToast('Please enter a valid email address','#C23B3B'); return;
+  }
+  txt.textContent='⏳ Unlocking your playbook...';
+  btn.disabled=true;
+  btn.style.background='#5E8C2E';
+  setTimeout(()=>{
+    document.getElementById('gateBox').style.display='none';
+    const lc = document.getElementById('lockedChapters');
+    lc.style.display='block';
+    document.getElementById('sbar').classList.add('show');
+    lc.scrollIntoView({behavior:'smooth',block:'start'});
+    // Animate newly visible elements
+    lc.querySelectorAll('.anim').forEach((el,i)=>{
+      setTimeout(()=>el.classList.add('vis'),i*60);
+    });
+  }, 650);
+}
+document.getElementById('gEmail').addEventListener('keydown',e=>{if(e.key==='Enter')unlockGuide();});
+
+// ── INDUSTRY TABS ──────────────────────────────────
+function switchTab(el, panel){
+  document.querySelectorAll('.ind-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.ind-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-'+panel).classList.add('active');
+}
+
+// ── READING PROGRESS ──────────────────────────────
+window.addEventListener('scroll',()=>{
+  const h=document.documentElement;
+  const pct=(h.scrollTop/(h.scrollHeight-h.clientHeight))*100;
+  document.getElementById('rprog').style.width=Math.min(pct,100)+'%';
+  if(document.getElementById('lockedChapters').style.display!=='none'&&window.scrollY>500){
+    document.getElementById('sbar').classList.add('show');
+  }
+},{passive:true});
+
+// ── SCROLL ANIMATIONS ─────────────────────────────
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('vis');});
+},{threshold:0.1});
+document.querySelectorAll('.anim').forEach(el=>obs.observe(el));
+
+// ── TOAST ─────────────────────────────────────────
+function showToast(msg,col){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  if(col)t.style.background=col;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+document.getElementById('yr').textContent=new Date().getFullYear();
+</script>
+</body>
+</html>

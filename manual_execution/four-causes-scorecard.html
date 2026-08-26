@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Four Causes Scorecard | Traffic Radius</title>
+<meta name="description" content="Find out which of the four real causes is behind your flat social media performance — free, in under 5 minutes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --color-primary:#a4d36b;
+  --color-primary-dark:#8fc453;
+  --color-accent-blue:#209fd7;
+  --color-dark:#171717;
+  --color-heading:#000000;
+  --color-body-text:#3d3d3d;
+  --color-muted-text:#555555;
+  --color-white:#ffffff;
+  --color-light-bg:#fafafa;
+  --color-border:#ebebeb;
+  --color-card-tint:#f9fbff;
+  --font-base:'Montserrat', sans-serif;
+  --radius-pill:30px;
+  --radius-card:12px;
+  --radius-card-sm:8px;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:var(--font-base); color:var(--color-body-text); background:var(--color-light-bg);
+  line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:760px; margin:0 auto; padding:32px 20px 80px;}
+header.brand-bar{
+  display:flex; align-items:center; gap:10px; padding:22px 20px; background:var(--color-white);
+  border-bottom:1px solid var(--color-border);
+}
+.logo{display:flex; align-items:center; gap:10px; font-weight:800; font-size:19px; color:var(--color-heading);}
+.logo-bars{display:flex; align-items:flex-end; gap:2px;}
+.logo-bars span{width:4px; display:block; background:var(--color-accent-blue); border-radius:2px;}
+.logo-bars span:nth-child(1){height:9px;}
+.logo-bars span:nth-child(2){height:15px; background:var(--color-primary);}
+.logo-bars span:nth-child(3){height:20px;}
+
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px; background:var(--color-primary); color:#12210a;
+  text-transform:uppercase; font-weight:700; font-size:12px; letter-spacing:.05em;
+  padding:8px 16px; border-radius:4px; margin-bottom:18px;
+}
+h1{font-size:34px; font-weight:700; color:var(--color-heading); line-height:1.25; margin-bottom:14px;}
+p.lead{font-size:16px; color:var(--color-muted-text); margin-bottom:8px;}
+.intro-card{background:var(--color-white); border:1px solid var(--color-border); border-radius:var(--radius-card); padding:32px; margin-bottom:24px;}
+.meta-row{display:flex; gap:18px; flex-wrap:wrap; margin-top:18px; font-size:13.5px; color:var(--color-muted-text);}
+.meta-row span{display:flex; align-items:center; gap:6px;}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:10px;
+  font-family:var(--font-base); font-weight:700; text-transform:uppercase; font-size:15px;
+  letter-spacing:.02em; padding:15px 28px; border-radius:var(--radius-pill); border:2px solid transparent;
+  cursor:pointer; transition:all .2s ease; background:var(--color-primary); color:#121212; width:100%;
+}
+.btn:hover{background:var(--color-primary-dark); transform:translateY(-1px);}
+.btn-ghost{background:transparent; border-color:var(--color-dark); color:var(--color-dark);}
+.btn-ghost:hover{background:var(--color-dark); color:#fff;}
+
+/* Progress bar */
+.progress-shell{background:var(--color-border); border-radius:20px; height:8px; overflow:hidden; margin-bottom:8px;}
+.progress-fill{background:var(--color-primary); height:100%; width:0%; transition:width .3s ease;}
+.progress-label{font-size:13px; color:var(--color-muted-text); margin-bottom:22px;}
+
+/* Quiz card */
+#quizScreen{display:none;}
+.question-card{
+  background:var(--color-white); border:1px solid var(--color-border); border-radius:var(--radius-card);
+  padding:32px;
+}
+.question-card h2{font-size:20px; color:var(--color-heading); margin-bottom:22px; line-height:1.4;}
+.option{
+  display:block; width:100%; text-align:left; background:var(--color-white);
+  border:1px solid var(--color-border); border-radius:var(--radius-card-sm); padding:16px 18px;
+  margin-bottom:12px; font-family:var(--font-base); font-size:15px; color:var(--color-body-text);
+  cursor:pointer; transition:.15s;
+}
+.option:hover{border-color:var(--color-accent-blue); background:var(--color-card-tint);}
+.option.selected{border-color:var(--color-accent-blue); background:var(--color-card-tint); box-shadow:0 0 0 1px var(--color-accent-blue) inset;}
+.nav-row{display:flex; justify-content:space-between; margin-top:24px; gap:12px;}
+.nav-row .btn{width:auto; flex:1;}
+.btn-disabled{opacity:.4; pointer-events:none;}
+
+/* Gate screen */
+#gateScreen{display:none;}
+.gate-card{
+  background:var(--color-dark); color:#fff; border-radius:var(--radius-card); padding:40px; text-align:center;
+}
+.gate-card h2{color:#fff; font-size:26px; margin-bottom:12px;}
+.gate-card p{color:#d5d5d5; margin-bottom:26px;}
+.result-teaser{
+  display:inline-block; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2);
+  border-radius:var(--radius-card-sm); padding:18px 26px; margin-bottom:26px; font-weight:700; font-size:18px;
+  color:var(--color-primary);
+}
+.gate-form{max-width:380px; margin:0 auto; text-align:left;}
+.gate-form label{display:block; font-size:13px; font-weight:700; margin-bottom:6px; margin-top:14px; color:#eee;}
+.gate-form input{
+  width:100%; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:#fff;
+  border-radius:8px; padding:13px 14px; font-family:var(--font-base); font-size:14px;
+}
+.gate-form input::placeholder{color:#999;}
+.gate-form .btn{margin-top:22px;}
+.friction-note{font-size:12.5px; color:#aaa; margin-top:14px;}
+
+/* Results screen */
+#resultsScreen{display:none;}
+.result-card{background:var(--color-white); border:1px solid var(--color-border); border-radius:var(--radius-card); padding:36px;}
+.result-headline{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--color-accent-blue); font-weight:700; margin-bottom:8px;}
+.result-title{font-size:28px; font-weight:800; color:var(--color-heading); margin-bottom:16px;}
+.result-body{font-size:15.5px; color:var(--color-body-text); margin-bottom:26px;}
+.bars{margin:26px 0;}
+.bar-row{margin-bottom:16px;}
+.bar-label{display:flex; justify-content:space-between; font-size:13.5px; font-weight:700; margin-bottom:6px;}
+.bar-shell{background:var(--color-border); border-radius:20px; height:14px; overflow:hidden;}
+.bar-fill{height:100%; border-radius:20px; transition:width .6s ease;}
+.tell-box{background:var(--color-card-tint); border-left:4px solid var(--color-accent-blue); padding:16px 20px; border-radius:0 8px 8px 0; margin:22px 0; font-size:14.5px;}
+.cta-block{margin-top:30px; text-align:center;}
+.cta-block .btn{margin-bottom:12px;}
+.cta-sub{font-size:13.5px; color:var(--color-muted-text); margin-top:8px;}
+.secondary-link{display:block; text-align:center; margin-top:16px; font-size:14px; color:var(--color-accent-blue); font-weight:600; text-decoration:none;}
+
+footer{text-align:center; padding:30px 20px; font-size:13px; color:#999;}
+
+@media (max-width:600px){
+  h1{font-size:26px;}
+  .intro-card, .question-card, .result-card, .gate-card{padding:22px;}
+  .nav-row{flex-direction:column-reverse;}
+}
+</style>
+</head>
+<body>
+
+<header class="brand-bar">
+  <div class="logo">
+    <span class="logo-bars"><span></span><span></span><span></span></span>
+    Traffic Radius
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- INTRO SCREEN -->
+  <div id="introScreen">
+    <span class="eyebrow">Free Diagnostic · 5 Minutes</span>
+    <h1>The Four Causes Scorecard</h1>
+    <p class="lead">Find out which of the four real causes is behind your flat social media performance — before you talk to anyone.</p>
+
+    <div class="intro-card">
+      <p style="margin-bottom:14px;">You can probably already prove social isn't working. What you can't prove is <em>why</em> — and guessing at a fix before you know the cause is how most businesses end up paying for a solution to the wrong problem.</p>
+      <p style="margin-bottom:0;">Answer 12 quick questions about how your social media actually runs today. We'll score you against the same four causes we use in our paid audits — channel fit, brand architecture, operating model, and measurement — and tell you which one is most likely holding you back.</p>
+      <div class="meta-row">
+        <span>⏱ Under 5 minutes</span>
+        <span>🔒 No credit card</span>
+        <span>📄 Instant result</span>
+      </div>
+    </div>
+
+    <button class="btn" onclick="startQuiz()">Start My Free Scorecard</button>
+    <p class="cta-sub" style="text-align:center; margin-top:14px;">No obligation. Your answers are only used to calculate your result.</p>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div id="quizScreen">
+    <div class="progress-shell"><div class="progress-fill" id="progressFill"></div></div>
+    <p class="progress-label" id="progressLabel">Question 1 of 12</p>
+
+    <div class="question-card">
+      <h2 id="questionText"></h2>
+      <div id="optionsContainer"></div>
+      <div class="nav-row">
+        <button class="btn btn-ghost" id="backBtn" onclick="prevQuestion()">Back</button>
+        <button class="btn btn-disabled" id="nextBtn" onclick="nextQuestion()">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GATE SCREEN -->
+  <div id="gateScreen">
+    <div class="gate-card">
+      <h2>Your result is ready</h2>
+      <p>Your biggest likely cause of underperformance is:</p>
+      <div class="result-teaser" id="teaserText">—</div>
+      <p>Enter your name and email to unlock the full breakdown — what it means, and what to do about it first.</p>
+      <div class="gate-form">
+        <label for="firstName">First name</label>
+        <input type="text" id="firstName" placeholder="Jane">
+        <label for="workEmail">Work email</label>
+        <input type="email" id="workEmail" placeholder="jane@yourbusiness.com.au">
+        <button class="btn" onclick="unlockResults()">Unlock My Full Result</button>
+        <p class="friction-note">No obligation. We'll only use this to send your result and occasional relevant insights — nothing else.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS SCREEN -->
+  <div id="resultsScreen">
+    <div class="result-card">
+      <p class="result-headline">Your Primary Cause</p>
+      <h2 class="result-title" id="resultTitle">—</h2>
+      <p class="result-body" id="resultBody">—</p>
+
+      <div class="tell-box" id="resultTell"></div>
+
+      <div class="bars" id="barsContainer">
+        <p style="font-weight:700; margin-bottom:14px; font-size:14px;">Your full breakdown</p>
+      </div>
+
+      <div class="cta-block">
+        <a class="btn" id="primaryCtaBtn" href="https://trafficradius.com.au/social-media-audit/" target="_blank" rel="noopener">Get My Free Social Media Audit</a>
+        <p class="cta-sub">Your scorecard result is a starting point. The free audit goes deeper into your specific accounts and data.</p>
+        <a class="secondary-link" id="secondaryCtaLink" href="https://trafficradius.com.au/book-strategy-consultation/" target="_blank" rel="noopener">Or skip ahead and book a Social Media Marketing Strategy Consultation →</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Traffic Radius · Melbourne, VIC · Working with Australian businesses Australia-wide</footer>
+
+<script>
+// ============================================================
+// QUESTION BANK — 12 questions, 3 per cause
+// cause keys: channel | brand | operating | measurement
+// each option has a severity score 0-3 (0 = healthy, 3 = severe)
+// ============================================================
+const questions = [
+  { cause:'channel', text:'How many social platforms are you actively posting on right now?', options:[
+    {label:'1 platform, consistently', score:0},
+    {label:'2 platforms', score:1},
+    {label:'3 or more platforms', score:2},
+    {label:"Not sure — it varies", score:3}
+  ]},
+  { cause:'channel', text:'Do you have a specific reason — data, not habit — for being active on each platform you use?', options:[
+    {label:'Yes, each one is backed by where our customers actually are', score:0},
+    {label:'Mostly, for our main one or two', score:1},
+    {label:"Not really — we're there because we're \"supposed to be\"", score:2},
+    {label:'No, we just picked what everyone else uses', score:3}
+  ]},
+  { cause:'channel', text:'When you compare effort to results across platforms, what do you actually see?', options:[
+    {label:'One platform clearly outperforms and gets most of our effort', score:0},
+    {label:'Roughly even results everywhere', score:1},
+    {label:'Respectable numbers everywhere, nothing that converts anywhere', score:2},
+    {label:"We honestly can't tell", score:3}
+  ]},
+  { cause:'brand', text:"Who is the \"face\" of your social content most of the time?", options:[
+    {label:'Named people on our team — leadership, specialists, founders', score:0},
+    {label:'A mix of company voice and named people', score:1},
+    {label:'Almost entirely a company/brand account', score:2},
+    {label:"Not sure — whoever's free posts it", score:3}
+  ]},
+  { cause:'brand', text:'Has an unpolished, off-the-cuff post from someone on your team ever noticeably outperformed your planned, designed content?', options:[
+    {label:'No — our planned content performs best', score:0},
+    {label:"Not that we've tracked", score:1},
+    {label:"We don't really create off-the-cuff content to compare", score:2},
+    {label:"Yes, and we didn't know what to do with that", score:3}
+  ]},
+  { cause:'brand', text:'Do your buyers make decisions based more on trusting your organisation as a whole, or trusting a specific person?', options:[
+    {label:'Trusting our organisation/brand as a whole', score:0},
+    {label:'A genuine mix of both', score:1},
+    {label:'Not sure', score:2},
+    {label:'Mostly a specific person or people they deal with', score:3}
+  ]},
+  { cause:'operating', text:'How long does a piece of content typically take to get approved and published?', options:[
+    {label:'Same day to 2 days', score:0},
+    {label:'About a week', score:1},
+    {label:'More than a week', score:2},
+    {label:'It varies wildly — no defined process', score:3}
+  ]},
+  { cause:'operating', text:'What happens to your social output during your busiest period of the year?', options:[
+    {label:"Stays consistent — it's built to survive busy periods", score:0},
+    {label:'Slows down a bit but continues', score:1},
+    {label:"We don't really have a quieter period to compare against", score:2},
+    {label:'Mostly stops', score:3}
+  ]},
+  { cause:'operating', text:'How many people would it take out of action before your social activity stopped entirely?', options:[
+    {label:"4 or more — it's not dependent on one or two people", score:0},
+    {label:'3', score:1},
+    {label:'2', score:2},
+    {label:'Just 1', score:3}
+  ]},
+  { cause:'measurement', text:'Can you currently trace specific enquiries, bookings or sales back to specific social posts or campaigns?', options:[
+    {label:'Yes, with confidence', score:0},
+    {label:'Somewhat — for paid, not organic', score:1},
+    {label:'Only roughly', score:2},
+    {label:'No, not really', score:3}
+  ]},
+  { cause:'measurement', text:'When someone enquires and mentions "I\'ve seen you around" or "a colleague mentioned you," does that get captured anywhere in your data?', options:[
+    {label:'Yes, we ask and record it', score:0},
+    {label:'Sometimes, informally', score:1},
+    {label:'Not sure', score:2},
+    {label:"No — that's just a conversation, not data", score:3}
+  ]},
+  { cause:'measurement', text:'How long does it typically take from someone first noticing you on social to them actually buying or enquiring?', options:[
+    {label:'Same day to a few days', score:0},
+    {label:'A few weeks', score:1},
+    {label:'Several months', score:2},
+    {label:'Honestly, we have no idea', score:3}
+  ]}
+];
+
+const causeInfo = {
+  channel: {
+    name:'Channel-Fit Problem',
+    body:"You're spread across platforms because that's what you're supposed to do, with no evidence behind any of them. Effort divides, nothing reaches critical mass, and every channel underperforms slightly rather than one channel working properly.",
+    tell:"The tell: respectable numbers everywhere, meaningful response nowhere.",
+    color:'#209fd7'
+  },
+  brand: {
+    name:'Brand-Architecture Problem',
+    body:"Your credibility sits in your people — your leaders, specialists, founders — and your social presence is a logo. In categories where buyers hire individuals rather than organisations, a company page is publishing into the wrong distribution model.",
+    tell:"The tell: someone posts something rough and unpolished from their phone and it outperforms months of designed content. That's the mechanism telling you where attention actually lives.",
+    color:'#a4d36b'
+  },
+  operating: {
+    name:'Operating-Model Problem',
+    body:"The strategy is sound. The content is fine. But production competes with core work, approval takes far longer than the news cycle it's responding to, and the whole thing depends on one or two people who are busiest exactly when the plan needs them.",
+    tell:"The tell: your best months are the months you had capacity, not the months your strategy changed.",
+    color:'#f2a93b'
+  },
+  measurement: {
+    name:'Measurement Problem',
+    body:"Social may already be contributing and you can't see it. Last-click attribution will always credit the final search. Dark social — the DM, the forwarded post, the conversation you never see — leaves no trace at all.",
+    tell:"The tell: enquiries arriving warm, already familiar with you, attributed to direct or branded search.",
+    color:'#d6556b'
+  }
+};
+
+let currentQuestion = 0;
+let answers = new Array(questions.length).fill(null);
+let finalScores = null;
+
+function startQuiz(){
+  document.getElementById('introScreen').style.display = 'none';
+  document.getElementById('quizScreen').style.display = 'block';
+  renderQuestion();
+}
+
+function renderQuestion(){
+  const q = questions[currentQuestion];
+  document.getElementById('questionText').textContent = q.text;
+  document.getElementById('progressLabel').textContent = 'Question ' + (currentQuestion+1) + ' of ' + questions.length;
+  document.getElementById('progressFill').style.width = (((currentQuestion)/questions.length)*100) + '%';
+
+  const container = document.getElementById('optionsContainer');
+  container.innerHTML = '';
+  q.options.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'option' + (answers[currentQuestion] === idx ? ' selected' : '');
+    btn.textContent = opt.label;
+    btn.onclick = () => selectOption(idx);
+    container.appendChild(btn);
+  });
+
+  document.getElementById('backBtn').classList.toggle('btn-disabled', currentQuestion === 0);
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.textContent = currentQuestion === questions.length - 1 ? 'See My Result' : 'Next';
+  nextBtn.classList.toggle('btn-disabled', answers[currentQuestion] === null);
+}
+
+function selectOption(idx){
+  answers[currentQuestion] = idx;
+  renderQuestion();
+}
+
+function nextQuestion(){
+  if (answers[currentQuestion] === null) return;
+  if (currentQuestion === questions.length - 1) {
+    calculateResults();
+    showGate();
+  } else {
+    currentQuestion++;
+    renderQuestion();
+  }
+}
+
+function prevQuestion(){
+  if (currentQuestion === 0) return;
+  currentQuestion--;
+  renderQuestion();
+}
+
+function calculateResults(){
+  const scores = { channel:0, brand:0, operating:0, measurement:0 };
+  questions.forEach((q, i) => {
+    const chosen = q.options[answers[i]];
+    scores[q.cause] += chosen.score;
+  });
+  finalScores = scores;
+}
+
+function getPrimaryCause(){
+  const order = ['channel','brand','operating','measurement'];
+  let top = order[0];
+  order.forEach(k => { if (finalScores[k] > finalScores[top]) top = k; });
+  return top;
+}
+
+function showGate(){
+  document.getElementById('quizScreen').style.display = 'none';
+  document.getElementById('gateScreen').style.display = 'block';
+  document.getElementById('progressFill').style.width = '100%';
+  const primary = getPrimaryCause();
+  document.getElementById('teaserText').textContent = causeInfo[primary].name;
+}
+
+function unlockResults(){
+  const name = document.getElementById('firstName').value.trim();
+  const email = document.getElementById('workEmail').value.trim();
+  if (!name || !email || !email.includes('@')) {
+    alert('Please enter your first name and a valid work email to see your full result.');
+    return;
+  }
+  // In production: POST {name, email, scores: finalScores} to CRM/email platform here.
+  renderResults();
+  document.getElementById('gateScreen').style.display = 'none';
+  document.getElementById('resultsScreen').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function renderResults(){
+  const primary = getPrimaryCause();
+  const info = causeInfo[primary];
+  document.getElementById('resultTitle').textContent = info.name;
+  document.getElementById('resultBody').textContent = info.body;
+  document.getElementById('resultTell').textContent = info.tell;
+
+  const maxScore = 9; // 3 questions x max 3
+  const order = ['channel','brand','operating','measurement'];
+  const barsContainer = document.getElementById('barsContainer');
+  barsContainer.innerHTML = '<p style="font-weight:700; margin-bottom:14px; font-size:14px;">Your full breakdown</p>';
+  order.forEach(k => {
+    const pct = Math.round((finalScores[k]/maxScore)*100);
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="bar-label"><span>${causeInfo[k].name}</span><span>${finalScores[k]}/${maxScore}</span></div>
+      <div class="bar-shell"><div class="bar-fill" style="width:${pct}%; background:${causeInfo[k].color};"></div></div>
+    `;
+    barsContainer.appendChild(row);
+  });
+
+  // Total severity across all causes drives which CTA is emphasised
+  const total = Object.values(finalScores).reduce((a,b)=>a+b,0);
+  const maxTotal = 36;
+  if (total / maxTotal > 0.6) {
+    document.getElementById('secondaryCtaLink').textContent = 'Your scores suggest more than one cause at play — book a Social Media Marketing Strategy Consultation to unpack it properly →';
+  }
+}
+</script>
+
+</body>
+</html>

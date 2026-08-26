@@ -1,0 +1,30 @@
+{
+  "asset_id": "sms_sequence",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/universal-sms-sequence-prompt.md",
+  "fields": [
+    { "field_id": "sms_purpose", "label": "SMS Purpose", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "number_of_sms_messages", "label": "Number of SMS messages", "kind": "number", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "trigger_point", "label": "Trigger point", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "compliance_sensitivity", "label": "Compliance Sensitivity", "kind": "enum_choice", "required": true, "source": "user_input",
+      "choices": ["Healthcare", "Financial", "Legal", "Other regulated field: specify", "None"],
+      "raw_explanation": "Healthcare / Financial / Legal / Other regulated field: specify / None" },
+    { "field_id": "additional_notes_optional", "label": "Additional notes (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+
+    { "field_id": "icp_document", "label": "ICP Document", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "icp_*", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1: \"ICP avatar: their name/archetype, core fears, goals, language patterns, and how they respond to direct outreach (are they receptive or guarded?)\"" },
+    { "field_id": "funnel_stages", "label": "Funnel Structure", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "funnel_stages", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1: \"The funnel structure and email sequence already created — so the SMS sequence complements without duplicating what the emails say.\"" },
+    { "field_id": "email_sequence_copy", "label": "Email Sequence Copy", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "email_sequence_copy", "fallback": "skip_silently_if_missing",
+      "raw_explanation": "Step 1: \"The funnel structure and email sequence already created — so the SMS sequence complements without duplicating what the emails say.\" No Email Sequence asset/prompt exists anywhere else in this system, so this is modeled as an optional reference that is silently skipped (not asked about, not blocking) if the context key doesn't exist, rather than the standard ask_user_if_missing fallback." },
+    { "field_id": "cro_rewritten_copy", "label": "Brand Voice (from CRO)", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1: \"Client name, industry, region, offer type, and brand voice.\" Step 2: \"Match the brand voice from earlier outputs — direct, plain-spoken, no corporate fluff.\" Also the source of \"the primary and secondary CTAs already established.\"" },
+    { "field_id": "offer_ladder_optional", "label": "Offer Ladder (optional)", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "offer_ladder", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1: \"Whether the sale is transactional/impulse or considered/high-ticket\" — informed by the value ladder/offer stage where one exists." }
+  ]
+}

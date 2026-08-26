@@ -1,0 +1,198 @@
+{
+  "asset_id": "offers",
+  "version": 1,
+  "source_prompt_file": "manual_execution/Value-Ladder-Genie-Prompt.md",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry",
+      "label": "Industry",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_location",
+      "label": "Region / Location",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — city/state/country; note if the business is local-only, national, or global"
+    },
+    {
+      "field_id": "practitioner_team_credentials",
+      "label": "Practitioner / Team Credentials",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — qualifications, years in the field, certifications, notable results, team size and roles, tools/software owned, any licensing already held"
+    },
+    {
+      "field_id": "delivery_capacity",
+      "label": "Delivery Capacity",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — solo operator, small team (size), agency, or platform/software; roughly how many clients or units can be served at once at each level of hands-on involvement"
+    },
+    {
+      "field_id": "target_service_offer_to_ladder",
+      "label": "Target Service / Offer to Ladder",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "required_if": { "field": "wish_mode", "equals": "Wish 6 (Single Offer Type Laddered)" },
+      "fallback_instruction": "Leave blank for Wish 1-5 and Wish 7 — the Genie draws from the full service catalogue. REQUIRED only when Wish / Mode = Wish 6.",
+      "raw_explanation": "YOUR ANSWER — the specific service, product, or category this ladder is being built around. Leave blank only for Wish 1–5 and Wish 7, where the Genie should draw from the full service catalogue; REQUIRED for Wish 6"
+    },
+    {
+      "field_id": "icp_document",
+      "label": "ICP Document",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — paste, attach, or reference \"use the ICP established earlier in this conversation.\" Should cover: avatar name/archetype, demographics, psychographics, core pains and fears, goals, decision criteria, awareness level, objections, and the language they actually use"
+    },
+    {
+      "field_id": "cro_messaging_framework",
+      "label": "CRO / Messaging Framework",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference \"use the CRO audit / pillar page copy established earlier in this conversation.\" Used to keep offer titles and rationale consistent with existing brand voice and psychological triggers already in play"
+    },
+    {
+      "field_id": "competitor_analysis",
+      "label": "Competitor Analysis",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "unresolved_context_key",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, reference a file, or say \"use the competitor analysis established earlier in this conversation.\" Should cover what competitors currently sell at each price point, what's overpriced/underpriced relative to the market, and any gap in the competitive offer stack"
+    },
+    {
+      "field_id": "existing_offers_already_in_market",
+      "label": "Existing Offers Already in Market",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank — list anything this business already sells today, at any price point, so the Genie extends the ladder rather than duplicating or cannibalising it"
+    },
+    {
+      "field_id": "financial_anchor_inputs",
+      "label": "Financial Anchor Inputs",
+      "kind": "compound",
+      "required": false,
+      "source": "user_input",
+      "sub_fields": [
+        {
+          "field_id": "annual_value_of_the_outcome_to_the_customer",
+          "label": "Annual value of the outcome to the customer",
+          "kind": "text",
+          "required": false,
+          "source": "user_input",
+          "fallback_instruction": "If unknown, leave blank and the Genie will state its assumption before proceeding.",
+          "raw_explanation": "YOUR ANSWER — revenue gained, cost avoided, hours saved × their hourly rate, or risk removed. If unknown, leave blank and the Genie will state its assumption before proceeding"
+        },
+        {
+          "field_id": "customer_s_typical_budget_or_spend_norms_for_this_category",
+          "label": "Customer's typical budget or spend norms for this category",
+          "kind": "text",
+          "required": false,
+          "source": "user_input",
+          "raw_explanation": "YOUR ANSWER or leave blank"
+        },
+        {
+          "field_id": "currency",
+          "label": "Currency",
+          "kind": "text",
+          "required": false,
+          "source": "user_input",
+          "fallback_instruction": "Defaults to USD if left blank.",
+          "raw_explanation": "YOUR ANSWER — e.g. AUD, USD, GBP. Defaults to USD if left blank"
+        },
+        {
+          "field_id": "local_market_price_norms_if_known",
+          "label": "Local market price norms (if known)",
+          "kind": "text",
+          "required": false,
+          "source": "user_input",
+          "raw_explanation": "YOUR ANSWER or leave blank"
+        }
+      ]
+    },
+    {
+      "field_id": "regulated_field_flag",
+      "label": "Regulated Field Flag",
+      "kind": "boolean_flag",
+      "required": true,
+      "source": "user_input",
+      "conditional_children": ["regulation_name"],
+      "raw_explanation": "YOUR ANSWER — Yes/No. If yes, name the regulation (medical, legal, financial, insurance, immigration, childcare, real estate, etc.) so compliance notes are attached correctly"
+    },
+    {
+      "field_id": "regulation_name",
+      "label": "Regulation Name",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "conditional_on": { "field": "regulated_field_flag", "equals": true },
+      "raw_explanation": "Name the regulation (medical, legal, financial, insurance, immigration, childcare, real estate, etc.) so compliance notes are attached correctly."
+    },
+    {
+      "field_id": "wish_mode",
+      "label": "Wish / Mode",
+      "kind": "enum_choice",
+      "required": true,
+      "source": "user_input",
+      "choices": [
+        "Wish 1 (Free/Lead Gen)",
+        "Wish 2 (Low-Ticket)",
+        "Wish 3 (Mid-Range)",
+        "Wish 4 (High-Ticket)",
+        "Wish 5 (Premium)",
+        "Wish 6 (Single Offer Type Laddered)",
+        "Wish 7 (Full Ladder Blueprint)"
+      ],
+      "raw_explanation": "YOUR ANSWER — select one: Wish 1 (Free/Lead Gen) · Wish 2 (Low-Ticket) · Wish 3 (Mid-Range) · Wish 4 (High-Ticket) · Wish 5 (Premium) · Wish 6 (Single Offer Type Laddered) · Wish 7 (Full Ladder Blueprint)"
+    },
+    {
+      "field_id": "number_of_items_optional_override",
+      "label": "Number of Items (optional override)",
+      "kind": "number",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Leave blank to use the default count for the selected Wish.",
+      "raw_explanation": "YOUR ANSWER or leave blank to use the default count for the selected Wish"
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    }
+  ]
+}

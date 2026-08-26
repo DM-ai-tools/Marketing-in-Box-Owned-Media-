@@ -1,0 +1,39 @@
+[project]
+name = "marketing-in-a-box-backend"
+version = "0.1.0"
+description = "Marketing-in-a-Box orchestrator API: DAG pipeline, Claude-based generation, HITL review."
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.1",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "celery>=5.4",
+    "redis>=5.0",
+    "anthropic>=0.34",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
+    "networkx>=3.3",
+    # Runtime, not just test tooling: app/services/scraper.py fetches the live page behind the
+    # CRO stage's "Existing Page URL" so the operator does not have to paste it by hand.
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

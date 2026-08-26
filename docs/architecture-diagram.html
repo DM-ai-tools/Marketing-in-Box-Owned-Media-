@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>How the content pipeline works</title>
+<style>
+  :root {
+    --bg: #F4F1EA;
+    --card: #FFFFFF;
+    --border: #E4E0D6;
+    --text-primary: #1E2A38;
+    --text-secondary: #4A5568;
+    --text-muted: #8A8A82;
+    --step-teal: #0F6E56;
+    --step-blue: #185FA5;
+    --step-purple: #534AB7;
+    --step-brown: #7A4A1E;
+    --sidebar-bg: #EAF3F7;
+    --sidebar-border: #CFE3EC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    color: var(--text-primary);
+    padding: 48px 24px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 36px; }
+  h1 {
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--step-blue);
+    margin: 0 0 10px;
+  }
+  .subtitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px;
+  }
+  .caption {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  hr.rule {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 28px 0 32px;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 28px;
+    align-items: start;
+  }
+  .steps { display: flex; flex-direction: column; }
+  .step-row { display: flex; gap: 14px; }
+  .step-num-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 30px;
+    flex-shrink: 0;
+  }
+  .step-num {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-line {
+    width: 2px;
+    flex: 1;
+    background: var(--border);
+    margin-top: 2px;
+  }
+  .step-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    flex: 1;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .step-card h3 {
+    font-size: 15px;
+    margin: 0 0 6px;
+    font-weight: 700;
+  }
+  .step-card p {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .step-card code {
+    background: #F1EFE8;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12.5px;
+  }
+  .step-note {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin: 2px 0 8px 44px;
+    font-weight: 600;
+  }
+  .side-note-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 4px 0 16px 44px;
+  }
+  .side-note {
+    background: #FBFAF6;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .side-note.warn { background: #FDF6E9; border-color: #EFDBAE; }
+  .side-note strong {
+    display: block;
+    font-size: 12.5px;
+    margin-bottom: 4px;
+  }
+  .side-note p, .side-note li {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .side-note ul { margin: 0; padding-left: 16px; }
+  .approval-tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 8px;
+    margin-right: 12px;
+  }
+  .approve { color: #2E7D32; }
+  .reject { color: #B23B3B; }
+
+  .sidebar {
+    background: var(--sidebar-bg);
+    border: 1px solid var(--sidebar-border);
+    border-radius: 12px;
+    padding: 20px;
+    position: sticky;
+    top: 24px;
+  }
+  .sidebar h2 {
+    font-size: 15px;
+    color: var(--step-blue);
+    text-align: center;
+    margin: 0 0 4px;
+  }
+  .sidebar .sidebar-caption {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    margin: 0 0 16px;
+  }
+  .principle {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .principle strong {
+    display: block;
+    font-size: 12.5px;
+    margin-bottom: 4px;
+  }
+  .principle p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>How the content pipeline works</h1>
+    <p class="subtitle">From a new project, to a full set of reviewed and exported content &mdash; step by step</p>
+    <p class="caption">Plain-language walkthrough of the system architecture, and who or what is responsible for each part</p>
+  </header>
+  <hr class="rule">
+
+  <div class="layout">
+    <div class="steps">
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-blue)">1</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>A new project is created</h3>
+          <p>An operator opens the dashboard and starts a project, entering the client's starting details &mdash; name, industry, region, and any known background. This becomes the project's first stored context.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-blue)">2</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>The system checks who is asking</h3>
+          <p>Every request carries the operator's role. Operators can only run stages on projects assigned to them; only admins can edit prompt templates or manage staff. This is checked before any stage is triggered.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-teal)">3</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>The Workflow Engine checks dependencies</h3>
+          <p>Before a stage can run, the Workflow Engine confirms every stage it depends on is already <code>approved</code>. If not, the request is rejected with a clear reason rather than run against incomplete context.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-teal)">4</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>Existing context is pulled in</h3>
+          <p>Anything already approved for this project &mdash; persona details, prior analysis, design decisions &mdash; is loaded from the Context Store, so each stage builds on real, structured facts instead of repeating earlier work.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-purple)">5</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>The stage is queued for background execution</h3>
+          <p>The task is placed on the Redis queue and picked up by a Celery worker, so the operator's screen is never blocked while a stage runs.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-purple)">6</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>The prompt template is rendered with context</h3>
+          <p>The worker fetches the correct versioned prompt template for this stage and fills it in with the project's current context fields, following the exact instructions and guardrails written into that template.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-purple)">7</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>Claude generates the content</h3>
+          <p>The rendered prompt is sent to the Anthropic Claude API. The result comes back as structured content specific to that stage &mdash; a persona, an analysis, a page design, a piece of written content.</p>
+        </div>
+      </div>
+
+      <div class="step-note">Stage type decides what happens next</div>
+      <div class="side-note-row">
+        <div class="side-note warn">
+          <strong>Gated stages pause here</strong>
+          <p>Persona, Analysis, and Design are saved as <code>awaiting_review</code> and wait for a human before anything downstream can start.</p>
+        </div>
+        <div class="side-note">
+          <strong>Auto-chain stages continue</strong>
+          <p>Everything after Design is saved as <code>approved</code> immediately and the next stage in sequence is queued right away.</p>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-brown)">8</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-card">
+          <h3>An operator reviews a gated stage</h3>
+          <p>The operator reads the draft, edits it directly if needed, and approves or rejects it. Approving writes the final content into the Context Store as new, reusable facts for later stages. Rejecting sends the stage back to be re-run.</p>
+          <span class="approval-tag approve">&#10003; Approved &rarr; context saved, next stage unlocked</span>
+          <span class="approval-tag reject">&#10007; Rejected &rarr; stage reset, can be re-run</span>
+        </div>
+      </div>
+
+      <div class="step-row">
+        <div class="step-num-col">
+          <div class="step-num" style="background:var(--step-brown)">9</div>
+        </div>
+        <div class="step-card">
+          <h3>The finished content is stored and ready to export</h3>
+          <p>Approved content is written to the database and saved to the backend's Railway volume. The operator can export it as Markdown or HTML at any time, and the project dashboard shows the full status of every stage, start to finish.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="sidebar">
+      <h2>A few things that apply the whole way through</h2>
+      <p class="sidebar-caption">Not single steps &mdash; these run across everything above</p>
+
+      <div class="principle">
+        <strong>Data stays isolated per project</strong>
+        <p>Every database query is filtered by <code>project_id</code>. One project's data is never visible to another.</p>
+      </div>
+
+      <div class="principle">
+        <strong>A person always has the final say on gated stages</strong>
+        <p>Persona, Analysis, and Design cannot move forward without an explicit operator approval.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Failures only affect the failed stage</strong>
+        <p>If a Claude call fails, only that stage is marked <code>failed</code> and retried. Prior approved context and output are never lost.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Templates are versioned</strong>
+        <p>A stage always uses the template version that was active when its project reached that point, so editing a template never disrupts work already in progress.</p>
+      </div>
+
+      <div class="principle">
+        <strong>Nothing is lost</strong>
+        <p>Every run, approval, rejection, and export is recorded against the project, giving a full, traceable history of what happened and when.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "asset_id": "webinar",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/universal-webinar-prompt.md",
+  "notes": "Per user decision, this is ONE merged webinar-generation stage — confirmed against source: the ROLE section states the webinar's content is built by 'synthesising the strongest elements from competitor webinars,' and Steps 1-8 run linearly in a single prompt execution producing one combined 7-part output. The old DAG's separate 'competitor-sourced' and 'LLM-sourced' webinar stages are superseded by this single call.",
+  "fields": [
+    { "field_id": "webinar_topic_working_title", "label": "Webinar Topic / Working Title", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "competitor_webinar_sources", "label": "Competitor Webinar Sources", "kind": "file_attach", "required": true, "source": "user_input",
+      "accepted_types": ["file", "text"],
+      "raw_explanation": "UPLOAD OR PASTE — transcripts, slide content, or URLs of 2-5 competitor webinars. Step 2 (Competitor Webinar Synthesis) reads all sources supplied here." },
+    { "field_id": "webinar_format", "label": "Webinar Format", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "target_duration", "label": "Target Duration", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "primary_conversion_goal", "label": "Primary Conversion Goal", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "presenters_optional", "label": "Presenter(s) (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+    { "field_id": "registration_page_needed", "label": "Registration Page Needed", "kind": "boolean_flag", "required": true, "source": "user_input", "raw_explanation": "Yes / No" },
+    { "field_id": "follow_up_emails_needed", "label": "Follow-Up Emails Needed", "kind": "boolean_flag", "required": true, "source": "user_input", "raw_explanation": "Yes / No" },
+    { "field_id": "compliance_sensitivity", "label": "Compliance Sensitivity", "kind": "enum_choice", "required": true, "source": "user_input",
+      "choices": ["Healthcare", "Financial", "Legal", "Other regulated field: specify", "None"],
+      "raw_explanation": "Healthcare / Financial / Legal / Other regulated field: specify / None" },
+    { "field_id": "additional_notes_optional", "label": "Additional Notes (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+
+    { "field_id": "icp_document", "label": "ICP Document", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "icp_*", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1B: full avatar — demographics, psychographics, core pains and fears, goals, objections, decision criteria, awareness level, and exact language/phrases. \"Use the ICP's exact language from earlier outputs in this conversation.\"" },
+    { "field_id": "cro_rewritten_copy", "label": "Brand Voice / Proof Points (from CRO and Funnel)", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1A: brand voice and tone from approved pillar page and funnel copy; key proof points, stats, case studies, and testimonials approved for use; product/service differentiators already established." },
+    { "field_id": "design_tokens", "label": "Design Tokens", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "design_tokens", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 5 (Slide Deck Brief): \"Reference the client's brand colours and design language from earlier outputs.\"" },
+    { "field_id": "competitor_analysis_webinars", "label": "Competitor Analysis — Webinars", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "competitor_analysis_webinars", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Synthesized field — sourced from the paired Competitor Analysis — Webinars stage (08_Webinars.md), which identifies which competitors genuinely run self-hosted webinar programs worth sourcing transcripts/slides from for the Competitor Webinar Sources field above. Not explicitly named in this prompt's own text, which only asks for raw source uploads." }
+  ]
+}

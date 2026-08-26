@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Why Your Meta Ads ROAS Dropped — 5-Step Diagnosis | Traffic Radius</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+
+    /* ─── DESIGN TOKENS ───────────────────────────────────────────── */
+    :root {
+      --navy:       #0D1F3C;
+      --navy-mid:   #152d55;
+      --navy-light: #1e3d6b;
+      --blue:       #1B62FF;
+      --orange:     #FF5C2B;
+      --orange-dk:  #e04a1f;
+      --white:      #F5F7FA;
+      --grey:       #4A5568;
+      --grey-lt:    #E2E8F0;
+      --grey-mid:   #8492A6;
+      /* status colours */
+      --red:        #EF4444;
+      --amber:      #F59E0B;
+      --green:      #10B981;
+      --red-bg:     rgba(239,68,68,0.08);
+      --amber-bg:   rgba(245,158,11,0.08);
+      --green-bg:   rgba(16,185,129,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      font-family: 'Inter', sans-serif;
+      background: var(--white);
+      color: var(--navy);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       GATEWAY
+    ══════════════════════════════════════════════════════════════ */
+    #gateway {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(13, 31, 60, 0.68);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .gw-wrap {
+      width: 100%;
+      max-width: 530px;
+      background: #fff;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 48px 120px rgba(13,31,60,0.32), 0 0 0 1px rgba(27,98,255,0.06);
+      position: relative;
+    }
+
+    /* gradient top bar */
+    .gw-topbar {
+      height: 5px;
+      background: linear-gradient(90deg, var(--red) 0%, var(--amber) 50%, var(--green) 100%);
+    }
+
+    /* diagnosis badge strip */
+    .gw-diag-strip {
+      background: var(--navy);
+      padding: 10px 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .gw-diag-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+
+    .gw-diag-text {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.50);
+    }
+
+    .gw-inner {
+      padding: 36px 40px 32px;
+    }
+
+    .gw-logo-row {
+      margin-bottom: 24px;
+    }
+
+    .gw-eyebrow {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--orange);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+    .gw-eyebrow::before {
+      content: '';
+      width: 18px; height: 2px;
+      background: var(--orange);
+      border-radius: 2px;
+    }
+
+    .gw-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.30;
+      color: var(--navy);
+      margin-bottom: 10px;
+    }
+
+    .gw-sub {
+      font-size: 13.5px;
+      color: var(--grey);
+      line-height: 1.65;
+      margin-bottom: 20px;
+    }
+
+    /* diagnosis preview */
+    .gw-steps-preview {
+      background: var(--white);
+      border: 1px solid var(--grey-lt);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 22px;
+    }
+
+    .gw-step-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--grey-lt);
+    }
+    .gw-step-row:last-child { border-bottom: none; }
+
+    .gw-step-num {
+      font-family: 'Sora', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--navy);
+      opacity: 0.25;
+      min-width: 20px;
+    }
+
+    .gw-step-label {
+      font-size: 12.5px;
+      color: var(--grey);
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .gw-step-badge {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .gw-step-badge.critical { background: var(--red-bg); color: var(--red); }
+    .gw-step-badge.high     { background: var(--amber-bg); color: var(--amber); }
+    .gw-step-badge.locked   { background: rgba(13,31,60,0.07); color: var(--grey-mid); }
+
+    /* form */
+    .f-group { margin-bottom: 12px; }
+    .f-group label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+    .f-group input {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      border: 1.5px solid var(--grey-lt);
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--navy);
+      background: #fff;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .f-group input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(27,98,255,0.11);
+    }
+    .f-group input::placeholder { color: #b0bac9; }
+    .f-group input.err { border-color: var(--red); box-shadow: 0 0 0 3px rgba(239,68,68,0.09); }
+    .f-err { font-size: 11.5px; color: var(--red); margin-top: 4px; display: none; }
+    .f-group input.err + .f-err { display: block; }
+
+    .gw-btn {
+      width: 100%;
+      height: 54px;
+      margin-top: 16px;
+      background: var(--orange);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Sora', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      letter-spacing: 0.01em;
+      transition: background .2s, transform .15s, box-shadow .2s;
+      box-shadow: 0 6px 22px rgba(255,92,43,0.30);
+    }
+    .gw-btn:hover { background: var(--orange-dk); transform: translateY(-1px); box-shadow: 0 10px 30px rgba(255,92,43,0.38); }
+    .gw-btn:active { transform: translateY(0); }
+
+    .gw-proof {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 0 0;
+      border-top: 1px solid var(--grey-lt);
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .gw-proof-item {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11.5px; color: var(--grey-mid); font-weight: 600;
+    }
+    .gw-privacy {
+      text-align: center;
+      font-size: 11px;
+      color: var(--grey-mid);
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+    .gw-privacy a { color: var(--blue); text-decoration: none; }
+
+    /* ══════════════════════════════════════════════════════════════
+       CONTENT PAGE
+    ══════════════════════════════════════════════════════════════ */
+    #content-page { display: none; min-height: 100vh; }
+
+    /* SITE HEADER */
+    .site-hdr { background: var(--navy); }
+
+    .hdr-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .hdr-cta {
+      font-size: 12px;
+      color: rgba(255,255,255,0.50);
+      font-weight: 500;
+    }
+    .hdr-cta a { color: var(--orange); text-decoration: none; font-weight: 700; }
+
+    /* HERO */
+    .hero {
+      background: var(--navy);
+      padding-bottom: 0;
+    }
+
+    .hero-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 52px 52px 0;
+    }
+
+    .hero-eyebrow {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--orange);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .hero-eyebrow::before {
+      content: ''; width: 22px; height: 2px;
+      background: var(--orange); border-radius: 2px;
+    }
+
+    .hero-title {
+      font-family: 'Sora', sans-serif;
+      font-size: clamp(24px, 3.6vw, 44px);
+      font-weight: 800;
+      line-height: 1.18;
+      color: #fff;
+      max-width: 820px;
+      margin-bottom: 18px;
+    }
+    .hero-title .hl { color: var(--orange); }
+
+    .hero-desc {
+      font-size: 15.5px;
+      color: rgba(255,255,255,0.65);
+      line-height: 1.72;
+      max-width: 640px;
+      margin-bottom: 32px;
+    }
+
+    .hero-meta {
+      display: flex; gap: 26px; flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .hero-meta-item {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12.5px; color: rgba(255,255,255,0.48); font-weight: 500;
+    }
+
+    /* STATUS RIBBON under hero */
+    .status-ribbon {
+      background: rgba(0,0,0,0.25);
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 52px;
+    }
+    .status-ribbon-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .status-item-label {
+      font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.48);
+      letter-spacing: 0.03em;
+    }
+    .status-item-val {
+      font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.80);
+    }
+
+    /* PROGRESS STRIP */
+    .progress-strip {
+      background: var(--white);
+      border-bottom: 1px solid var(--grey-lt);
+      padding: 14px 52px;
+    }
+    .progress-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .prog-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--grey);
+      white-space: nowrap;
+    }
+    .prog-label span { color: var(--blue); }
+    .prog-track {
+      flex: 1;
+      max-width: 280px;
+      height: 7px;
+      background: var(--grey-lt);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--orange));
+      border-radius: 100px;
+      width: 0%;
+      transition: width .4s ease;
+    }
+    .prog-status {
+      font-size: 12px; color: var(--grey-mid); font-weight: 500; white-space: nowrap;
+    }
+
+    /* MAIN BODY */
+    .page-body {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 56px 52px 80px;
+    }
+
+    /* INTRO BLOCK */
+    .intro-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 52px;
+    }
+
+    .intro-stat {
+      background: var(--navy);
+      border-radius: 14px;
+      padding: 24px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+    .intro-stat::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .intro-stat.s-orange::before { background: var(--orange); }
+    .intro-stat.s-blue::before   { background: var(--blue); }
+
+    .intro-stat-val {
+      font-family: 'Sora', sans-serif;
+      font-size: 38px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .intro-stat-label {
+      font-size: 13.5px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.55;
+    }
+    .intro-stat-label strong { color: rgba(255,255,255,0.85); }
+
+    .intro-text {
+      background: #fff;
+      border: 1px solid var(--grey-lt);
+      border-left: 4px solid var(--blue);
+      border-radius: 0 12px 12px 0;
+      padding: 24px 28px;
+      grid-column: 1 / -1;
+      font-size: 14.5px;
+      color: var(--grey);
+      line-height: 1.75;
+    }
+    .intro-text strong { color: var(--navy); }
+
+    /* SECTION HEADER */
+    .sec-label {
+      font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.13em; text-transform: uppercase;
+      color: var(--orange);
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .sec-label::after { content:''; flex:1; height:1px; background: var(--grey-lt); }
+
+    .sec-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 26px; font-weight: 700;
+      color: var(--navy); margin-bottom: 8px; line-height: 1.25;
+    }
+    .sec-desc {
+      font-size: 14.5px; color: var(--grey); line-height: 1.68;
+      margin-bottom: 36px; max-width: 680px;
+    }
+
+    /* ══ DIAGNOSIS STEPS ═══════════════════════════════════════════ */
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      margin-bottom: 56px;
+    }
+
+    .step-card {
+      background: #fff;
+      border: 1px solid var(--grey-lt);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 2px 16px rgba(13,31,60,0.05);
+      transition: box-shadow .2s;
+      animation: fadeUp .4s ease both;
+    }
+    .step-card:nth-child(1) { animation-delay: .04s; }
+    .step-card:nth-child(2) { animation-delay: .10s; }
+    .step-card:nth-child(3) { animation-delay: .16s; }
+    .step-card:nth-child(4) { animation-delay: .22s; }
+    .step-card:nth-child(5) { animation-delay: .28s; }
+    .step-card:hover { box-shadow: 0 8px 36px rgba(13,31,60,0.10); }
+
+    /* STEP HEADER */
+    .step-hdr {
+      background: var(--navy);
+      padding: 22px 32px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .step-num-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 48px;
+    }
+    .step-numeral {
+      font-family: 'Sora', sans-serif;
+      font-size: 46px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -2px;
+      color: rgba(255,255,255,0.12);
+    }
+    .step-word {
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.25);
+      margin-top: -2px;
+    }
+
+    .step-hdr-body {}
+    .step-severity {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 4px;
+      margin-bottom: 7px;
+    }
+    .step-severity.critical { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+    .step-severity.high     { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.25); }
+    .step-severity.medium   { background: rgba(27,98,255,0.15);  color: #93c5fd; border: 1px solid rgba(27,98,255,0.25); }
+
+    .step-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 19px; font-weight: 700;
+      color: #fff; line-height: 1.28;
+    }
+
+    .step-time {
+      text-align: right; flex-shrink: 0;
+    }
+    .step-time-val {
+      font-family: 'Sora', sans-serif;
+      font-size: 20px; font-weight: 700;
+      color: rgba(255,255,255,0.30);
+      display: block; line-height: 1;
+    }
+    .step-time-label {
+      font-size: 9.5px; font-weight: 600;
+      letter-spacing: 0.10em; text-transform: uppercase;
+      color: rgba(255,255,255,0.22);
+    }
+
+    /* STEP BODY */
+    .step-body {
+      padding: 28px 32px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 26px;
+    }
+    @media (max-width: 700px) { .step-body { grid-template-columns: 1fr; } }
+
+    .step-col {}
+    .scol-label {
+      font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.10em; text-transform: uppercase;
+      color: var(--navy);
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .scol-label::after { content:''; flex:1; height:1px; background: var(--grey-lt); }
+
+    /* AUDIT CHECKLIST */
+    .audit-list {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .audit-list li {
+      display: flex; align-items: flex-start; gap: 11px;
+      font-size: 13.5px; color: var(--navy); line-height: 1.55;
+      cursor: pointer;
+    }
+    .a-box {
+      width: 20px; height: 20px;
+      border: 2px solid var(--grey-lt);
+      border-radius: 5px;
+      flex-shrink: 0; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .18s; background: #fff;
+    }
+    li.checked .a-box {
+      background: var(--blue); border-color: var(--blue);
+    }
+    li.checked .a-box::after {
+      content: '';
+      width: 9px; height: 5.5px;
+      border-left: 2.5px solid white; border-bottom: 2.5px solid white;
+      transform: rotate(-45deg) translateY(-1px); display: block;
+    }
+    li.checked .a-txt {
+      color: var(--grey-mid);
+      text-decoration: line-through;
+      text-decoration-color: var(--grey-lt);
+    }
+
+    /* WHAT TO LOOK FOR */
+    .signals-list {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .signals-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13px; color: var(--grey); line-height: 1.55;
+    }
+    .sig-icon {
+      width: 22px; height: 22px;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 0px;
+      font-size: 11px; font-weight: 700;
+    }
+    .sig-icon.red    { background: var(--red-bg); color: var(--red); }
+    .sig-icon.amber  { background: var(--amber-bg); color: var(--amber); }
+    .sig-icon.green  { background: var(--green-bg); color: var(--green); }
+
+    /* FINDING BLOCK */
+    .finding-block {
+      background: var(--white);
+      border: 1px solid var(--grey-lt);
+      border-top: 3px solid var(--orange);
+      border-radius: 0 0 10px 10px;
+      padding: 14px 16px;
+      margin-top: 16px;
+    }
+    .finding-lbl {
+      font-size: 9.5px; font-weight: 700; letter-spacing: 0.10em;
+      text-transform: uppercase; color: var(--orange); margin-bottom: 5px;
+    }
+    .finding-txt {
+      font-size: 13px; color: var(--navy); line-height: 1.55; font-weight: 500;
+    }
+
+    /* STEP FOOTER ACTION */
+    .step-action {
+      background: var(--white);
+      border-top: 1px solid var(--grey-lt);
+      padding: 16px 32px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .act-icon {
+      width: 30px; height: 30px; border-radius: 8px;
+      background: var(--navy);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .act-lbl {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+      text-transform: uppercase; color: var(--blue); margin-bottom: 3px;
+    }
+    .act-txt {
+      font-size: 13.5px; color: var(--navy); line-height: 1.55; font-weight: 500;
+    }
+
+    /* ══ ROAS RECOVERY TRACKER ═════════════════════════════════════ */
+    .tracker-card {
+      background: #fff;
+      border: 1px solid var(--grey-lt);
+      border-radius: 18px;
+      overflow: hidden;
+      margin-bottom: 48px;
+      box-shadow: 0 2px 16px rgba(13,31,60,0.04);
+    }
+    .tracker-hdr {
+      background: var(--navy);
+      padding: 20px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .tracker-hdr-left h3 {
+      font-family: 'Sora', sans-serif;
+      font-size: 17px; font-weight: 700; color: #fff; margin-bottom: 3px;
+    }
+    .tracker-hdr-left p {
+      font-size: 12.5px; color: rgba(255,255,255,0.48);
+    }
+    .tracker-score-display {
+      text-align: center;
+    }
+    .tracker-score-num {
+      font-family: 'Sora', sans-serif;
+      font-size: 40px; font-weight: 800;
+      color: var(--orange); line-height: 1;
+      display: block;
+      transition: all .3s;
+    }
+    .tracker-score-lbl {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
+      text-transform: uppercase; color: rgba(255,255,255,0.35);
+    }
+
+    .tracker-body {
+      padding: 24px 32px;
+    }
+
+    .severity-scale {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .sev-cell {
+      border-radius: 10px;
+      padding: 14px 14px;
+      text-align: center;
+      border: 1.5px solid transparent;
+      transition: all .2s;
+    }
+    .sev-cell.active { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,92,43,0.10); }
+    .sev-cell.sev-low    { background: var(--green-bg); }
+    .sev-cell.sev-medium { background: var(--amber-bg); }
+    .sev-cell.sev-high   { background: rgba(239,68,68,0.06); }
+    .sev-cell.sev-critical { background: rgba(239,68,68,0.12); }
+    .sev-range {
+      font-family: 'Sora', sans-serif;
+      font-size: 17px; font-weight: 700; line-height: 1; margin-bottom: 3px;
+    }
+    .sev-cell.sev-low    .sev-range { color: var(--green); }
+    .sev-cell.sev-medium .sev-range { color: var(--amber); }
+    .sev-cell.sev-high   .sev-range { color: var(--red); }
+    .sev-cell.sev-critical .sev-range { color: var(--red); }
+    .sev-name {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+      text-transform: uppercase; margin-bottom: 5px;
+    }
+    .sev-cell.sev-low    .sev-name { color: var(--green); }
+    .sev-cell.sev-medium .sev-name { color: var(--amber); }
+    .sev-cell.sev-high   .sev-name { color: var(--red); }
+    .sev-cell.sev-critical .sev-name { color: var(--red); }
+    .sev-desc {
+      font-size: 11px; color: var(--grey); line-height: 1.45;
+    }
+
+    .tracker-interp {
+      background: var(--white);
+      border: 1px solid var(--grey-lt);
+      border-radius: 10px;
+      padding: 16px 18px;
+      font-size: 13.5px; color: var(--navy); line-height: 1.65;
+    }
+
+    .tracker-footer {
+      border-top: 1px solid var(--grey-lt);
+      padding: 16px 32px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .tf-label { font-size: 12px; font-weight: 600; color: var(--grey); white-space: nowrap; }
+    .tf-track { flex:1; height:7px; background: var(--grey-lt); border-radius: 100px; overflow: hidden; }
+    .tf-fill  { height:100%; background: linear-gradient(90deg, var(--green), var(--amber), var(--red)); border-radius: 100px; width:0%; transition: width .4s ease; }
+    .tf-pct   { font-size: 12.5px; font-weight: 700; color: var(--navy); }
+
+    /* ══ QUICK FIX GUIDE ═══════════════════════════════════════════ */
+    .quick-fix {
+      margin-bottom: 52px;
+    }
+    .qf-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 800px) { .qf-grid { grid-template-columns: 1fr; } }
+
+    .qf-card {
+      background: #fff;
+      border: 1px solid var(--grey-lt);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .qf-card-hdr {
+      background: var(--navy);
+      padding: 14px 18px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .qf-icon {
+      width: 28px; height: 28px; border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .qf-card-hdr h4 {
+      font-family: 'Sora', sans-serif;
+      font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .qf-body {
+      padding: 16px 18px;
+    }
+    .qf-timeline {
+      font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .qf-steps {
+      list-style: none;
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .qf-steps li {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 12.5px; color: var(--grey); line-height: 1.5;
+    }
+    .qf-step-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      margin-top: 6px; flex-shrink: 0; background: var(--grey-mid);
+    }
+
+    /* ══ CTA SECTION ═══════════════════════════════════════════════ */
+    .cta-section {
+      background: var(--navy);
+      border-radius: 20px;
+      padding: 50px 48px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 36px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-section::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--blue) 0%, var(--orange) 100%);
+    }
+    .cta-section::after {
+      content: '';
+      position: absolute; bottom: -50px; right: -30px;
+      width: 200px; height: 200px; border-radius: 50%;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .cta-eyebrow {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.13em;
+      text-transform: uppercase; color: rgba(255,255,255,0.45);
+      display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+    }
+    .cta-eyebrow::before {
+      content: ''; width: 18px; height: 2px;
+      background: var(--orange); border-radius: 2px;
+    }
+    .cta-title {
+      font-family: 'Sora', sans-serif;
+      font-size: 28px; font-weight: 800; color: #fff;
+      line-height: 1.22; margin-bottom: 12px;
+    }
+    .cta-title .hl { color: var(--orange); }
+    .cta-desc {
+      font-size: 14.5px; color: rgba(255,255,255,0.62);
+      line-height: 1.70; max-width: 520px;
+    }
+
+    .cta-buttons { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+    .cta-btn-primary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      background: var(--orange); color: #fff;
+      font-family: 'Sora', sans-serif; font-size: 15px; font-weight: 700;
+      padding: 16px 28px; border-radius: 10px; text-decoration: none;
+      white-space: nowrap; transition: transform .15s, box-shadow .2s;
+      box-shadow: 0 6px 20px rgba(255,92,43,0.35);
+    }
+    .cta-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(255,92,43,0.45); }
+
+    .cta-btn-secondary {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.65);
+      font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600;
+      padding: 12px 22px; border-radius: 8px; text-decoration: none;
+      white-space: nowrap; border: 1px solid rgba(255,255,255,0.11);
+      transition: background .2s;
+    }
+    .cta-btn-secondary:hover { background: rgba(255,255,255,0.13); }
+
+    /* FOOTER */
+    .site-footer { background: var(--navy); padding: 30px 52px; }
+    .footer-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 20px; flex-wrap: wrap;
+    }
+    .footer-text { font-size: 12.5px; color: rgba(255,255,255,0.33); line-height: 1.6; }
+    .footer-text a { color: rgba(255,255,255,0.42); text-decoration: none; }
+    .footer-links { display: flex; gap: 18px; }
+    .footer-links a {
+      font-size: 12.5px; color: rgba(255,255,255,0.38); text-decoration: none;
+      transition: color .15s;
+    }
+    .footer-links a:hover { color: rgba(255,255,255,0.72); }
+
+    /* ── SHARED UTILS ──────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(18px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    @media (max-width: 700px) {
+      .gw-inner { padding: 28px 22px 24px; }
+      .hdr-inner { padding: 16px 20px; }
+      .hero-inner { padding: 36px 20px 0; }
+      .status-ribbon { padding: 12px 20px; }
+      .progress-strip { padding: 12px 20px; }
+      .page-body { padding: 36px 20px 60px; }
+      .intro-block { grid-template-columns: 1fr; }
+      .step-hdr { grid-template-columns: auto 1fr; padding: 18px 20px; }
+      .step-time { display: none; }
+      .step-body { padding: 20px; }
+      .step-action { padding: 14px 20px; }
+      .tracker-card .tracker-hdr { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .tracker-body { padding: 18px 20px; }
+      .tracker-footer { padding: 14px 20px; }
+      .severity-scale { grid-template-columns: 1fr 1fr; }
+      .cta-section { grid-template-columns: 1fr; padding: 32px 24px; }
+      .cta-buttons { flex-direction: row; flex-wrap: wrap; }
+      .site-footer { padding: 22px 20px; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     GATEWAY
+══════════════════════════════════════════════════════════════ -->
+<div id="gateway" role="dialog" aria-modal="true">
+  <div class="gw-wrap">
+
+    <div class="gw-topbar"></div>
+
+    <!-- diagnosis strip -->
+    <div class="gw-diag-strip">
+      <div class="gw-diag-dot" style="background:var(--red);"></div>
+      <div class="gw-diag-dot" style="background:var(--amber);"></div>
+      <div class="gw-diag-dot" style="background:var(--green);"></div>
+      <span class="gw-diag-text">Meta Ads ROAS Diagnostic — Audit Checklist</span>
+    </div>
+
+    <div class="gw-inner">
+
+      <!-- Logo — exact SVG recreation, colours preserved -->
+      <div class="gw-logo-row">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 70" height="50" aria-label="Traffic Radius — Growing Your Business the Smart Way!">
+          <!-- Bar chart icon: black | sky-blue | lime-green -->
+          <rect x="4"  y="42" width="10" height="20" rx="1.5" fill="#1A1A1A"/>
+          <rect x="18" y="30" width="10" height="32" rx="1.5" fill="#45B8D8"/>
+          <rect x="32" y="12" width="10" height="50" rx="1.5" fill="#8DC63F"/>
+          <!-- "Traffic" — bold dark charcoal -->
+          <text x="52" y="50" font-family="'Sora','Arial Black',sans-serif" font-weight="700" font-size="38" fill="#333333" letter-spacing="-0.5">Traffic</text>
+          <!-- "Radius" — lighter weight grey -->
+          <text x="214" y="50" font-family="'Sora',Arial,sans-serif" font-weight="400" font-size="38" fill="#555555" letter-spacing="-0.5">Radius</text>
+          <!-- cyan dot on "i" in Radius -->
+          <circle cx="282" cy="13" r="3.4" fill="#45B8D8"/>
+          <!-- tagline -->
+          <text x="52" y="68" font-family="'Inter',Georgia,serif" font-style="italic" font-size="12.5" fill="#555555" letter-spacing="0.2">Growing Your Business the Smart Way!</text>
+        </svg>
+      </div>
+
+      <div class="gw-eyebrow">Free ROAS Diagnosis Checklist</div>
+
+      <h1 class="gw-title">Why Your Meta Ads ROAS Dropped Last Month — And the 5-Step Diagnosis to Fix It</h1>
+
+      <p class="gw-sub">
+        A falling ROAS rarely has one cause — it's usually two or three problems compounding. This step-by-step diagnostic checklist walks you through each layer of your account so you can pinpoint exactly where the breakdown occurred.
+      </p>
+
+      <!-- 5 steps preview -->
+      <div class="gw-steps-preview">
+        <div class="gw-step-row">
+          <span class="gw-step-num">01</span>
+          <span class="gw-step-label">Verify your pixel &amp; conversion tracking first</span>
+          <span class="gw-step-badge critical">Critical</span>
+        </div>
+        <div class="gw-step-row">
+          <span class="gw-step-num">02</span>
+          <span class="gw-step-label">Diagnose audience saturation &amp; fatigue</span>
+          <span class="gw-step-badge high">High</span>
+        </div>
+        <div class="gw-step-row">
+          <span class="gw-step-num">03</span>
+          <span class="gw-step-label">Audit creative performance &amp; fatigue signals</span>
+          <span class="gw-step-badge high">High</span>
+        </div>
+        <div class="gw-step-row">
+          <span class="gw-step-num">04</span>
+          <span class="gw-step-label">Review landing page &amp; offer alignment</span>
+          <span class="gw-step-badge locked">🔒 Locked</span>
+        </div>
+        <div class="gw-step-row">
+          <span class="gw-step-num">05</span>
+          <span class="gw-step-label">Analyse budget, bidding &amp; campaign structure</span>
+          <span class="gw-step-badge locked">🔒 Locked</span>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <form id="gw-form" novalidate>
+        <div class="f-group">
+          <label for="gf-name">Your Name</label>
+          <input type="text" id="gf-name" placeholder="e.g. Michael Chen" autocomplete="given-name" required />
+          <div class="f-err">Please enter your name.</div>
+        </div>
+        <div class="f-group">
+          <label for="gf-email">Business Email</label>
+          <input type="email" id="gf-email" placeholder="e.g. michael@yourbusiness.com.au" autocomplete="email" required />
+          <div class="f-err">Please enter a valid email.</div>
+        </div>
+        <div class="f-group">
+          <label for="gf-web">Website URL</label>
+          <input type="url" id="gf-web" placeholder="e.g. https://yourbusiness.com.au" autocomplete="url" />
+        </div>
+        <button type="submit" class="gw-btn">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Unlock My Free ROAS Diagnosis
+        </button>
+      </form>
+
+      <!-- Social proof -->
+      <div class="gw-proof">
+        <div class="gw-proof-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          400+ Australian businesses
+        </div>
+        <div style="width:1px;height:12px;background:var(--grey-lt);"></div>
+        <div class="gw-proof-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Award-winning Melbourne agency
+        </div>
+      </div>
+      <p class="gw-privacy">🔒 Zero spam. <a href="https://trafficradius.com.au/privacy-policy" target="_blank">Privacy Policy</a>.</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CONTENT PAGE
+══════════════════════════════════════════════════════════════ -->
+<div id="content-page">
+
+  <!-- HEADER -->
+  <header class="site-hdr">
+    <div class="hdr-inner">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 70" height="44" aria-label="Traffic Radius">
+        <rect x="4"  y="42" width="10" height="20" rx="1.5" fill="#ffffff"/>
+        <rect x="18" y="30" width="10" height="32" rx="1.5" fill="#45B8D8"/>
+        <rect x="32" y="12" width="10" height="50" rx="1.5" fill="#8DC63F"/>
+        <text x="52" y="50" font-family="'Sora','Arial Black',sans-serif" font-weight="700" font-size="38" fill="#ffffff" letter-spacing="-0.5">Traffic</text>
+        <text x="214" y="50" font-family="'Sora',Arial,sans-serif" font-weight="400" font-size="38" fill="rgba(255,255,255,0.70)" letter-spacing="-0.5">Radius</text>
+        <circle cx="282" cy="13" r="3.4" fill="#45B8D8"/>
+        <text x="52" y="68" font-family="'Inter',Georgia,serif" font-style="italic" font-size="12.5" fill="rgba(255,255,255,0.36)" letter-spacing="0.2">Growing Your Business the Smart Way!</text>
+      </svg>
+      <div class="hdr-cta">Found the issue? <a href="https://trafficradius.com.au/contact" target="_blank">Get expert help fixing it →</a></div>
+    </div>
+
+    <!-- HERO -->
+    <div class="hero-inner">
+      <div class="hero-eyebrow">Free Meta Ads ROAS Diagnosis Checklist</div>
+      <h1 class="hero-title">Why Your Meta Ads <span class="hl">ROAS Dropped</span> Last Month — And the 5-Step Diagnosis to Fix It</h1>
+      <p class="hero-desc">
+        A sudden ROAS decline is almost never caused by one thing. It's usually two or three problems compounding silently. This structured five-step diagnostic process walks you through every layer of your Meta Ads account — from pixel health to bidding strategy — so you can identify the exact cause and fix it with confidence.
+      </p>
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.48)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          10-minute diagnostic
+        </div>
+        <div class="hero-meta-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.48)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Structured audit checklist
+        </div>
+        <div class="hero-meta-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.48)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          ROAS recovery action guide included
+        </div>
+      </div>
+    </div>
+
+    <!-- STATUS RIBBON -->
+    <div class="status-ribbon">
+      <div class="status-ribbon-inner">
+        <div class="status-item">
+          <div class="status-dot" style="background:var(--red);"></div>
+          <span class="status-item-label">Steps covered:</span>
+          <span class="status-item-val">5 Root Causes</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot" style="background:var(--amber);"></div>
+          <span class="status-item-label">Avg. time to diagnose:</span>
+          <span class="status-item-val">10–15 minutes</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot" style="background:var(--green);"></div>
+          <span class="status-item-label">Most common cause:</span>
+          <span class="status-item-val">Audience saturation + creative fatigue</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- PROGRESS -->
+  <div class="progress-strip">
+    <div class="progress-inner">
+      <div class="prog-label">Diagnosis progress: <span id="prog-label">0 of 20 checks</span></div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+      <div class="prog-status" id="prog-status">Work through each step below</div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <main class="page-body">
+
+    <!-- INTRO STATS -->
+    <div class="intro-block">
+      <div class="intro-stat s-orange">
+        <div class="intro-stat-val">78%</div>
+        <div class="intro-stat-label">of sudden ROAS drops are caused by <strong>audience saturation or creative fatigue</strong> — both are fixable within 7 days</div>
+      </div>
+      <div class="intro-stat s-blue">
+        <div class="intro-stat-val">1 in 3</div>
+        <div class="intro-stat-label">ROAS "drops" are actually <strong>tracking errors</strong> — the ads are working, but the pixel isn't recording it correctly</div>
+      </div>
+      <div class="intro-text">
+        <strong>Before you cut your budget or change your bidding strategy:</strong> run through this five-step diagnosis in order. Each step rules out one layer of the problem. The most common mistake business owners make when ROAS drops is responding to symptoms rather than causes — changing budgets, pausing campaigns, or switching bid strategies without first understanding <em>why</em> performance dropped. This checklist gives you a structured process so your response is informed, not reactive.
+      </div>
+    </div>
+
+    <!-- SECTION HEADER -->
+    <div class="sec-label">The 5-Step Diagnosis</div>
+    <h2 class="sec-title">Your ROAS Recovery Checklist</h2>
+    <p class="sec-desc">Complete every step in sequence. Tick each item as you check it in your Ads Manager. Your running risk score updates at the bottom as you go.</p>
+
+    <!-- STEPS -->
+    <div class="steps-list">
+
+      <!-- ═ STEP 1 ════════════════════════════════════════════════ -->
+      <div class="step-card">
+        <div class="step-hdr">
+          <div class="step-num-block">
+            <span class="step-numeral">01</span>
+            <span class="step-word">Step</span>
+          </div>
+          <div class="step-hdr-body">
+            <div class="step-severity critical">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              Critical — Check This First
+            </div>
+            <h3 class="step-title">Verify Your Pixel &amp; Conversion Tracking</h3>
+          </div>
+          <div class="step-time">
+            <span class="step-time-val">~3</span>
+            <span class="step-time-label">min</span>
+          </div>
+        </div>
+
+        <div class="step-body">
+          <div class="step-col">
+            <div class="scol-label">Audit Checklist</div>
+            <ul class="audit-list" data-total="4">
+              <li data-check><span class="a-box"></span><span class="a-txt">Open Meta Events Manager and verify your pixel shows "Active" status with data in the last 24 hours</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Use the Meta Pixel Helper browser extension to confirm your key conversion event (Purchase, Lead, or Submit Application) is firing correctly on the thank-you/confirmation page</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Check your Aggregated Event Measurement settings — confirm your highest-priority conversion event is ranked first in your pixel's event configuration</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Verify your attribution window hasn't changed — compare the window used this month against last month's reporting period (7-day click vs 1-day click changes ROAS significantly)</span></li>
+            </ul>
+          </div>
+
+          <div class="step-col">
+            <div class="scol-label">Warning Signals</div>
+            <ul class="signals-list">
+              <li>
+                <span class="sig-icon red">!</span>
+                <span><strong>Red flag:</strong> Events Manager shows "No recent activity" or pixel status is "Inactive" — your ROAS drop may be entirely a measurement failure, not a real performance issue</span>
+              </li>
+              <li>
+                <span class="sig-icon amber">~</span>
+                <span><strong>Watch for:</strong> A sudden shift in conversion volume that coincides with a website update, theme change, or checkout flow modification — these commonly break pixel events silently</span>
+              </li>
+              <li>
+                <span class="sig-icon green">✓</span>
+                <span><strong>Healthy signal:</strong> Pixel firing, correct events ranked, attribution window unchanged — proceed to Step 2 with confidence that your data is reliable</span>
+              </li>
+            </ul>
+
+            <div class="finding-block">
+              <div class="finding-lbl">Key Finding</div>
+              <div class="finding-txt">A misconfigured pixel or broken conversion event is the single most common cause of a "false" ROAS drop. Rule this out before touching anything else in your account.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-action">
+          <div class="act-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          </div>
+          <div>
+            <div class="act-lbl">If issues found</div>
+            <div class="act-txt">Reinstall the pixel via your CMS (Shopify, WordPress, Webflow) or tag manager. Re-verify using Test Events in Events Manager before re-enabling any paused campaigns. Do not adjust campaigns until tracking is confirmed accurate.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═ STEP 2 ════════════════════════════════════════════════ -->
+      <div class="step-card">
+        <div class="step-hdr">
+          <div class="step-num-block">
+            <span class="step-numeral">02</span>
+            <span class="step-word">Step</span>
+          </div>
+          <div class="step-hdr-body">
+            <div class="step-severity high">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              High Priority
+            </div>
+            <h3 class="step-title">Diagnose Audience Saturation &amp; Fatigue</h3>
+          </div>
+          <div class="step-time">
+            <span class="step-time-val">~4</span>
+            <span class="step-time-label">min</span>
+          </div>
+        </div>
+
+        <div class="step-body">
+          <div class="step-col">
+            <div class="scol-label">Audit Checklist</div>
+            <ul class="audit-list" data-total="4">
+              <li data-check><span class="a-box"></span><span class="a-txt">Check frequency for each active ad set over the last 7 days — flag any ad set with frequency above 3.5 for a cold audience or above 7 for a warm retargeting audience</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Review CPM trend week-over-week in the Ads Manager breakdowns — a rising CPM with stable or falling CTR confirms your audience is resisting the ad, not just the market</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Check your audience size — audiences below 100,000 people saturate quickly when spend is maintained; lookalike audiences may need broadening or refreshing</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Review your Quality Ranking and Engagement Rate Ranking in the Ads Manager columns — "Below Average" on either metric signals the audience has seen enough of this creative</span></li>
+            </ul>
+          </div>
+
+          <div class="step-col">
+            <div class="scol-label">Warning Signals</div>
+            <ul class="signals-list">
+              <li>
+                <span class="sig-icon red">!</span>
+                <span><strong>Red flag:</strong> Frequency above 4.0 on a cold audience with a CPM that has risen more than 25% over 14 days — your audience is exhausted and the algorithm is working harder for diminishing results</span>
+              </li>
+              <li>
+                <span class="sig-icon amber">~</span>
+                <span><strong>Watch for:</strong> Audience size shrinking as you add exclusion lists without adding fresh audiences — your reachable pool may have quietly contracted</span>
+              </li>
+              <li>
+                <span class="sig-icon green">✓</span>
+                <span><strong>Healthy signal:</strong> Frequency below 2.5, stable CPM, audience size above 500k — audience health is not your primary ROAS issue; advance to Step 3</span>
+              </li>
+            </ul>
+
+            <div class="finding-block">
+              <div class="finding-lbl">Key Finding</div>
+              <div class="finding-txt">Audience saturation accounts for approximately 38% of ROAS declines in accounts spending over $5,000/month. The fix — expanding your audiences — often restores ROAS within 5–7 days.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-action">
+          <div class="act-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <div class="act-lbl">If issues found</div>
+            <div class="act-txt">Launch a 2–4% lookalike audience to expand reach. Add an Advantage+ broad targeting ad set alongside your existing targeted sets. Exclude people who converted in the last 30 days to keep your pool fresh.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═ STEP 3 ════════════════════════════════════════════════ -->
+      <div class="step-card">
+        <div class="step-hdr">
+          <div class="step-num-block">
+            <span class="step-numeral">03</span>
+            <span class="step-word">Step</span>
+          </div>
+          <div class="step-hdr-body">
+            <div class="step-severity high">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              High Priority
+            </div>
+            <h3 class="step-title">Audit Creative Performance &amp; Fatigue Signals</h3>
+          </div>
+          <div class="step-time">
+            <span class="step-time-val">~3</span>
+            <span class="step-time-label">min</span>
+          </div>
+        </div>
+
+        <div class="step-body">
+          <div class="step-col">
+            <div class="scol-label">Audit Checklist</div>
+            <ul class="audit-list" data-total="4">
+              <li data-check><span class="a-box"></span><span class="a-txt">Check link CTR on your active ads — a CTR below 0.9% on cold audiences or below 1.8% on warm audiences indicates the creative is no longer compelling attention</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">For video ads, review your 3-second video view rate (hook rate) — a hook rate below 20% means your opening frame is failing to stop the scroll</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Identify how long your current best-performing ads have been active — any ad running the same creative for more than 4–6 weeks without a fresh challenger is in the danger zone</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Check your ad-level Quality Ranking — "Below Average (bottom 35% of ads)" signals Meta's algorithm has assessed your creative as significantly less engaging than competing ads in the same auction</span></li>
+            </ul>
+          </div>
+
+          <div class="step-col">
+            <div class="scol-label">Warning Signals</div>
+            <ul class="signals-list">
+              <li>
+                <span class="sig-icon red">!</span>
+                <span><strong>Red flag:</strong> CTR has dropped more than 30% from its peak while impressions remain stable — classic creative fatigue. The algorithm is still serving the ad, but your audience has stopped engaging with it</span>
+              </li>
+              <li>
+                <span class="sig-icon amber">~</span>
+                <span><strong>Watch for:</strong> Strong hook rate but low conversion rate — the creative is stopping the scroll but the message isn't converting interest into action, suggesting a message-offer mismatch</span>
+              </li>
+              <li>
+                <span class="sig-icon green">✓</span>
+                <span><strong>Healthy signal:</strong> CTR stable or above benchmark, hook rate above 25%, creative launched within the last 3 weeks — creative is not your primary issue; advance to Step 4</span>
+              </li>
+            </ul>
+
+            <div class="finding-block">
+              <div class="finding-lbl">Key Finding</div>
+              <div class="finding-txt">Creative fatigue is the most common driver of gradual ROAS decline in mature accounts. Unlike audience saturation, it affects accounts of all sizes and budget levels equally.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-action">
+          <div class="act-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          </div>
+          <div>
+            <div class="act-lbl">If issues found</div>
+            <div class="act-txt">Launch two new creative variants immediately: one with a new hook angle and one with a new format (e.g. switch static to video or carousel). Use Dynamic Creative Testing to let Meta identify the winner within 7–10 days.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═ STEP 4 ════════════════════════════════════════════════ -->
+      <div class="step-card">
+        <div class="step-hdr">
+          <div class="step-num-block">
+            <span class="step-numeral">04</span>
+            <span class="step-word">Step</span>
+          </div>
+          <div class="step-hdr-body">
+            <div class="step-severity medium">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Medium Priority
+            </div>
+            <h3 class="step-title">Review Landing Page &amp; Offer Alignment</h3>
+          </div>
+          <div class="step-time">
+            <span class="step-time-val">~3</span>
+            <span class="step-time-label">min</span>
+          </div>
+        </div>
+
+        <div class="step-body">
+          <div class="step-col">
+            <div class="scol-label">Audit Checklist</div>
+            <ul class="audit-list" data-total="4">
+              <li data-check><span class="a-box"></span><span class="a-txt">Pull your landing page conversion rate for the last 30 days and compare it to the prior 30-day period — a drop of more than 15% is significant and points to a below-the-click problem</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Test your landing page load speed on mobile using Google PageSpeed Insights — a load time above 3 seconds on mobile can reduce conversion rates by up to 40%</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Compare the headline and primary offer on your landing page with the ad that drove the click — message match must be nearly identical or conversion rates will suffer</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Check if your pricing, offer, or product range changed during the period of ROAS decline — an offer change that wasn't reflected in the ad copy creates expectation mismatch and tanks conversions</span></li>
+            </ul>
+          </div>
+
+          <div class="step-col">
+            <div class="scol-label">Warning Signals</div>
+            <ul class="signals-list">
+              <li>
+                <span class="sig-icon red">!</span>
+                <span><strong>Red flag:</strong> Click volume is healthy but lead/purchase volume has dropped sharply — the problem is occurring after the click, on your landing page or checkout flow, not in the ad</span>
+              </li>
+              <li>
+                <span class="sig-icon amber">~</span>
+                <span><strong>Watch for:</strong> A recent CMS update, plugin change, or third-party integration that may have introduced a form error or page layout issue — these break conversion flows silently and often go unnoticed for weeks</span>
+              </li>
+              <li>
+                <span class="sig-icon green">✓</span>
+                <span><strong>Healthy signal:</strong> Landing page conversion rate stable, page speed under 2.5 seconds, message match strong — your below-the-click funnel is not the issue; advance to Step 5</span>
+              </li>
+            </ul>
+
+            <div class="finding-block">
+              <div class="finding-lbl">Key Finding</div>
+              <div class="finding-txt">Landing page issues often present as an "ads problem" because the click data looks healthy. ROAS drops caused by landing page failures are invisible in Ads Manager — they require checking your analytics platform directly.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-action">
+          <div class="act-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div>
+            <div class="act-lbl">If issues found</div>
+            <div class="act-txt">Fix page speed first (compress images, reduce scripts). Align your landing page headline directly to your ad headline. Test your form or checkout process end-to-end on a mobile device to catch any functional failures.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═ STEP 5 ════════════════════════════════════════════════ -->
+      <div class="step-card">
+        <div class="step-hdr">
+          <div class="step-num-block">
+            <span class="step-numeral">05</span>
+            <span class="step-word">Step</span>
+          </div>
+          <div class="step-hdr-body">
+            <div class="step-severity medium">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.y2" y2="16"/></svg>
+              Medium Priority
+            </div>
+            <h3 class="step-title">Analyse Budget, Bidding &amp; Campaign Structure</h3>
+          </div>
+          <div class="step-time">
+            <span class="step-time-val">~3</span>
+            <span class="step-time-label">min</span>
+          </div>
+        </div>
+
+        <div class="step-body">
+          <div class="step-col">
+            <div class="scol-label">Audit Checklist</div>
+            <ul class="audit-list" data-total="4">
+              <li data-check><span class="a-box"></span><span class="a-txt">Review whether your daily or campaign budget changed (up or down) by more than 20% in the period before your ROAS dropped — large budget changes force campaigns back into the learning phase</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Check your campaign's "Learning" or "Learning Limited" status in Ads Manager — campaigns in the learning phase typically underperform by 20–40% compared to stable delivery</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Identify any bid strategy changes made in the last 30 days — switching from Lowest Cost to Cost Cap, or between manual and automated bidding, resets the algorithm's optimisation model</span></li>
+              <li data-check><span class="a-box"></span><span class="a-txt">Count the number of significant edits made to active campaigns in the last 30 days (ad set pausing, duplicating, budget changes, audience edits) — more than 3–4 significant edits per week pushes campaigns back into learning repeatedly</span></li>
+            </ul>
+          </div>
+
+          <div class="step-col">
+            <div class="scol-label">Warning Signals</div>
+            <ul class="signals-list">
+              <li>
+                <span class="sig-icon red">!</span>
+                <span><strong>Red flag:</strong> Multiple campaigns showing "Learning Limited" status — this means Meta cannot get enough conversion events (minimum 50 per week per ad set) to optimise effectively, and ROAS will remain suppressed</span>
+              </li>
+              <li>
+                <span class="sig-icon amber">~</span>
+                <span><strong>Watch for:</strong> Excessive campaign edits — well-intentioned optimisations made too frequently can create a "never leaves learning" situation where Meta's algorithm never stabilises</span>
+              </li>
+              <li>
+                <span class="sig-icon green">✓</span>
+                <span><strong>Healthy signal:</strong> Campaigns in "Active" status, budget changes minimal, bid strategy stable for 30+ days, less than 2 significant structural edits per week</span>
+              </li>
+            </ul>
+
+            <div class="finding-block">
+              <div class="finding-lbl">Key Finding</div>
+              <div class="finding-txt">Over-management is a real cause of ROAS decline. The Meta algorithm needs stability and consistent conversion volume to optimise. Sometimes the best action is to stop making changes and give the algorithm time to learn.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-action">
+          <div class="act-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+          </div>
+          <div>
+            <div class="act-lbl">If issues found</div>
+            <div class="act-txt">If in learning phase: avoid all structural edits for 7 days and allow at least 50 conversions per ad set per week to exit learning. Consolidate ad sets if budget is spread too thin. Consider switching to Advantage+ Shopping Campaigns if currently running manual structures.</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /steps-list -->
+
+    <!-- ROAS RECOVERY TRACKER -->
+    <div class="tracker-card">
+      <div class="tracker-hdr">
+        <div class="tracker-hdr-left">
+          <h3>Your ROAS Diagnosis Score</h3>
+          <p>Tick items above to calculate how many issues your account has</p>
+        </div>
+        <div class="tracker-score-display">
+          <span class="tracker-score-num" id="score-num">0</span>
+          <div class="tracker-score-lbl">of 20 issues</div>
+        </div>
+      </div>
+
+      <div class="tracker-body">
+        <div class="severity-scale">
+          <div class="sev-cell sev-low" id="sev-low">
+            <div class="sev-range">0–4</div>
+            <div class="sev-name">Low Risk</div>
+            <div class="sev-desc">Minor issues. Monitor closely and retest in 7 days.</div>
+          </div>
+          <div class="sev-cell sev-medium" id="sev-medium">
+            <div class="sev-range">5–9</div>
+            <div class="sev-name">Moderate</div>
+            <div class="sev-desc">Multiple issues compounding. Prioritise Steps 1–3 fixes.</div>
+          </div>
+          <div class="sev-cell sev-high" id="sev-high">
+            <div class="sev-range">10–14</div>
+            <div class="sev-name">High Risk</div>
+            <div class="sev-desc">Significant decline drivers present. Act within 3 days.</div>
+          </div>
+          <div class="sev-cell sev-critical" id="sev-critical">
+            <div class="sev-range">15–20</div>
+            <div class="sev-name">Critical</div>
+            <div class="sev-desc">Major account health issues. Get expert support immediately.</div>
+          </div>
+        </div>
+
+        <div class="tracker-interp" id="tracker-interp">
+          Tick the checklist items above to generate your personalised ROAS diagnosis. The more issues you identify, the more urgently action is needed. Even 3–4 ticked items across different steps can compound to create a significant ROAS decline.
+        </div>
+      </div>
+
+      <div class="tracker-footer">
+        <span class="tf-label">Severity level</span>
+        <div class="tf-track"><div class="tf-fill" id="tf-fill"></div></div>
+        <span class="tf-pct" id="tf-pct">0%</span>
+      </div>
+    </div>
+
+    <!-- QUICK FIX GUIDE -->
+    <div class="quick-fix">
+      <div class="sec-label">Recovery Actions</div>
+      <h2 class="sec-title">ROAS Recovery: What to Fix First</h2>
+      <p class="sec-desc">Based on the most common issue combinations identified in this diagnostic, here are the three most effective recovery actions — ranked by time-to-impact.</p>
+
+      <div class="qf-grid">
+        <div class="qf-card">
+          <div class="qf-card-hdr">
+            <div class="qf-icon" style="background:rgba(239,68,68,0.20);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            </div>
+            <h4>Fix Your Tracking (Day 1)</h4>
+          </div>
+          <div class="qf-body">
+            <div class="qf-timeline" style="color:var(--red);">Immediate — 0–24 hours</div>
+            <ul class="qf-steps">
+              <li><span class="qf-step-dot" style="background:var(--red);"></span>Open Events Manager and check pixel status</li>
+              <li><span class="qf-step-dot" style="background:var(--red);"></span>Use Pixel Helper to test conversion event firing</li>
+              <li><span class="qf-step-dot" style="background:var(--red);"></span>Use Test Events tool to confirm live data</li>
+              <li><span class="qf-step-dot" style="background:var(--red);"></span>Review Aggregated Event Measurement priority ranking</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="qf-card">
+          <div class="qf-card-hdr">
+            <div class="qf-icon" style="background:rgba(245,158,11,0.20);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fcd34d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            </div>
+            <h4>Refresh Creative (Days 2–4)</h4>
+          </div>
+          <div class="qf-body">
+            <div class="qf-timeline" style="color:var(--amber);">Short-term — 2–7 days to impact</div>
+            <ul class="qf-steps">
+              <li><span class="qf-step-dot" style="background:var(--amber);"></span>Produce two new creative variants with fresh hooks</li>
+              <li><span class="qf-step-dot" style="background:var(--amber);"></span>Launch via Dynamic Creative Testing within existing ad sets</li>
+              <li><span class="qf-step-dot" style="background:var(--amber);"></span>Do not pause winning creatives — add challengers alongside them</li>
+              <li><span class="qf-step-dot" style="background:var(--amber);"></span>Review performance at 7 days and archive underperformers</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="qf-card">
+          <div class="qf-card-hdr">
+            <div class="qf-icon" style="background:rgba(16,185,129,0.20);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+            </div>
+            <h4>Expand Audiences (Days 3–7)</h4>
+          </div>
+          <div class="qf-body">
+            <div class="qf-timeline" style="color:var(--green);">Medium-term — 5–14 days to impact</div>
+            <ul class="qf-steps">
+              <li><span class="qf-step-dot" style="background:var(--green);"></span>Launch a 2–4% lookalike from your best customer list</li>
+              <li><span class="qf-step-dot" style="background:var(--green);"></span>Add an Advantage+ broad targeting ad set at 20% of budget</li>
+              <li><span class="qf-step-dot" style="background:var(--green);"></span>Review and update exclusion lists (remove converters older than 90 days)</li>
+              <li><span class="qf-step-dot" style="background:var(--green);"></span>Allow 10–14 days before evaluating new audience performance</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-section">
+      <div>
+        <div class="cta-eyebrow">Free Expert Account Audit</div>
+        <h2 class="cta-title">Still Can't Find <span class="hl">Why Your ROAS Dropped?</span></h2>
+        <p class="cta-desc">
+          Sometimes a ROAS decline has causes that are difficult to identify without a fresh set of expert eyes. The Traffic Radius team audits Meta Ads accounts every day — we know exactly where to look, how to read the data, and what to prioritise. Book a free, no-obligation strategy call and we'll diagnose your account with you, live, at no cost.
+        </p>
+      </div>
+      <div class="cta-buttons">
+        <a href="https://trafficradius.com.au/contact" target="_blank" class="cta-btn-primary">
+          Book My Free Audit Call
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+        <a href="https://trafficradius.com.au" target="_blank" class="cta-btn-secondary">
+          Visit trafficradius.com.au →
+        </a>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-text">
+        © 2026 Traffic Radius. All rights reserved. Melbourne, Australia.<br/>
+        <a href="https://trafficradius.com.au" target="_blank">trafficradius.com.au</a>
+      </div>
+      <div class="footer-links">
+        <a href="https://trafficradius.com.au/privacy-policy" target="_blank">Privacy Policy</a>
+        <a href="https://trafficradius.com.au/contact" target="_blank">Contact</a>
+        <a href="https://trafficradius.com.au" target="_blank">Visit Website</a>
+      </div>
+    </div>
+  </footer>
+
+</div><!-- /content-page -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════════ -->
+<script>
+
+  /* ─── GATEWAY ─────────────────────────────────────────────── */
+  const gateway     = document.getElementById('gateway');
+  const contentPage = document.getElementById('content-page');
+
+  function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+
+  document.getElementById('gw-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const nameEl  = document.getElementById('gf-name');
+    const emailEl = document.getElementById('gf-email');
+    let ok = true;
+
+    if (!nameEl.value.trim())           { nameEl.classList.add('err');  ok = false; }
+    else                                { nameEl.classList.remove('err'); }
+    if (!validEmail(emailEl.value.trim())) { emailEl.classList.add('err'); ok = false; }
+    else                                   { emailEl.classList.remove('err'); }
+
+    if (!ok) return;
+
+    const lead = {
+      name:    nameEl.value.trim(),
+      email:   emailEl.value.trim(),
+      website: document.getElementById('gf-web').value.trim(),
+      ts:      new Date().toISOString(),
+      source:  'meta-lead-magnet-roas-diagnosis'
+    };
+    console.log('[Traffic Radius Lead]', JSON.stringify(lead));
+
+    gateway.style.display = 'none';
+    contentPage.style.display = 'block';
+    window.scrollTo(0, 0);
+  });
+
+  /* ─── CHECKLIST + SCORE ───────────────────────────────────── */
+  let totalChecked = 0;
+  const totalItems = 20;
+
+  const progFill   = document.getElementById('prog-fill');
+  const progLabel  = document.getElementById('prog-label');
+  const progStatus = document.getElementById('prog-status');
+  const scoreNum   = document.getElementById('score-num');
+  const tfFill     = document.getElementById('tf-fill');
+  const tfPct      = document.getElementById('tf-pct');
+  const trackerInterp = document.getElementById('tracker-interp');
+
+  const sevCells = {
+    low:      document.getElementById('sev-low'),
+    medium:   document.getElementById('sev-medium'),
+    high:     document.getElementById('sev-high'),
+    critical: document.getElementById('sev-critical')
+  };
+
+  function getLevel(n) {
+    if (n <= 4)  return 'low';
+    if (n <= 9)  return 'medium';
+    if (n <= 14) return 'high';
+    return 'critical';
+  }
+
+  const interps = {
+    0:        'Tick the checklist items above to generate your personalised ROAS diagnosis. The more issues you identify, the more urgently action is needed.',
+    low:      n => `<strong>${n} issue${n===1?'':'s'} identified.</strong> Your account health appears relatively sound. The ROAS drop may be a temporary algorithm fluctuation or a minor tracking discrepancy. Monitor for 7 days before making structural changes.`,
+    medium:   n => `<strong>${n} issues identified — moderate risk.</strong> Multiple factors are likely compounding to suppress your ROAS. Prioritise the Steps where you ticked the most items and address them in sequence within the next 5–7 days.`,
+    high:     n => `<strong>${n} issues identified — high risk.</strong> Significant problems across multiple layers of your account. Your ROAS will continue to decline without structured intervention. Start with tracking verification, then move to creative and audience fixes immediately.`,
+    critical: n => `<strong>${n} of 20 issues identified — critical account health.</strong> Your Meta Ads account has systemic problems that are actively destroying ROAS. Continuing to spend without addressing these issues will accelerate losses. We strongly recommend booking an expert audit call today.`
+  };
+
+  function updateUI() {
+    const pct = Math.round((totalChecked / totalItems) * 100);
+    progFill.style.width  = pct + '%';
+    scoreNum.textContent  = totalChecked;
+    tfFill.style.width    = pct + '%';
+    tfPct.textContent     = pct + '%';
+
+    const checked5 = Math.ceil(totalChecked / 4);
+    const stepsRev = Math.min(5, Math.max(0, checked5));
+    progLabel.textContent = totalChecked + ' of 20 checks';
+
+    const level = totalChecked === 0 ? null : getLevel(totalChecked);
+
+    // status text
+    const statusMap = {
+      null:     'Work through each step below',
+      low:      'Low risk — keep monitoring',
+      medium:   '⚠ Moderate risk — act within 7 days',
+      high:     '⚠ High risk — act within 3 days',
+      critical: '🚨 Critical — get expert support now'
+    };
+    progStatus.textContent = statusMap[level];
+
+    // highlight active severity cell
+    Object.entries(sevCells).forEach(([k, el]) => {
+      el.classList.toggle('active', k === level);
+    });
+
+    // interpretation text
+    if (totalChecked === 0) {
+      trackerInterp.innerHTML = interps[0];
+    } else {
+      trackerInterp.innerHTML = interps[level](totalChecked);
+    }
+  }
+
+  document.addEventListener('click', function(e) {
+    const box = e.target.closest('.a-box');
+    if (!box) return;
+    const li = box.closest('li[data-check]');
+    if (!li) return;
+
+    if (li.classList.contains('checked')) {
+      li.classList.remove('checked');
+      totalChecked = Math.max(0, totalChecked - 1);
+    } else {
+      li.classList.add('checked');
+      totalChecked++;
+    }
+    updateUI();
+  });
+
+  updateUI();
+
+</script>
+</body>
+</html>

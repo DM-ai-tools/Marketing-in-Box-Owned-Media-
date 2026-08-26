@@ -1,0 +1,75 @@
+# Create and activate virtual environment (if not already done)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+# Install backend and dev/test dependencies
+pip install -e ".[dev]"
+
+-------------------------------------------------------------------------------------------------------------------------------
+# Run all tests in the tests directory
+pytest
+
+# Run tests with verbose output
+pytest -v
+
+# Run a specific test file (e.g., health check)
+pytest tests/test_health.py
+
+----------------------------------------------------------------------------------------------------------------------
+. Interactive Testing via Swagger UI & ReDoc
+FastAPI automatically generates interactive API documentation for testing endpoints in the browser:
+
+Start the local development server:
+uvicorn app.main:app --reload
+python -m app --reload
+
+powershell
+cd d:\Projects\Marketing_in_a_box\application\backend
+.\.venv\Scripts\python.exe -m app --reload
+# Port 8001 — that's what the frontend's Vite proxy points /api/* at.
+# Use `python -m app`, NOT `uvicorn app.main:app`. Two separate traps with that one:
+#   1) PORT: uvicorn defaults to 8000, the Vite proxy calls 8001 — so every /api/* request fails
+#      at the proxy and the UI says "Couldn't load chat history" while /health on 8000 looks fine.
+#      (If you must use uvicorn directly, add --port 8001.)
+#   2) EVENT LOOP: on Windows a single-process uvicorn builds a ProactorEventLoop, which psycopg's
+#      async mode refuses, and then every DB route 500s while /health and /docs still answer 200.
+# See application/backend/README.md.
+# Only ONE server at a time on a port — Windows lets a second uvicorn bind the same port and
+# then stale code answers the requests (this is what silently emptied the chat-history sidebar).
+Open in your browser:
+
+Swagger UI (Interactive): http://127.0.0.1:8001/docs (allows you to send requests and inspect responses directly)
+ReDoc (Reference): http://127.0.0.1:8001/redoc
+
+-------------------------------------------------------------------------------------------------------------------------------
+Manual Endpoint Probing
+With the server running on http://127.0.0.1:8001:
+
+PowerShell:
+powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8001/health
+Curl:
+bash
+curl http://127.0.0.1:8001/health
+
+-------------------------------------------------------------------------------------------------------------------------------
+Start the Frontend (Vite + React)
+Open a second terminal window and run:
+
+powershell
+cd d:\Projects\Marketing_in_a_box\application\frontend
+# Start the Vite development server
+npm run dev
+App URL: http://localhost:5173 (or the port displayed in the console output)
+
+-------------------------------------------------------------------------------------------------------------------------------
+#POSTGRES
+aditya
+aditya123
+pgAdmin 4 (installed with PostgreSQL on Windows):
+
+Open pgAdmin 4 from your Start menu.
+Enter your master password (aditya123).
+Navigate: Servers → PostgreSQL → Databases → marketing_in_a_box → Schemas → public → Tables-> context_entries.
+
+
+-------------------------------------------------------------------------------------------------------------------------------

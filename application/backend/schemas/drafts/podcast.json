@@ -1,0 +1,38 @@
+{
+  "asset_id": "podcast",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/universal-podcast-prompt.md",
+  "fields": [
+    { "field_id": "episode_topic_working_title", "label": "Episode Topic / Working Title", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "competitor_podcast_sources", "label": "Competitor Podcast Sources", "kind": "file_attach", "required": true, "source": "user_input",
+      "accepted_types": ["file", "text"],
+      "raw_explanation": "UPLOAD OR PASTE — transcripts, show notes, or episode descriptions from 2-5 competitor podcasts" },
+    { "field_id": "podcast_format", "label": "Podcast Format", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "target_duration", "label": "Target Duration", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "guest_details_optional", "label": "Guest Details (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+    { "field_id": "is_this_new_or_existing_podcast", "label": "Is This New or Existing Podcast", "kind": "enum_choice", "required": true, "source": "user_input",
+      "choices": ["New", "Existing"], "raw_explanation": "New / Existing" },
+    { "field_id": "primary_cta_for_this_episode_optional", "label": "Primary CTA for This Episode (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+    { "field_id": "repurposing_assets_needed_optional", "label": "Repurposing Assets Needed (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "List all that apply or leave blank" },
+    { "field_id": "compliance_sensitivity", "label": "Compliance Sensitivity", "kind": "enum_choice", "required": true, "source": "user_input",
+      "choices": ["Healthcare", "Financial", "Legal", "Other regulated field: specify", "None"],
+      "raw_explanation": "Healthcare / Financial / Legal / Other regulated field: specify / None" },
+    { "field_id": "additional_notes_optional", "label": "Additional Notes (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER or leave blank" },
+
+    { "field_id": "icp_document", "label": "ICP Document", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "icp_*", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1B: full avatar — demographics, psychographics, core pains and fears, goals, objections, decision criteria, and the exact language they use." },
+    { "field_id": "cro_rewritten_copy", "label": "Brand Voice / Proof Points (from CRO)", "kind": "context_reference", "required": true, "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 1A: brand voice and tone from approved copy; key proof points, stats, case studies, and client stories approved for use; product/service differentiators already established." },
+    { "field_id": "pillar_page_html", "label": "Pillar Page", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "pillar_page_html", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Step 6 (Show Notes): \"Internal links: Link to the pillar page and one other relevant client page.\"" },
+    { "field_id": "webinar_script_optional", "label": "Webinar Script (optional)", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "webinar_script", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Per Marketing_in_a_Box_Session_Context.md §6, Podcast reads icp_*, webinar_script, plus a supplied podcast transcript source. Not explicitly named in this prompt's own text; retained from the previously established DAG wiring — see REVIEW_NEEDED_V2.md." },
+    { "field_id": "competitor_analysis_podcast", "label": "Competitor Analysis — Podcast", "kind": "context_reference", "required": false, "source": "auto_from_context",
+      "context_key": "competitor_analysis_podcast", "fallback": "ask_user_if_missing",
+      "raw_explanation": "Synthesized field — sourced from the paired Competitor Analysis — Podcast stage (10_Podcast.md), which identifies which competitors genuinely run self-hosted podcasts worth sourcing from for the Competitor Podcast Sources field above." }
+  ]
+}

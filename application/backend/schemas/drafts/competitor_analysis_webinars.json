@@ -1,0 +1,68 @@
+{
+  "asset_id": "competitor_analysis_webinars",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Competitor Analysis/08_Webinars.md",
+  "paired_main_asset_id": "webinar",
+  "fields": [
+    {
+      "field_id": "target_url",
+      "label": "Target URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "{TARGET_URL} — the company/page you're benchmarking against (required)."
+    },
+    {
+      "field_id": "service",
+      "label": "Service",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Fixed pattern \"webinars for {SERVICE}\", inferred from {TARGET_URL} if not specified. Strict: only include companies that explicitly use webinars hosted, branded, and offered BY THE COMPANY ITSELF as lead magnets/offers/educational resources. Excludes third-party-hosted guest appearances, paid one-off corporate training mislabeled as a lead magnet, stray mentions with no real program, and in-person-only workshops mislabeled as webinars.",
+      "raw_explanation": "service: \"webinars for {SERVICE}\" (the target's core service, inferred from {TARGET_URL} if not specified)."
+    },
+    {
+      "field_id": "niche",
+      "label": "Niche",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "fallback_instruction": "Leave open if not specified.",
+      "raw_explanation": "{NICHE} — leave open if not specified."
+    },
+    {
+      "field_id": "location",
+      "label": "Location",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "default": "Australia-wide",
+      "fallback_instruction": "Defaults to Australia-wide if not specified, boosting local leaders if provided.",
+      "raw_explanation": "{LOCATION}, or Australia-wide if not specified, boosting local leaders if provided."
+    },
+    {
+      "field_id": "competitor_type",
+      "label": "Competitor Type",
+      "kind": "enum_choice",
+      "required": false,
+      "source": "user_input",
+      "choices": [
+        "niche_specialist",
+        "full_stack_niche"
+      ],
+      "fallback_instruction": "If missing or empty, include both types.",
+      "raw_explanation": "\"niche_specialist\" = a company specialised in the target's core service that also runs its own educational webinar program. \"full_stack_niche\" = a full-service company in the same industry that prominently uses webinars as a lead magnet or educational resource."
+    },
+    {
+      "field_id": "excluded_competitors",
+      "label": "Excluded Competitors",
+      "kind": "text",
+      "required": false,
+      "source": "auto_from_context",
+      "fallback_instruction": "Auto-populated from this same competitor-analysis stage's own prior output(s) for this client (system-managed dedup), per REVIEW_NEEDED_V2.md item 7 resolution -- the user does not manually retype domains. If no prior run exists for this client/stage, treated as an empty list rather than prompting the user.",
+      "raw_explanation": "excluded_competitors: [list any domains already sourced in prior runs]",
+      "context_key": "competitor_analysis_webinars",
+      "fallback": "treat_as_empty_if_missing"
+    }
+  ]
+}

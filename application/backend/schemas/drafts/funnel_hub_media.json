@@ -1,0 +1,89 @@
+{
+  "asset_id": "funnel_hub_media",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Funnel-Hub-Media-Architect-Prompt.md",
+  "notes": "Distinct asset from 'funnel' per explicit user decision — not a version of the same asset. No paired numbered Competitor Analysis file exists for this stage; competitor material is folded into the generic 'reference_folder_knowledge_base' field. Field content confirmed unchanged from the prior manual_execution/-sourced draft; only source_prompt_file and the new context_reference fields below were added in this pass.",
+  "fields": [
+    {
+      "field_id": "client_brand",
+      "label": "Client / Brand",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry_vertical",
+      "label": "Industry / Vertical",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "service_or_product_line_being_funnel_mapped",
+      "label": "Service or product line being funnel-mapped",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "reference_folder_knowledge_base",
+      "label": "Reference folder / knowledge base",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "unresolved_context_key",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — the folder, drive, or file set containing this client's existing strategy docs, personas, topic clusters, keyword research, and any funnel/lead-magnet assets already built. Governing rule: \"ground every topic, offer, and headline in the reference folder... Do not invent generic funnel content unrelated to what the client's actual strategy documents say.\""
+    },
+    {
+      "field_id": "established_buyer_personas_if_any",
+      "label": "Established buyer personas (if any)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — name and one-line role for each; if none exist yet, note that personas must be inferred from the reference material before proceeding",
+      "fallback_instruction": "If none exist yet, personas must be inferred from the reference material before proceeding."
+    },
+    {
+      "field_id": "icp_document",
+      "label": "ICP Document",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "Synthesized field — used to infer 'Established buyer personas' when none are directly supplied, per that field's own fallback instruction."
+    },
+    {
+      "field_id": "design_tokens",
+      "label": "Design Tokens",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "design_tokens",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "Phase 1, step 3: \"Reuse the client's existing design tokens (colours, type, button/card styles) rather than inventing a new visual system.\" Phase 3, step 4: \"...reusing the client's established design tokens.\""
+    },
+    {
+      "field_id": "existing_funnel_document",
+      "label": "Existing Funnel Document",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "funnel_stages",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "Governing rule: \"...and any existing funnel or lead-magnet content already built for this client. If an asset is referenced in those documents as 'already in-market' but cannot be located as a standalone file, say so explicitly and rebuild the relevant piece fresh rather than assuming it exists.\""
+    },
+    {
+      "field_id": "primary_conversion_action_if_one_already_exists",
+      "label": "Primary conversion action (if one already exists)",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — e.g. an existing \"book a call\" or \"start a trial\" CTA already in use, so new funnels don't duplicate it"
+    }
+  ]
+}

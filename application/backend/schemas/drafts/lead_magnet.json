@@ -1,0 +1,159 @@
+{
+  "asset_id": "lead_magnet",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Lead-Magnet-Architect-Prompt.md",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry",
+      "label": "Industry",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_location",
+      "label": "Region / Location",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "delivery_capacity",
+      "label": "Delivery Capacity",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — solo, small team, agency, or platform/software; what can realistically be built and fulfilled"
+    },
+    {
+      "field_id": "target_service_offer",
+      "label": "Target Service / Offer",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — the specific service or product this lead magnet must feed into"
+    },
+    {
+      "field_id": "funnel_entry_point_optional",
+      "label": "Funnel Entry Point (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — where traffic will find this lead magnet: pillar page, ad, organic search, referral, etc."
+    },
+    {
+      "field_id": "icp_document",
+      "label": "ICP Document",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — paste, attach, or say \"use the ICP established earlier in this conversation.\" Should cover avatar, pains, goals, decision criteria, awareness level, research behaviour, objections, and language"
+    },
+    {
+      "field_id": "cro_messaging_framework",
+      "label": "CRO / Messaging Framework",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "cro_rewritten_copy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the CRO audit / pillar page copy already established, so tone and locked terminology carry through"
+    },
+    {
+      "field_id": "pillar_page",
+      "label": "Pillar Page",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "pillar_page_html",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the pillar page already established. Provides locked service names and existing CTA labels this lead magnet must not contradict"
+    },
+    {
+      "field_id": "funnel_document",
+      "label": "Funnel Document",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "funnel_stages",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the funnel already established. Identifies any lead magnet(s) already live, so this exercise adds to the ladder rather than duplicating it"
+    },
+    {
+      "field_id": "offers_value_ladder_document",
+      "label": "Offers / Value Ladder Document",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "offer_ladder",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the value ladder already established. Identifies what Rung 0/1 already exists and what this lead magnet should ascend into"
+    },
+    {
+      "field_id": "competitor_lead_magnet_list",
+      "label": "Competitor Lead Magnet List",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "competitor_analysis_lead_magnet",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — attach or reference a file/spreadsheet listing competitors in this industry and their best-known lead magnet: domain, name, format, mechanic, gated or ungated, and any notes on positioning or perceived value. Now sourced from the paired Competitor Analysis — Lead Magnet stage (03_Lead_Magnet.md); falls back to asking the user for a manual attachment if that stage hasn't been run."
+    },
+    {
+      "field_id": "brand_design_reference",
+      "label": "Brand Design Reference",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "design_tokens",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — the live website URL to extract colours/fonts/buttons from (if different from Client Website URL above), OR a design-system reference doc already established in this conversation, OR paste explicit brand values: primary colour hex, secondary colour hex, font family, button style, logo file"
+    },
+    {
+      "field_id": "regulated_field_flag",
+      "label": "Regulated Field Flag",
+      "kind": "boolean_flag",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — Yes/No. If yes, name the regulation so compliance language is applied correctly",
+      "conditional_children": ["regulation_name"]
+    },
+    {
+      "field_id": "regulation_name",
+      "label": "Regulation Name",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "conditional_on": { "field": "regulated_field_flag", "equals": true },
+      "raw_explanation": "Name the regulation (medical, legal, financial, insurance, immigration, childcare, real estate, etc.) so compliance language is applied correctly."
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    }
+  ]
+}

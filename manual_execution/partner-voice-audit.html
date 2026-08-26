@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Partner Voice Audit | Traffic Radius</title>
+<meta name="description" content="How much of your LinkedIn presence actually comes from a person? Find out in under 3 minutes — free, instant score.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   DESIGN TOKENS — reused verbatim from design-system-extracted.md
+   and four-causes-scorecard.html. No new colours, fonts or
+   component styles introduced. The three score-band colours
+   below are reused directly from the Four Causes Scorecard's
+   own cause-colour palette, repurposed for a different meaning.
+   ========================================================= */
+:root{
+  --color-primary:#a4d36b;
+  --color-primary-dark:#8fc453;
+  --color-accent-blue:#209fd7;
+  --color-dark:#171717;
+  --color-heading:#000000;
+  --color-body-text:#3d3d3d;
+  --color-muted-text:#555555;
+  --color-white:#ffffff;
+  --color-light-bg:#fafafa;
+  --color-border:#ebebeb;
+  --color-card-tint:#f9fbff;
+  --band-company:#d6556b;
+  --band-mixed:#f2a93b;
+  --band-partner:#a4d36b;
+  --font-base:'Montserrat', sans-serif;
+  --radius-pill:30px;
+  --radius-card:12px;
+  --radius-card-sm:8px;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:var(--font-base); color:var(--color-body-text); background:var(--color-light-bg);
+  line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:760px; margin:0 auto; padding:32px 20px 80px;}
+header.brand-bar{
+  display:flex; align-items:center; gap:10px; padding:22px 20px; background:var(--color-white);
+  border-bottom:1px solid var(--color-border);
+}
+.logo{display:flex; align-items:center; gap:10px; font-weight:800; font-size:19px; color:var(--color-heading);}
+.logo-bars{display:flex; align-items:flex-end; gap:2px;}
+.logo-bars span{width:4px; display:block; background:var(--color-accent-blue); border-radius:2px;}
+.logo-bars span:nth-child(1){height:9px;}
+.logo-bars span:nth-child(2){height:15px; background:var(--color-primary);}
+.logo-bars span:nth-child(3){height:20px;}
+
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px; background:var(--color-primary); color:#12210a;
+  text-transform:uppercase; font-weight:700; font-size:12px; letter-spacing:.05em;
+  padding:8px 16px; border-radius:4px; margin-bottom:18px;
+}
+h1{font-size:34px; font-weight:700; color:var(--color-heading); line-height:1.25; margin-bottom:14px;}
+p.lead{font-size:16px; color:var(--color-muted-text); margin-bottom:8px;}
+.intro-card{background:var(--color-white); border:1px solid var(--color-border); border-radius:var(--radius-card); padding:32px; margin-bottom:24px;}
+.meta-row{display:flex; gap:18px; flex-wrap:wrap; margin-top:18px; font-size:13.5px; color:var(--color-muted-text);}
+.meta-row span{display:flex; align-items:center; gap:6px;}
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:10px;
+  font-family:var(--font-base); font-weight:700; text-transform:uppercase; font-size:15px;
+  letter-spacing:.02em; padding:15px 28px; border-radius:var(--radius-pill); border:2px solid transparent;
+  cursor:pointer; transition:all .2s ease; background:var(--color-primary); color:#121212; width:100%;
+}
+.btn:hover{background:var(--color-primary-dark); transform:translateY(-1px);}
+.btn-ghost{background:transparent; border-color:var(--color-dark); color:var(--color-dark);}
+.btn-ghost:hover{background:var(--color-dark); color:#fff;}
+
+/* Progress bar */
+.progress-shell{background:var(--color-border); border-radius:20px; height:8px; overflow:hidden; margin-bottom:8px;}
+.progress-fill{background:var(--color-primary); height:100%; width:0%; transition:width .3s ease;}
+.progress-label{font-size:13px; color:var(--color-muted-text); margin-bottom:22px;}
+
+/* Quiz card */
+#quizScreen{display:none;}
+.question-card{
+  background:var(--color-white); border:1px solid var(--color-border); border-radius:var(--radius-card);
+  padding:32px;
+}
+.question-card h2{font-size:20px; color:var(--color-heading); margin-bottom:22px; line-height:1.4;}
+.option{
+  display:block; width:100%; text-align:left; background:var(--color-white);
+  border:1px solid var(--color-border); border-radius:var(--radius-card-sm); padding:16px 18px;
+  margin-bottom:12px; font-family:var(--font-base); font-size:15px; color:var(--color-body-text);
+  cursor:pointer; transition:.15s;
+}
+.option:hover{border-color:var(--color-accent-blue); background:var(--color-card-tint);}
+.option.selected{border-color:var(--color-accent-blue); background:var(--color-card-tint); box-shadow:0 0 0 1px var(--color-accent-blue) inset;}
+.nav-row{display:flex; justify-content:space-between; margin-top:24px; gap:12px;}
+.nav-row .btn{width:auto; flex:1;}
+.btn-disabled{opacity:.4; pointer-events:none;}
+
+/* Gate screen */
+#gateScreen{display:none;}
+.gate-card{
+  background:var(--color-dark); color:#fff; border-radius:var(--radius-card); padding:40px; text-align:center;
+}
+.gate-card h2{color:#fff; font-size:26px; margin-bottom:12px;}
+.gate-card p{color:#d5d5d5; margin-bottom:26px;}
+.result-teaser{
+  display:inline-block; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2);
+  border-radius:var(--radius-card-sm); padding:18px 26px; margin-bottom:26px; font-weight:700; font-size:18px;
+}
+.gate-form{max-width:380px; margin:0 auto; text-align:left;}
+.gate-form label{display:block; font-size:13px; font-weight:700; margin-bottom:6px; margin-top:14px; color:#eee;}
+.gate-form input{
+  width:100%; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.06); color:#fff;
+  border-radius:8px; padding:13px 14px; font-family:var(--font-base); font-size:14px;
+}
+.gate-form input::placeholder{color:#999;}
+.gate-form .btn{margin-top:22px;}
+.friction-note{font-size:12.5px; color:#aaa; margin-top:14px;}
+
+/* Results screen */
+#resultsScreen{display:none;}
+.result-card{background:var(--color-white); border:1px solid var(--color-border); border-radius:var(--radius-card); padding:36px;}
+.result-headline{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--color-accent-blue); font-weight:700; margin-bottom:8px;}
+.result-title{font-size:28px; font-weight:800; color:var(--color-heading); margin-bottom:10px;}
+.result-score{font-size:15px; font-weight:700; margin-bottom:22px;}
+.gauge-shell{background:var(--color-border); border-radius:20px; height:20px; overflow:hidden; margin-bottom:6px; position:relative;}
+.gauge-fill{height:100%; border-radius:20px; transition:width .6s ease;}
+.gauge-scale{display:flex; justify-content:space-between; font-size:11.5px; color:var(--color-muted-text); margin-bottom:26px;}
+.result-body{font-size:15.5px; color:var(--color-body-text); margin-bottom:22px;}
+.benchmark-box{background:var(--color-card-tint); border-left:4px solid var(--color-accent-blue); padding:16px 20px; border-radius:0 8px 8px 0; margin:20px 0; font-size:14.5px;}
+.breakdown-block{margin:26px 0;}
+.breakdown-block h3{font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--color-muted-text); margin-bottom:12px;}
+.breakdown-item{display:flex; gap:12px; margin-bottom:14px; font-size:14.5px; align-items:flex-start;}
+.breakdown-item .dot{width:8px; height:8px; border-radius:50%; margin-top:6px; flex-shrink:0;}
+.breakdown-item.down .dot{background:var(--band-company);}
+.breakdown-item.up .dot{background:var(--color-primary);}
+.cta-block{margin-top:30px; text-align:center;}
+.cta-block .btn{margin-bottom:12px;}
+.cta-sub{font-size:13.5px; color:var(--color-muted-text); margin-top:8px;}
+.secondary-link{display:block; text-align:center; margin-top:16px; font-size:14px; color:var(--color-accent-blue); font-weight:600; text-decoration:none;}
+
+footer{text-align:center; padding:30px 20px; font-size:13px; color:#999;}
+
+@media (max-width:600px){
+  h1{font-size:26px;}
+  .intro-card, .question-card, .result-card, .gate-card{padding:22px;}
+  .nav-row{flex-direction:column-reverse;}
+}
+</style>
+</head>
+<body>
+
+<header class="brand-bar">
+  <div class="logo">
+    <span class="logo-bars"><span></span><span></span><span></span></span>
+    Traffic Radius
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- INTRO SCREEN -->
+  <div id="introScreen">
+    <span class="eyebrow">Free Diagnostic · Under 3 Minutes</span>
+    <h1>The Partner Voice Audit</h1>
+    <p class="lead">How much of your LinkedIn presence actually comes from a person? Find out — before you talk to anyone.</p>
+
+    <div class="intro-card">
+      <p style="margin-bottom:14px;">You've probably seen it already: a partner posts something rough and unscripted, and it quietly outperforms months of designed company content. That's not a fluke — it's a specific, measurable pattern, and most professional services firms are further into it than they realise.</p>
+      <p style="margin-bottom:0;">Answer 10 quick questions about how your firm actually shows up on LinkedIn today. We'll score how much of your presence comes from named individuals versus your company page, and benchmark it against professional-services norms.</p>
+      <div class="meta-row">
+        <span>⏱ Under 3 minutes</span>
+        <span>🔒 No credit card</span>
+        <span>📄 Instant score</span>
+      </div>
+    </div>
+
+    <button class="btn" onclick="startQuiz()">Start the Partner Voice Audit</button>
+    <p class="cta-sub" style="text-align:center; margin-top:14px;">No email required to start. Your answers are only used to calculate your score.</p>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div id="quizScreen">
+    <div class="progress-shell"><div class="progress-fill" id="progressFill"></div></div>
+    <p class="progress-label" id="progressLabel">Question 1 of 10</p>
+
+    <div class="question-card">
+      <h2 id="questionText"></h2>
+      <div id="optionsContainer"></div>
+      <div class="nav-row">
+        <button class="btn btn-ghost" id="backBtn" onclick="prevQuestion()">Back</button>
+        <button class="btn btn-disabled" id="nextBtn" onclick="nextQuestion()">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GATE SCREEN -->
+  <div id="gateScreen">
+    <div class="gate-card">
+      <h2>Your Partner Voice Score is ready</h2>
+      <p>Your score places you in the:</p>
+      <div class="result-teaser" id="teaserText">—</div>
+      <p>Enter your name and email to unlock the full breakdown — which answers are pulling your score down, what's already working, and what a realistic first move looks like.</p>
+      <div class="gate-form">
+        <label for="firstName">First name</label>
+        <input type="text" id="firstName" placeholder="Jane">
+        <label for="workEmail">Work email</label>
+        <input type="email" id="workEmail" placeholder="jane@yourfirm.com.au">
+        <button class="btn" onclick="unlockResults()">Unlock My Full Breakdown</button>
+        <p class="friction-note">No obligation. We'll only use this to send your breakdown and occasional relevant insights — nothing else.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS SCREEN -->
+  <div id="resultsScreen">
+    <div class="result-card">
+      <p class="result-headline">Your Partner Voice Score</p>
+      <h2 class="result-title" id="resultScoreTitle">—</h2>
+      <p class="result-score" id="resultBandLabel">—</p>
+
+      <div class="gauge-shell"><div class="gauge-fill" id="gaugeFill"></div></div>
+      <div class="gauge-scale"><span>Company-Led</span><span>Mixed Signal</span><span>Partner-Led</span></div>
+
+      <p class="result-body" id="resultBody">—</p>
+
+      <div class="benchmark-box">Most professional services firms we've assessed score in the Company-Led band on their first audit — you're not unusual, and this is a diagnosable, fixable pattern rather than a verdict on your marketing team.</div>
+
+      <div class="breakdown-block">
+        <h3>Where your score is being pulled down the most</h3>
+        <div id="downList"></div>
+      </div>
+
+      <div class="breakdown-block">
+        <h3>What's already working in your favour</h3>
+        <div id="upList"></div>
+      </div>
+
+      <div class="cta-block">
+        <a class="btn" id="primaryCtaBtn" href="https://trafficradius.com.au/book-linkedin-strategy-session/" target="_blank" rel="noopener">Book My LinkedIn Strategy Session</a>
+        <p class="cta-sub">30 minutes. We'll go deeper on your specific score — no obligation, no pitch attached.</p>
+        <a class="secondary-link" id="secondaryCtaLink" href="https://trafficradius.com.au/book-strategy-consultation/" target="_blank" rel="noopener">Or, if this looks like more than a LinkedIn issue, book a Social Media Marketing Strategy Consultation →</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Traffic Radius · Melbourne, VIC · Working with Australian businesses Australia-wide</footer>
+
+<script>
+// ============================================================
+// QUESTION BANK — 10 questions, single composite Partner Voice score
+// each option scored 0-3 (0 = most company-led, 3 = most partner-led)
+// "lever" = short label used in the dynamic breakdown
+// insightLow / insightHigh = the sentence shown when this question
+// is among the lowest / highest scoring answers
+// ============================================================
+const questions = [
+  { lever:'Where you publish from',
+    text:'In the last three months, what share of your firm\'s LinkedIn posts were published from the company page versus an individual\'s personal profile?',
+    insightLow:"Most of your content is coming from the company page rather than named individuals — on LinkedIn specifically, that's publishing into the channel the platform itself favours least.",
+    insightHigh:"Your posting is already weighted toward individual profiles rather than the company page — a genuine head start most firms don't have.",
+    options:[
+      {label:'Almost entirely the company page', score:0},
+      {label:'Mostly the company page, occasional individual posts', score:1},
+      {label:'Roughly even split', score:2},
+      {label:'Mostly individual profiles, company page supports them', score:3}
+    ]},
+  { lever:'How recently a partner posted personally',
+    text:'When did a partner or principal at your firm last post something on their own LinkedIn profile about their work?',
+    insightLow:"It's been a while (or never) since a partner posted personally — recency matters on LinkedIn, where the algorithm rewards consistent individual activity.",
+    insightHigh:"You've got at least one partner posting personally on a regular basis — that's the foundation the rest of this can build on.",
+    options:[
+      {label:"Can't recall, or never", score:0},
+      {label:'More than three months ago', score:1},
+      {label:'Within the last month', score:2},
+      {label:"Within the last week, and it's a regular habit", score:3}
+    ]},
+  { lever:'The engagement gap between individual and company posts',
+    text:'Compare a typical rough, unscripted post from a partner against your designed company-page content. Which gets more genuine engagement — comments and DMs, not just impressions?',
+    insightLow:"You haven't yet seen (or tracked) an individual post outperforming the company page — that comparison is usually the fastest way to prove where your real attention lives.",
+    insightHigh:"You've already seen individual posts clearly outperform company content — that's the mechanism telling you where attention actually lives, and it's rare for a firm to have already noticed it.",
+    options:[
+      {label:"We haven't seen this happen, or the company page always wins", score:0},
+      {label:'Roughly the same', score:1},
+      {label:'The individual post, noticeably', score:2},
+      {label:"The individual post, by a wide margin — we've seen this repeatedly", score:3}
+    ]},
+  { lever:'Thought Leader Ads',
+    text:'Do you currently run paid LinkedIn campaigns built around a named individual\'s content (Thought Leader Ads), or only sponsored content from the company page?',
+    insightLow:"You're not yet running Thought Leader Ads — paid spend is going toward the company page rather than amplifying a named person's content to a defined audience.",
+    insightHigh:"Thought Leader Ads are already a standing part of your program — that's a specialised tactic very few firms in this category have adopted.",
+    options:[
+      {label:'Only company-page sponsored content, or no paid LinkedIn activity', score:0},
+      {label:"We've tested it once or twice, informally", score:1},
+      {label:'We run it occasionally, without a defined process', score:2},
+      {label:'We run Thought Leader Ads as a standing part of our program', score:3}
+    ]},
+  { lever:'How many senior people have active profiles',
+    text:'How many of your senior people (partners, principals, practice leads) have a complete, active LinkedIn profile they post from at least monthly?',
+    insightLow:"Very few of your senior people have an active personal profile — this is usually the single biggest lever available, because it doesn't require new content, just distribution through people who already exist.",
+    insightHigh:"You've already got several senior people posting regularly — a genuinely rare position, and one that changes what the next step should look like.",
+    options:[
+      {label:'None', score:0},
+      {label:'One', score:1},
+      {label:'Two or three', score:2},
+      {label:'Four or more, or a defined rotating group', score:3}
+    ]},
+  { lever:'Whether a capture process exists',
+    text:'Do you have a defined process for turning what a partner already says well in client meetings into published content — a "capture" process?',
+    insightLow:"There's no defined capture process yet — content is being written from scratch rather than pulled from what your partners already say well.",
+    insightHigh:"A real capture process already exists — that's usually the hardest operational piece to build, and you've already got it.",
+    options:[
+      {label:'No process — content is written from scratch, separately', score:0},
+      {label:'Informal, ad hoc, depends who\'s available', score:1},
+      {label:'Semi-formal — someone occasionally records or notes what a partner says', score:2},
+      {label:'Yes, a defined, repeatable capture process exists', score:3}
+    ]},
+  { lever:'Review and compliance speed',
+    text:'How long does content typically take to clear internal review or compliance before it can be published?',
+    insightLow:"Review is currently slow — content is likely landing well after the moment it was relevant, which discourages the kind of timely, personal posting this depends on.",
+    insightHigh:"Your review process is fast, which means the main blocker to activating individual voices isn't compliance.",
+    options:[
+      {label:'More than a week', score:0},
+      {label:'Three to seven days', score:1},
+      {label:'One to two days', score:2},
+      {label:'Same day, or boundaries are pre-agreed so review is rarely a blocker', score:3}
+    ]},
+  { lever:'Attribution tracking',
+    text:'Do you track which specific LinkedIn posts — company or individual — lead to actual enquiries, or only engagement metrics like likes and impressions?',
+    insightLow:"You're currently tracking engagement only — which means even a successful shift toward individual voice may not show up anywhere in your reporting yet.",
+    insightHigh:"You're already tracking enquiry-level attribution, including self-reported data — most firms we assess aren't this far along.",
+    options:[
+      {label:'Only engagement metrics', score:0},
+      {label:'We look at engagement and guess at the rest', score:1},
+      {label:"We have some attribution, but it's inconsistent", score:2},
+      {label:'We track this specifically, including self-reported attribution on enquiry forms', score:3}
+    ]},
+  { lever:'Employee advocacy',
+    text:'Have you activated employee advocacy — making it easy for willing staff to share or engage with company content from their own profiles?',
+    insightLow:"Employee advocacy hasn't been activated yet — usually the largest untapped distribution asset a firm already owns, sitting unused.",
+    insightHigh:"You've already got a defined, opt-in employee advocacy program running — a genuinely underused lever most competitors haven't touched either.",
+    options:[
+      {label:"No, and we haven't considered it", score:0},
+      {label:"We've discussed it, nothing built", score:1},
+      {label:'A few staff do this informally', score:2},
+      {label:"Yes, it's a defined, opt-in program", score:3}
+    ]},
+  { lever:'Whose face clients would associate with you',
+    text:'If a client said, "I\'ve been seeing your firm a lot on LinkedIn lately," could you confidently say whose face they\'d associate with that — or just your logo?',
+    insightLow:"Right now that recognition would most likely land on your logo, not a specific person — which is the whole mechanism this audit is measuring, stated plainly.",
+    insightHigh:"Clients would likely name a specific person, not just your logo — that's the outcome every other question in this audit is really working toward.",
+    options:[
+      {label:'Just the logo', score:0},
+      {label:'Probably the logo, maybe one person', score:1},
+      {label:'One or two specific people, most likely', score:2},
+      {label:'Several specific people, clearly', score:3}
+    ]}
+];
+
+const bandInfo = {
+  company: { name:'Company-Led Zone', color:'var(--band-company)', hex:'#d6556b',
+    body:"Your LinkedIn presence is currently built mostly around the company page rather than named individuals. In a category where buyers hire people, not pages, this is the most common — and most fixable — pattern we see. The good news: the fix is usually narrow (one or two named voices, a short capture process) rather than a full content overhaul." },
+  mixed: { name:'Mixed Signal Zone', color:'var(--band-mixed)', hex:'#f2a93b',
+    body:"You've got real individual activity happening, but it isn't yet fully supported — often missing Thought Leader Ads, employee advocacy, or consistent attribution. The content exists; it just isn't compounding the way it could." },
+  partner: { name:'Partner-Led Zone', color:'var(--band-partner)', hex:'#a4d36b',
+    body:"Your LinkedIn presence already leans toward named individuals rather than the company page — a genuinely uncommon position. The more useful next conversation is usually about measurement and scaling what's already working, not about activating voice from scratch." }
+};
+
+let currentQuestion = 0;
+let answers = new Array(questions.length).fill(null);
+let finalScore = 0;
+
+function startQuiz(){
+  document.getElementById('introScreen').style.display = 'none';
+  document.getElementById('quizScreen').style.display = 'block';
+  renderQuestion();
+}
+
+function renderQuestion(){
+  const q = questions[currentQuestion];
+  document.getElementById('questionText').textContent = q.text;
+  document.getElementById('progressLabel').textContent = 'Question ' + (currentQuestion+1) + ' of ' + questions.length;
+  document.getElementById('progressFill').style.width = (((currentQuestion)/questions.length)*100) + '%';
+
+  const container = document.getElementById('optionsContainer');
+  container.innerHTML = '';
+  q.options.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'option' + (answers[currentQuestion] === idx ? ' selected' : '');
+    btn.textContent = opt.label;
+    btn.onclick = () => selectOption(idx);
+    container.appendChild(btn);
+  });
+
+  document.getElementById('backBtn').classList.toggle('btn-disabled', currentQuestion === 0);
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.textContent = currentQuestion === questions.length - 1 ? 'See My Score' : 'Next';
+  nextBtn.classList.toggle('btn-disabled', answers[currentQuestion] === null);
+}
+
+function selectOption(idx){
+  answers[currentQuestion] = idx;
+  renderQuestion();
+}
+
+function nextQuestion(){
+  if (answers[currentQuestion] === null) return;
+  if (currentQuestion === questions.length - 1) {
+    calculateResults();
+    showGate();
+  } else {
+    currentQuestion++;
+    renderQuestion();
+  }
+}
+
+function prevQuestion(){
+  if (currentQuestion === 0) return;
+  currentQuestion--;
+  renderQuestion();
+}
+
+function calculateResults(){
+  let raw = 0;
+  questions.forEach((q, i) => { raw += q.options[answers[i]].score; });
+  finalScore = Math.round((raw / (questions.length * 3)) * 100);
+}
+
+function getBandKey(score){
+  if (score <= 33) return 'company';
+  if (score <= 66) return 'mixed';
+  return 'partner';
+}
+
+function showGate(){
+  document.getElementById('quizScreen').style.display = 'none';
+  document.getElementById('gateScreen').style.display = 'block';
+  document.getElementById('progressFill').style.width = '100%';
+  const band = bandInfo[getBandKey(finalScore)];
+  const teaser = document.getElementById('teaserText');
+  teaser.textContent = band.name;
+  teaser.style.color = band.hex;
+}
+
+function unlockResults(){
+  const name = document.getElementById('firstName').value.trim();
+  const email = document.getElementById('workEmail').value.trim();
+  if (!name || !email || !email.includes('@')) {
+    alert('Please enter your first name and a valid work email to see your full breakdown.');
+    return;
+  }
+  // In production: POST {name, email, score: finalScore, answers} to CRM/email platform here.
+  renderResults();
+  document.getElementById('gateScreen').style.display = 'none';
+  document.getElementById('resultsScreen').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function renderResults(){
+  const band = bandInfo[getBandKey(finalScore)];
+
+  document.getElementById('resultScoreTitle').textContent = finalScore + ' / 100';
+  document.getElementById('resultBandLabel').textContent = band.name;
+  document.getElementById('resultBandLabel').style.color = band.hex;
+  document.getElementById('resultBody').textContent = band.body;
+
+  const gauge = document.getElementById('gaugeFill');
+  gauge.style.width = finalScore + '%';
+  gauge.style.background = band.hex;
+
+  // Rank questions by score to surface the 3 lowest and top 2 highest
+  const ranked = questions.map((q, i) => ({ q, score: q.options[answers[i]].score })).sort((a,b) => a.score - b.score);
+
+  const downList = document.getElementById('downList');
+  downList.innerHTML = '';
+  ranked.slice(0, 3).forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'breakdown-item down';
+    row.innerHTML = `<span class="dot"></span><span><strong>${item.q.lever}.</strong> ${item.q.insightLow}</span>`;
+    downList.appendChild(row);
+  });
+
+  const upList = document.getElementById('upList');
+  upList.innerHTML = '';
+  const highs = ranked.slice().reverse().filter(item => item.score >= 2).slice(0, 2);
+  if (highs.length === 0) {
+    upList.innerHTML = '<div class="breakdown-item up"><span class="dot"></span><span>Nothing scored highly enough yet to call out here — that\'s common at the Company-Led stage, and it just means the opportunity above is the clearest starting point.</span></div>';
+  } else {
+    highs.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'breakdown-item up';
+      row.innerHTML = `<span class="dot"></span><span><strong>${item.q.lever}.</strong> ${item.q.insightHigh}</span>`;
+      upList.appendChild(row);
+    });
+  }
+
+  // If the score is already strong, de-emphasise the LinkedIn-specific CTA in favour of the broader consultation
+  if (finalScore >= 67) {
+    document.getElementById('secondaryCtaLink').textContent = 'Already Partner-Led on LinkedIn? A Social Media Marketing Strategy Consultation can check the rest of your channels the same way →';
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,158 @@
+{
+  "asset_id": "social_content_strategy_audit",
+  "version": 1,
+  "source_prompt_file": "application/backend/assets/Prompts/Social-Content-Strategy-Audit-Architect-Prompt.md",
+  "fields": [
+    {
+      "field_id": "client_name",
+      "label": "Client Name",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_website_url",
+      "label": "Client Website URL",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "industry_niche",
+      "label": "Industry / Niche",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "region_country",
+      "label": "Region / Country",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER"
+    },
+    {
+      "field_id": "client_s_own_social_pages_handles",
+      "label": "Client's Own Social Pages/Handles",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — the actual handle/URL for each platform in scope, e.g. Facebook: /trafficradius, Instagram: @trafficradius, LinkedIn: /company/trafficradius, YouTube: @trafficradius. This account is audited and benchmarked exactly like a competitor, not treated as exempt."
+    },
+    {
+      "field_id": "competitor_list",
+      "label": "Competitor List",
+      "kind": "context_reference",
+      "required": true,
+      "source": "auto_from_context",
+      "context_key": "competitor_analysis_social_content_strategy",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — attach or reference the same competitor file/spreadsheet already established in this conversation (name, domain, similarity score, service page URL). Used to select which competitors get audited. Sourced from the paired Competitor Analysis — Social Content Strategy stage (07_Social_Content_Strategy_and_Posts.md) when available."
+    },
+    {
+      "field_id": "number_of_competitors_to_audit",
+      "label": "Number of Competitors to Audit",
+      "kind": "number",
+      "required": true,
+      "source": "user_input",
+      "default": 5,
+      "raw_explanation": "YOUR ANSWER — default 5, selected by highest similarity score from the Competitor List above. State a different number or name specific competitors directly to override automatic selection."
+    },
+    {
+      "field_id": "platforms_in_scope",
+      "label": "Platforms in Scope",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — which platforms to audit for every account, e.g. Facebook, Instagram, LinkedIn, YouTube, TikTok, Pinterest, Twitter/X. Only audit platforms where an account was actually found for a given competitor — do not fabricate a presence that doesn't exist."
+    },
+    {
+      "field_id": "raw_post_data_source",
+      "label": "Raw Post Data Source",
+      "kind": "file_attach",
+      "required": true,
+      "source": "user_input",
+      "accepted_types": [
+        "xlsx",
+        "csv"
+      ],
+      "raw_explanation": "YOUR ANSWER — for each account (own + competitors), specify how post data is obtained: (a) attach/reference an exported post dataset (CSV/XLSX with platform, date, format, caption/text, engagement) if one exists, or (b) say \"research live via browser\" to have posts collected directly from each platform. If (b), state how many of each account's most recent posts to sample per platform (default 40-60 per platform, capped by what's actually visible without login-gated access) — every report must disclose the actual sample size and collection method used, never presented as a full historical archive unless it demonstrably is one."
+    },
+    {
+      "field_id": "time_window",
+      "label": "Time Window",
+      "kind": "text",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — the post date range being audited, e.g. \"last 6 months\" or \"most recent 300-400 posts across all accounts.\" Applied consistently across every account so the comparison is apples-to-apples."
+    },
+    {
+      "field_id": "client_s_own_service_offering_list",
+      "label": "Client's Own Service / Offering List",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "unresolved_context_key",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER — the client's actual service lines, used to score every account's content against real service-coverage gaps. If left blank, infer from the ICP or pillar page already established in this conversation.",
+      "fallback_instruction": "If left blank, infer from the ICP or pillar page already established."
+    },
+    {
+      "field_id": "content_format_taxonomy_optional",
+      "label": "Content Format Taxonomy (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank to use the default: Carousel, Static Image, Text Post, Video/Reel, Story, Live/Webinar",
+      "fallback_instruction": "Leave blank to use the default: Carousel, Static Image, Text Post, Video/Reel, Story, Live/Webinar."
+    },
+    {
+      "field_id": "content_purpose_taxonomy_optional",
+      "label": "Content Purpose Taxonomy (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank to use the default: Awareness, Education, Engagement, Conversion, Promotion, Retention",
+      "fallback_instruction": "Leave blank to use the default: Awareness, Education, Engagement, Conversion, Promotion, Retention."
+    },
+    {
+      "field_id": "topic_theme_taxonomy_optional",
+      "label": "Topic/Theme Taxonomy (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank to have 8-12 topic tags inferred from the industry and the actual posts collected",
+      "fallback_instruction": "Leave blank to have 8-12 topic tags inferred from the industry and the actual posts collected."
+    },
+    {
+      "field_id": "icp_brand_voice_reference_optional",
+      "label": "ICP / Brand Voice Reference (optional)",
+      "kind": "context_reference",
+      "required": false,
+      "source": "auto_from_context",
+      "context_key": "icp_*",
+      "fallback": "ask_user_if_missing",
+      "raw_explanation": "YOUR ANSWER or leave blank — paste, attach, or reference the ICP and CRO/brand-voice framework already established, so the sample posts generated in the final step sound like this client, not a generic agency"
+    },
+    {
+      "field_id": "regulated_field_advertising_compliance_body_optional",
+      "label": "Regulated Field / Advertising Compliance Body (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER — e.g. ACCC (Australia), FTC (US), ASA (UK), or \"None.\" Governs claims made in any sample posts generated."
+    },
+    {
+      "field_id": "additional_notes_constraints_optional",
+      "label": "Additional Notes / Constraints (optional)",
+      "kind": "text",
+      "required": false,
+      "source": "user_input",
+      "raw_explanation": "YOUR ANSWER or leave blank"
+    }
+  ]
+}

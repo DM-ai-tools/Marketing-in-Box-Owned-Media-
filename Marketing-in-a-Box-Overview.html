@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing-in-a-Box — From Playbook to Engine</title>
+<style>
+  :root {
+    --ink-950: #12201b;
+    --ink-800: #1c2f27;
+    --ink-700: #2b3b34;
+    --paper-50: #eef0e9;
+    --paper-100: #e2e5da;
+    --paper-200: #d3d7c9;
+    --signal-500: #c98a2e;
+    --signal-600: #a9721f;
+    --teal-500: #3e6e64;
+    --teal-400: #5c8a7e;
+    --line: rgba(18, 32, 27, 0.14);
+    --line-dark: rgba(238, 240, 233, 0.16);
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper-50: #12201b;
+      --paper-100: #1c2f27;
+      --paper-200: #24382f;
+      --ink-950: #eef0e9;
+      --ink-800: #e2e5da;
+      --ink-700: #c7cdbf;
+      --signal-500: #f0ad4e;
+      --signal-600: #f6c274;
+      --teal-500: #7fab9e;
+      --teal-400: #9dc0b4;
+      --line: rgba(238, 240, 233, 0.14);
+      --line-dark: rgba(238, 240, 233, 0.14);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper-50: #12201b;
+    --paper-100: #1c2f27;
+    --paper-200: #24382f;
+    --ink-950: #eef0e9;
+    --ink-800: #e2e5da;
+    --ink-700: #c7cdbf;
+    --signal-500: #f0ad4e;
+    --signal-600: #f6c274;
+    --teal-500: #7fab9e;
+    --teal-400: #9dc0b4;
+    --line: rgba(238, 240, 233, 0.14);
+    --line-dark: rgba(238, 240, 233, 0.14);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --ink-950: #12201b;
+    --ink-800: #1c2f27;
+    --ink-700: #2b3b34;
+    --paper-50: #eef0e9;
+    --paper-100: #e2e5da;
+    --paper-200: #d3d7c9;
+    --signal-500: #c98a2e;
+    --signal-600: #a9721f;
+    --teal-500: #3e6e64;
+    --teal-400: #5c8a7e;
+    --line: rgba(18, 32, 27, 0.14);
+    --line-dark: rgba(238, 240, 233, 0.16);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper-50);
+    color: var(--ink-950);
+    font-family: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    font-weight: 400;
+    text-wrap: balance;
+    color: var(--ink-950);
+    margin: 0;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--signal-500);
+    font-weight: 500;
+  }
+
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  .prose p { max-width: 62ch; }
+  .prose { color: var(--ink-800); }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    background: var(--ink-950);
+    color: var(--paper-50);
+    padding: 88px 0 76px;
+  }
+  :root[data-theme="dark"] .hero,
+  @media (prefers-color-scheme: dark) { .hero { color: var(--paper-50); } }
+  .hero .wrap { max-width: 720px; }
+  .hero .eyebrow { color: var(--signal-600); margin-bottom: 18px; display: block; }
+  .hero h1 {
+    font-size: clamp(34px, 5vw, 50px);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+  }
+  .hero .sub {
+    margin-top: 22px;
+    font-size: 19px;
+    line-height: 1.6;
+    max-width: 56ch;
+    color: color-mix(in srgb, var(--paper-50) 78%, transparent);
+  }
+  .hero .meta {
+    margin-top: 36px;
+    font-size: 13px;
+    color: color-mix(in srgb, var(--paper-50) 55%, transparent);
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .hero .meta span { display: flex; align-items: center; gap: 8px; }
+  .hero .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--signal-500);
+    display: inline-block;
+  }
+
+  /* ---------- Sections ---------- */
+  section.read { padding: 64px 0; }
+  section.read + section.read { border-top: 1px solid var(--line); }
+  h2.title { font-size: 28px; margin-bottom: 18px; letter-spacing: -0.01em; }
+  .prose p + p { margin-top: 14px; }
+
+  /* ---------- Full bleed band ---------- */
+  .band {
+    background: var(--ink-950);
+    color: var(--paper-50);
+    padding: 56px 0 60px;
+  }
+  .band .wrap { max-width: 1080px; }
+  .band .eyebrow { color: var(--signal-600); }
+  .band h2 { color: var(--paper-50); font-size: 25px; margin-top: 10px; }
+  .band .lede {
+    margin-top: 10px;
+    max-width: 60ch;
+    color: color-mix(in srgb, var(--paper-50) 72%, transparent);
+    font-size: 15.5px;
+  }
+
+  /* ---------- Lane scroller ---------- */
+  .lanes {
+    margin-top: 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .lane-row {
+    display: grid;
+    grid-template-columns: 148px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  .lane-label {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--teal-400);
+    padding-top: 14px;
+    text-transform: uppercase;
+  }
+  .lane-scroll {
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .lane-cards {
+    display: flex;
+    gap: 12px;
+    min-width: max-content;
+  }
+  .stage-card {
+    width: 178px;
+    flex: 0 0 auto;
+    background: color-mix(in srgb, var(--paper-50) 8%, var(--ink-950));
+    border: 1px solid var(--line-dark);
+    border-radius: 3px;
+    padding: 14px 15px 15px;
+  }
+  .stage-card .n {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--signal-500);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage-card .name {
+    margin-top: 8px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--paper-50);
+    line-height: 1.3;
+  }
+  .stage-card .desc {
+    margin-top: 6px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: color-mix(in srgb, var(--paper-50) 62%, transparent);
+  }
+
+  .arrow-note {
+    margin-top: 20px;
+    font-size: 13px;
+    color: color-mix(in srgb, var(--paper-50) 55%, transparent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ---------- Insight: three layers ---------- */
+  .layers {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .layer {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 22px;
+    padding: 20px 0;
+    border-top: 1px solid var(--line);
+  }
+  .layer:first-child { border-top: none; }
+  .layer .tag {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    color: var(--teal-500);
+    letter-spacing: 0.03em;
+  }
+  .layer h3 { font-size: 18px; margin-top: 6px; font-family: inherit; font-weight: 600; }
+  .layer p { margin-top: 6px; font-size: 14.5px; color: var(--ink-700); max-width: 54ch; }
+  .layer-down {
+    text-align: center;
+    font-size: 12px;
+    color: var(--teal-500);
+    padding: 2px 0;
+  }
+
+  /* ---------- Engine loop ---------- */
+  .loop {
+    margin-top: 34px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    counter-reset: step;
+  }
+  .step {
+    flex: 1 1 200px;
+    background: color-mix(in srgb, var(--paper-50) 7%, var(--ink-950));
+    border: 1px solid var(--line-dark);
+    border-radius: 3px;
+    padding: 16px 16px 17px;
+    position: relative;
+  }
+  .step .k {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--signal-500);
+  }
+  .step .t {
+    margin-top: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--paper-50);
+  }
+  .step .d {
+    margin-top: 6px;
+    font-size: 12.5px;
+    color: color-mix(in srgb, var(--paper-50) 62%, transparent);
+    line-height: 1.45;
+  }
+  .loop-back {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--signal-600);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* ---------- Callout ---------- */
+  .callout {
+    margin-top: 8px;
+    border-left: 3px solid var(--teal-500);
+    background: var(--paper-100);
+    padding: 20px 24px;
+    border-radius: 0 3px 3px 0;
+  }
+  .callout .eyebrow { color: var(--teal-500); }
+  .callout p { margin-top: 10px; font-size: 15px; color: var(--ink-800); max-width: 58ch; }
+
+  /* ---------- Benefit grid ---------- */
+  .grid4 {
+    margin-top: 30px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+  }
+  .card {
+    background: var(--paper-50);
+    padding: 22px 22px 24px;
+  }
+  .card .tag { font-size: 12px; color: var(--teal-500); font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+  .card h3 { font-size: 17px; margin-top: 8px; font-weight: 600; font-family: inherit; }
+  .card p { font-size: 14px; margin-top: 8px; color: var(--ink-700); }
+
+  /* ---------- System diagram ---------- */
+  .diagram-intro { color: var(--ink-700); font-size: 15px; max-width: 60ch; margin-top: 4px; }
+  .diagram-card {
+    margin-top: 26px;
+    background: #182620;
+    border: 1px solid rgba(238, 240, 233, 0.14);
+    border-radius: 4px;
+    padding: 28px 24px 16px;
+    overflow-x: auto;
+  }
+  .diagram-card .mermaid { min-width: 620px; }
+  .diagram-key {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--ink-700);
+  }
+  .diagram-key strong { color: var(--ink-950); }
+
+  /* ---------- Roadmap ---------- */
+  .roadmap {
+    margin-top: 36px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .mile {
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--teal-500);
+    border-radius: 4px;
+    background: var(--paper-100);
+    padding: 20px 20px 22px;
+  }
+  .mile .mile-n {
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12px;
+    color: var(--signal-500);
+    font-variant-numeric: tabular-nums;
+  }
+  .mile .k { font-size: 12px; color: var(--teal-500); font-family: ui-monospace, "SF Mono", Consolas, monospace; margin-top: 6px; }
+  .mile h3 { font-size: 16px; margin-top: 8px; font-weight: 600; font-family: inherit; }
+  .mile p { font-size: 13.5px; margin-top: 6px; color: var(--ink-700); }
+
+  /* ---------- Close ---------- */
+  .close {
+    padding: 54px 0 72px;
+    border-top: 1px solid var(--line);
+  }
+  .close p { font-size: 16px; color: var(--ink-800); max-width: 56ch; }
+  .close .sig { margin-top: 22px; font-size: 13px; color: var(--teal-500); font-family: ui-monospace, "SF Mono", Consolas, monospace; }
+
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--signal-500);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 680px) {
+    .lane-row { grid-template-columns: 1fr; }
+    .lane-label { padding-top: 0; }
+    .layer { grid-template-columns: 1fr; gap: 6px; }
+    .grid4 { grid-template-columns: 1fr; }
+    .roadmap { grid-template-columns: 1fr; gap: 28px; }
+    .hero { padding: 64px 0 56px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Architecture Briefing — Internal</span>
+    <h1>Marketing-in-a-Box</h1>
+    <p class="sub">Turning the TrafficRadius Google Ads playbook into a reusable engine — one funnel, built once, run for any client.</p>
+    <div class="meta">
+      <span><span class="dot"></span>Prepared for dotmappers</span>
+      <span>Source: TrafficRadius Google Ads, Phase 1 &amp; 2</span>
+    </div>
+    <div style="margin-top: 24px;">
+      <a href="Marketing_in_a_Box_Architecture.html" style="background: var(--signal-500); color: #000; padding: 10px 18px; border-radius: 6px; font-weight: 700; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: transform 0.2s;">⚡ Open Full Interactive System Architecture Dashboard &rarr;</a>
+    </div>
+  </div>
+</header>
+
+<section class="read">
+  <div class="wrap prose">
+    <h2 class="title">Where this comes from</h2>
+    <p>Over the past few months, the team built a full content funnel for TrafficRadius's Google Ads service — an ideal customer profile, a conversion audit, a pillar landing page, a value-laddered offer, lead magnets, blogs, SMS sequences, webinars, a book, a podcast. Sixteen pieces of work, each one written to support the next, each one tracked as a document link in a spreadsheet.</p>
+    <p>Then the same shape was needed again for a different offer — Remarketing — inside the same account. It wasn't a new idea. It was the same funnel, rebuilt from scratch by hand: pillar page, funnel, lead magnet, blog, SMS, content marketing.</p>
+    <p>That repetition is the signal. This isn't sixteen one-off deliverables — it's one process, applied twice already, that every future client and every future offer will need again.</p>
+  </div>
+</section>
+
+<div class="band">
+  <div class="wrap">
+    <span class="eyebrow">What we already built — Phase 1</span>
+    <h2>The Google Ads funnel, stage by stage</h2>
+    <p class="lede">Sixteen stages, grouped below by the job they do. Each stage draws on the ones before it — the pillar page couldn't be written until the ICP and conversion audit existed.</p>
+
+    <div class="lanes">
+      <div class="lane-row">
+        <div class="lane-label">Foundation</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">01</div><div class="name">ICP</div><div class="desc">Who the client is actually selling to, and what they care about.</div></div>
+          <div class="stage-card"><div class="n">02</div><div class="name">CRO Audit</div><div class="desc">Where the existing site loses the people the ICP describes.</div></div>
+        </div></div>
+      </div>
+      <div class="lane-row">
+        <div class="lane-label">Core funnel</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">03</div><div class="name">Pillar Page</div><div class="desc">The landing page the ads actually point to.</div></div>
+          <div class="stage-card"><div class="n">04</div><div class="name">Funnel</div><div class="desc">The path from ad click to booked call or purchase.</div></div>
+          <div class="stage-card"><div class="n">05</div><div class="name">Offers</div><div class="desc">The value ladder — what's offered first, next, and last.</div></div>
+          <div class="stage-card"><div class="n">06</div><div class="name">Lead Magnet</div><div class="desc">An ROI calculator built to capture the first contact.</div></div>
+        </div></div>
+      </div>
+      <div class="lane-row">
+        <div class="lane-label">Nurture content</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">07</div><div class="name">Blog</div><div class="desc">Budget-planning content that ranks and nurtures.</div></div>
+          <div class="stage-card"><div class="n">08</div><div class="name">Text / SMS</div><div class="desc">A follow-up sequence for warm leads.</div></div>
+          <div class="stage-card"><div class="n">09</div><div class="name">SEO Pillar Page</div><div class="desc">A second pillar page written for organic search.</div></div>
+        </div></div>
+      </div>
+      <div class="lane-row">
+        <div class="lane-label">Operations</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">10</div><div class="name">Plan of Action</div><div class="desc">How every asset above rolls out, mapped as one plan.</div></div>
+        </div></div>
+      </div>
+      <div class="lane-row">
+        <div class="lane-label">Content engine</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">11</div><div class="name">Content Marketing</div><div class="desc">The ongoing content strategy behind the funnel.</div></div>
+          <div class="stage-card"><div class="n">12</div><div class="name">Social Strategy</div><div class="desc">Organic posts, benchmarked against three named competitors.</div></div>
+        </div></div>
+      </div>
+      <div class="lane-row">
+        <div class="lane-label">Authority</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">13</div><div class="name">Webinar — Competitor-sourced</div><div class="desc">Built from real competitor PPC/SEO webinar transcripts.</div></div>
+          <div class="stage-card"><div class="n">14</div><div class="name">Webinar — AI-generated</div><div class="desc">A 2026 Google Ads outlook, drafted directly.</div></div>
+          <div class="stage-card"><div class="n">15</div><div class="name">Book</div><div class="desc">A book-length blueprint on the same subject.</div></div>
+          <div class="stage-card"><div class="n">16</div><div class="name">Podcast</div><div class="desc">A conversion-copy episode, transcribed and mined for insight.</div></div>
+        </div></div>
+      </div>
+    </div>
+    <div class="arrow-note">→ scroll each row to see every stage</div>
+  </div>
+</div>
+
+<div class="band" style="background: var(--ink-800);">
+  <div class="wrap">
+    <span class="eyebrow">Same engine, second run — Phase 2</span>
+    <h2>Remarketing, rebuilt from the same shape</h2>
+    <p class="lede">A different offer, inside the same account. Six of the sixteen stages, run again — proof that the process, not the output, is the reusable part.</p>
+    <div class="lanes">
+      <div class="lane-row">
+        <div class="lane-label">Remarketing</div>
+        <div class="lane-scroll"><div class="lane-cards">
+          <div class="stage-card"><div class="n">01</div><div class="name">Pillar Page</div><div class="desc">A landing page built for warm, already-aware traffic.</div></div>
+          <div class="stage-card"><div class="n">02</div><div class="name">Funnel</div><div class="desc">The re-engagement path for lost visitors.</div></div>
+          <div class="stage-card"><div class="n">03</div><div class="name">Lead Magnet</div><div class="desc">An ROI estimator tuned to this offer.</div></div>
+          <div class="stage-card"><div class="n">04</div><div class="name">Blog</div><div class="desc">Content on winning back lost customers.</div></div>
+          <div class="stage-card"><div class="n">05</div><div class="name">Text / SMS</div><div class="desc">A remarketing-specific follow-up sequence.</div></div>
+          <div class="stage-card"><div class="n">06</div><div class="name">Content Marketing</div><div class="desc">The content strategy behind this narrower funnel.</div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="read">
+  <div class="wrap">
+    <span class="eyebrow" style="color: var(--teal-500);">The insight</span>
+    <h2 class="title" style="margin-top: 10px;">Three layers were already there — we just hadn't named them</h2>
+    <div class="layers">
+      <div class="layer">
+        <div><div class="tag">Layer 1</div></div>
+        <div><h3>The catalogue</h3><p>A 27-item list of every asset type a client relationship can include — brand identity, positioning, funnels, SEO, email, webinars, podcasts, and more. Not every client needs all 27. Every client draws from this same list.</p></div>
+      </div>
+      <div class="layer-down">↓ feeds</div>
+      <div class="layer">
+        <div><div class="tag">Layer 2</div></div>
+        <div><h3>The recipe book</h3><p>For each item in the catalogue, a written prompt: how to produce an ICP, how to produce a pillar page, how to produce a webinar. This already exists, one document per asset type, refined across versions.</p></div>
+      </div>
+      <div class="layer-down">↓ produces</div>
+      <div class="layer">
+        <div><div class="tag">Layer 3</div></div>
+        <div><h3>The client's output</h3><p>Phase 1 and Phase 2 are what happens when the recipe book is applied to one client's chosen items. Every future client is another pass through the same two layers above.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="band">
+  <div class="wrap">
+    <span class="eyebrow">The proposal</span>
+    <h2>An engine that runs this for any client</h2>
+    <p class="lede">Instead of rebuilding the funnel by hand each time, the same three layers become software: a catalogue to choose from, a template that orders the stages, and drafting done automatically — with a strategist approving every step before the next one starts.</p>
+    <div class="loop">
+      <div class="step"><div class="k">Step 1</div><div class="t">Set up the client</div><div class="d">Name, industry, business profile — entered once.</div></div>
+      <div class="step"><div class="k">Step 2</div><div class="t">Pick a funnel template</div><div class="d">"Google Ads Core" or "Remarketing" — or a new one, built once and reused forever after.</div></div>
+      <div class="step"><div class="k">Step 3</div><div class="t">Each stage drafts itself</div><div class="d">Using the recipe book plus everything approved so far — ICP feeds the audit, the audit feeds the pillar page.</div></div>
+      <div class="step"><div class="k">Step 4</div><div class="t">A strategist reviews</div><div class="d">Edit, approve, or send it back with notes. Nothing moves forward unreviewed.</div></div>
+      <div class="step"><div class="k">Step 5</div><div class="t">The funnel completes</div><div class="d">Every stage delivered, in order, exactly like Phase 1 — but built in days.</div></div>
+    </div>
+    <div class="loop-back">↻ the next client starts back at Step 1, using the same template</div>
+  </div>
+</div>
+
+<section class="read">
+  <div class="wrap">
+    <div class="callout">
+      <span class="eyebrow">What doesn't change</span>
+      <p>The strategist still decides what's good. The engine drafts every stage; a person reads, edits, and approves it before the next stage is allowed to start. This replaces the blank page and the rebuilding-from-scratch — not the judgment.</p>
+    </div>
+  </div>
+</section>
+
+<section class="read">
+  <div class="wrap">
+    <span class="eyebrow" style="color: var(--teal-500);">Under the hood</span>
+    <h2 class="title" style="margin-top: 10px;">System architecture</h2>
+    <p class="diagram-intro">One way to build the five steps above as software. The boxes are the parts that get built; the arrows are what moves between them for a single stage of a single client's funnel.</p>
+    <div class="diagram-card">
+      <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {
+  'background': '#182620',
+  'primaryColor': '#223830',
+  'primaryTextColor': '#eef0e9',
+  'primaryBorderColor': '#4a6b60',
+  'lineColor': '#d99a44',
+  'secondaryColor': '#2b3b34',
+  'secondaryTextColor': '#eef0e9',
+  'secondaryBorderColor': '#4a6b60',
+  'tertiaryColor': '#1c2f27',
+  'tertiaryTextColor': '#eef0e9',
+  'tertiaryBorderColor': '#4a6b60',
+  'clusterBkg': '#1c2f27',
+  'clusterBorder': '#3e6e64',
+  'fontFamily': 'ui-monospace, SFMono-Regular, Consolas, monospace',
+  'fontSize': '13px',
+  'edgeLabelBackground': '#182620'
+}}}%%
+flowchart TB
+    subgraph TEAM["Team-facing screens"]
+        direction LR
+        UI1["Client and Template Setup"]
+        UI2["Review and Approve Screen"]
+    end
+
+    subgraph CORE["Core engine"]
+        direction LR
+        P["Pipeline Tracker<br/>(this client's funnel run)"]
+        S["Stage Engine<br/>(fills the recipe for one stage)"]
+    end
+
+    AI["Claude AI<br/>(drafts the content)"]
+    DB[("Client, Template &amp;<br/>Pipeline Records")]
+    FILES[("Generated Deliverables<br/>pages, docs, audits")]
+    OPT["Optional add-on:<br/>live ad account data"]
+
+    UI1 --> P
+    P --> S
+    S --> AI
+    AI --> S
+    S --> UI2
+    UI2 -- approved --> P
+    UI2 -. sent back with notes .-> S
+    P --> DB
+    S --> FILES
+    FILES --> UI2
+    OPT -. context .-> S
+      </pre>
+    </div>
+    <p class="diagram-key"><strong>Reading it:</strong> solid arrows are the normal path forward; the dotted arrows are a stage sent back for edits, or optional extra context; the cylinders are where things are permanently stored.</p>
+  </div>
+</section>
+
+<section class="read">
+  <div class="wrap">
+    <h2 class="title">Why it's worth building</h2>
+    <div class="grid4">
+      <div class="card"><div class="tag">Reuse</div><h3>Built once, run many times</h3><p>The Google Ads funnel and the Remarketing funnel already prove the shape repeats. Every new template gets easier to add than the last.</p></div>
+      <div class="card"><div class="tag">Consistency</div><h3>No dropped stages</h3><p>A client can't accidentally skip the CRO audit or launch a pillar page before the ICP exists — the order is enforced, not remembered.</p></div>
+      <div class="card"><div class="tag">Speed</div><h3>Days, not a rebuild</h3><p>Starting a new client's funnel stops being "write sixteen documents from scratch" and becomes "review sixteen drafts."</p></div>
+      <div class="card"><div class="tag">Memory</div><h3>The playbook stays put</h3><p>Today the process lives in one strategist's head and a spreadsheet. This puts it somewhere the whole team can run it.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="read">
+  <div class="wrap">
+    <h2 class="title">Getting there</h2>
+    <div class="roadmap">
+      <div class="mile"><div class="mile-n">01</div><div class="k">First</div><h3>Prove it internally</h3><p>Build the engine around the Google Ads and Remarketing funnels already on file — no new stage types yet.</p></div>
+      <div class="mile"><div class="mile-n">02</div><div class="k">Then</div><h3>Connect real data</h3><p>Let the ICP and audit stages pull from the client's actual ad accounts instead of a manual brief.</p></div>
+      <div class="mile"><div class="mile-n">03</div><div class="k">Later</div><h3>Open it up</h3><p>If it holds up across several clients, consider a version clients can log into and run themselves.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="close">
+  <div class="wrap">
+    <p>The work already exists — this is the case for building the machine that runs it again, faster, for the next client and the one after that.</p>
+    <div class="sig">Marketing-in-a-Box — Architecture Overview</div>
+  </div>
+</section>
+
+<script src="mermaid.min.js"></script>
+<script>
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: true, securityLevel: "loose" });
+  } else {
+    document.querySelectorAll(".diagram-card").forEach(function (el) {
+      el.insertAdjacentHTML("beforeend", '<p style="color:#eef0e9;font-size:12px;margin-top:10px;">Diagram library (mermaid.min.js) not found — keep this file in the same folder as Marketing-in-a-Box-Overview.html.</p>');
+    });
+  }
+</script>
+</body>
+</html>
