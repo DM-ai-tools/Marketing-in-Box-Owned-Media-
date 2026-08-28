@@ -63,9 +63,11 @@ e.g. `icp` writes `["icp_persona_name", "icp_pain_points", ...]`).
 This table has no seed data in the initial migration — it must be populated from the
 finalized asset registry (Day 1 roadmap task) before any `run_stages`, `prompt_recipes`, or
 `field_schema_registry` rows can be inserted, since all three FK to `asset_definitions.asset_id`
-with `ON DELETE RESTRICT`. `scripts/seed_asset_definitions.py` performs this seeding for the
-25-stage DAG rebuilt from the new prompt source at `assets/Prompts/` — see that script's
-docstring for the full row list and why it's a re-runnable script (idempotent
+with `ON DELETE RESTRICT`. The app applies this seed itself on every boot
+(`app/main.py`'s lifespan calls `app/db/seed.py`), so a fresh database is usable without a manual
+step; `scripts/seed_asset_definitions.py` runs the same seed by hand against an arbitrary DSN. The
+25-stage DAG was rebuilt from the new prompt source at `assets/Prompts/` — see `app/db/seed.py`'s
+docstring for the full row list and why it's a re-runnable upsert (idempotent
 `INSERT ... ON CONFLICT DO UPDATE` keyed on `asset_id`) rather than a one-time data migration.
 
 `asset_id` is a `VARCHAR(100)` primary key, not a surrogate UUID — it's a stable, human-readable
@@ -269,9 +271,11 @@ once per field per turn, across every stage's intake session, rather than once p
 has no `asset_definitions` row to carry this on. It is documented here instead: **the Interviewer
 Agent uses `haiku`.**
 
-Full seed data for the 25-stage DAG lives in `scripts/seed_asset_definitions.py` (re-run it
-whenever a stage's tier/gating/dependencies change — see that script's docstring for why it's a
-script, not a one-time migration). Rationale for the three tiers, applied consistently across all
+Full seed data for the 25-stage DAG lives in `app/db/seed.py`, applied on every boot and by
+`scripts/seed_asset_definitions.py` on demand (edit it whenever a stage's tier/gating/dependencies
+change — see that module's docstring for why it's a re-runnable upsert, not a one-time migration).
+Retiring a stage does not delete its row: it is parked above `PARK_BASE` so pre-existing runs can
+still FK to it. Rationale for the three tiers, applied consistently across all
 25 seeded stages plus the Interviewer Agent:
 
 - **`opus`** — the 3 gated foundation stages: `icp`, `cro`, `pillar_page`. These are the DAG's

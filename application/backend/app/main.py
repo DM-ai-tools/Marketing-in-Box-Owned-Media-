@@ -67,10 +67,53 @@ def _verify_event_loop() -> None:
     )
 
 
+SEED_TIMEOUT_SECONDS = 20
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _verify_event_loop()
+    await _seed_reference_data()
     yield
+
+
+async def _seed_reference_data() -> None:
+    """Upsert `asset_definitions` on boot, so a fresh database is usable without a manual step.
+
+    Every stage's Save writes `run_stages` / `context_entries` / `approval_audit_log` rows that FK
+    to `asset_definitions.asset_id`. On an unseeded database that surfaces only at the first Save,
+    as `404 Unknown asset_id: 'icp'`, while `/health` and every chat-session route keep answering
+    200 — which reads as a broken feature rather than a missing seed. The upsert is idempotent
+    (see app/db/seed.py), so paying it once per boot is cheaper than the class of bug it removes.
+
+    Deliberately non-fatal: if the database is unreachable at startup, the app should still come up
+    and answer `/health` rather than crash-loop the deployment. The routes that need the DB will
+    fail on their own terms, and the log line below says exactly how to apply the seed by hand.
+
+    Also deliberately time-boxed. psycopg's own connect timeout is ~2 minutes, and nothing binds the
+    port until this returns — long enough for a platform health check to fail the deploy over a
+    database blip. `SEED_TIMEOUT_SECONDS` is far more than a reachable database needs and far less
+    than a deploy window.
+    """
+    from app.db.seed import seed_asset_definitions
+
+    try:
+        count = await asyncio.wait_for(seed_asset_definitions(), timeout=SEED_TIMEOUT_SECONDS)
+    except TimeoutError:
+        logger.error(
+            "asset_definitions seed timed out after %ss; the app will serve but every stage Save "
+            "will 404 with 'Unknown asset_id' until it succeeds. Check DATABASE_URL, then apply it "
+            "by hand with: python scripts/seed_asset_definitions.py",
+            SEED_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception(
+            "asset_definitions seed failed at startup; the app will serve but every stage Save "
+            "will 404 with 'Unknown asset_id' until it succeeds. Apply it by hand with: "
+            "python scripts/seed_asset_definitions.py"
+        )
+    else:
+        logger.info("asset_definitions seed applied (%d rows).", count)
 
 
 app = FastAPI(

@@ -184,7 +184,16 @@ class AssetDefinition(Base):
     __tablename__ = "asset_definitions"
     __table_args__ = (
         CheckConstraint("phase IN (1, 2)", name="ck_asset_definitions_phase"),
-        UniqueConstraint("phase", "sequence_order", name="uq_asset_definitions_phase_order"),
+        # Deferred so the boot-time reseed (app/db/seed.py) can reorder stages within one
+        # transaction — moving stage N into a slot another stage has not vacated yet is a
+        # transient state, not an invalid one. See the `defer_asset_order_unique` migration.
+        UniqueConstraint(
+            "phase",
+            "sequence_order",
+            name="uq_asset_definitions_phase_order",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
     )
 
     asset_id: Mapped[str] = mapped_column(String(100), primary_key=True)
