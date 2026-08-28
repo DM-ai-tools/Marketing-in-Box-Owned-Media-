@@ -22,7 +22,7 @@ from sqlalchemy import engine_from_config, pool
 # (the expected cwd per the backend README's setup instructions).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db.base import Base  # noqa: E402
+from app.db.base import Base, normalize_dsn  # noqa: E402
 from app.db import models  # noqa: E402,F401  import registers all models on Base.metadata
 
 # Alembic Config object, providing access to values within alembic.ini.
@@ -36,7 +36,10 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    url = os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    # Same driver normalisation the app applies (see app/db/base.py), so migrations run against a
+    # host-supplied DSN instead of failing on a psycopg2 that is not installed.
+    return normalize_dsn(url) if url else url
 
 
 def run_migrations_offline() -> None:

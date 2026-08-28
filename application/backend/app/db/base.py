@@ -54,6 +54,21 @@ def database_url() -> str:
             "DATABASE_URL is not set. Copy application/backend/.env.example to .env and set a "
             "real Postgres DSN, e.g. postgresql+psycopg://user:password@localhost:5432/marketing_in_a_box"
         )
+    return normalize_dsn(url)
+
+
+def normalize_dsn(url: str) -> str:
+    """Force the psycopg 3 driver onto a DSN that does not name one.
+
+    Managed hosts (Railway, Heroku, Render) inject a bare `postgresql://` — or the legacy
+    `postgres://` — which SQLAlchemy resolves to psycopg2: a driver this app does not install and,
+    being sync-only, one that `create_async_engine` refuses outright. The failure surfaces at the
+    first query as a 500, nowhere near the environment variable that caused it, so the scheme is
+    corrected here instead of relying on every deployment to spell the DSN exactly right.
+    """
+    for bare, driver in (("postgresql://", "postgresql+psycopg://"), ("postgres://", "postgresql+psycopg://")):
+        if url.startswith(bare):
+            return driver + url[len(bare):]
     return url
 
 
