@@ -146,6 +146,28 @@ const txt = (field_id: string, label: string, opts: Partial<FieldDef> = {}): Fie
   placeholder: opts.placeholder,
 });
 
+/** A topic the operator picks from suggestions instead of typing cold.
+ *
+ * Same answer shape as `txt` — a string, rendered into the stage's INPUTS block identically — so
+ * this is purely a change of *how the operator arrives at it*. `helpText` and `placeholder` still
+ * matter: the card always offers a "write my own" field, and those are what guide it.
+ *
+ * `slot` must name a slot the backend knows (`SLOTS` in `app/services/headlines.py`). A typo would
+ * surface as a 404 on the suggestion call at exactly the point in a run where the operator is
+ * blocked on it, so `PHASE1_STAGES`/`PHASE2_STAGES` construction is not where it gets caught —
+ * `tests/test_headlines.py` pins the slot table against the stage table instead.
+ */
+const topic = (field_id: string, label: string, slot: string, opts: Partial<FieldDef> = {}): FieldDef => ({
+  field_id,
+  label,
+  kind: "headline_choice",
+  headlineSlot: slot,
+  required: opts.required ?? true,
+  source: "user_input",
+  helpText: opts.helpText,
+  placeholder: opts.placeholder,
+});
+
 const num = (field_id: string, label: string, opts: Partial<FieldDef> = {}): FieldDef => ({
   field_id,
   label,
@@ -510,7 +532,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
       ctx("cro_locked_sections", "Locked Sections (from CRO)", "cro_locked_sections"),
       txt("page_architecture_section_order", "Page Architecture / Section Order", { default: "USE DEFAULT" }),
       txt("new_sections_to_add_optional", "New Sections to Add (optional)", { required: false }),
-      txt("primary_keyword_head_term", "Primary Keyword / Head Term"),
+      topic("primary_keyword_head_term", "Primary Keyword / Head Term", "pillar_head_term"),
       txt("secondary_cluster_terms_optional", "Secondary / Cluster Terms (optional)", { required: false }),
       txt("internal_cluster_pages_to_link_optional", "Internal Cluster Pages to Link (optional)", { required: false }),
       ctx("competitor_analysis_pillar_page", "Competitor Analysis — Pillar Pages", "competitor_analysis_seo_pillar_page", {
@@ -755,6 +777,11 @@ export const ASSET_CATALOG: AssetDefinition[] = [
           "The specific service or product this lead magnet must feed into. A magnet that doesn't lead anywhere collects the wrong people.",
         placeholder: "e.g. Social media strategy calls",
       }),
+      topic("selected_lead_magnet_concepts", "Lead Magnet Concepts", "lead_magnet_concept", {
+        helpText:
+          "Pick every concept you want built — each one becomes its own finished lead magnet with a full brief and a working HTML file. Around ten gives you a real spread of formats and funnel stages.",
+        placeholder: "e.g. The 12-minute social audit that shows where your reach died",
+      }),
       txt("funnel_entry_point_optional", "Funnel Entry Point (optional)", {
         required: false,
         helpText: "Where people meet this magnet — pillar page, ad, organic search, referral. It sets how much context the copy has to establish.",
@@ -780,17 +807,19 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     asset_id: "blog",
     label: "Blog Post",
     category: "Content",
-    description: "A single SEO-aware blog post that links back to the pillar page and matches established brand voice.",
+    description: "SEO-aware blog posts — one per topic chosen — that link back to the pillar page, to each other, and match established brand voice.",
     live: false,
     writesContextKeys: ["blog"],
     pairedCompetitorAssetId: "competitor_analysis_blog",
     fields: [
-      txt("blog_topic_working_title", "Blog Topic / Working Title", {
-        helpText: "The angle, not the final headline — the headline gets written for you.",
+      topic("blog_topic_working_title", "Blog Topics / Working Titles", "blog_topic", {
+        helpText:
+          "Pick every topic you want written — each one becomes its own full post with its own keyword plan, outline and content brief. Around five is a month of publishing.",
         placeholder: "e.g. What social media marketing actually costs in Melbourne in 2026",
       }),
       txt("primary_keyword", "Primary Keyword", {
-        helpText: "One phrase, the one this post is meant to rank for. Everything else is secondary to it.",
+        helpText:
+          "The head term the whole set supports — usually the pillar page's. Each topic you picked already carries its own keyword; this one anchors them together.",
         placeholder: "e.g. social media marketing cost melbourne",
       }),
       txt("secondary_supporting_keywords_optional", "Secondary / Supporting Keywords (optional)", {
@@ -944,7 +973,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
         helpText: "Why each post exists — this is what exposes a feed that only ever promotes. Leave blank for a standard set.",
         placeholder: "e.g. Educate, build trust, promote, entertain, recruit",
       }),
-      txt("topic_theme_taxonomy_optional", "Topic/Theme Taxonomy (optional)", {
+      topic("topic_theme_taxonomy_optional", "Topic/Theme Taxonomy (optional)", "social_theme_taxonomy", {
         required: false,
         helpText: "Subject areas to code posts against. Leave blank and they get derived from what's found.",
         placeholder: "e.g. SEO, paid social, client results, behind the scenes, team",
@@ -965,7 +994,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     writesContextKeys: ["webinar_script"],
     pairedCompetitorAssetId: "competitor_analysis_webinars",
     fields: [
-      txt("webinar_topic_working_title", "Webinar Topic / Working Title", {
+      topic("webinar_topic_working_title", "Webinar Topic / Working Title", "webinar_topic", {
         helpText: "The promise, not the final title — what makes someone give up an hour.",
         placeholder: "e.g. What agencies don't tell you about pricing, lock-in contracts, and reporting",
       }),
@@ -1018,7 +1047,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
       ctx("source_transcript_recording", "Source Transcript / Recording", "webinar_script", {
         helpText: 'Mandatory — or say "no transcript — build from outline/bullet points" and supply those in Additional Notes.',
       }),
-      txt("book_topic_working_title", "Book Topic / Working Title", {
+      topic("book_topic_working_title", "Book Topic / Working Title", "book_topic", {
         required: false,
         helpText: "Leave blank to derive one from the transcript.",
         placeholder: "e.g. The Honest Guide to Social Media Marketing",
@@ -1059,7 +1088,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     writesContextKeys: ["podcast"],
     pairedCompetitorAssetId: "competitor_analysis_podcast",
     fields: [
-      txt("episode_topic_working_title", "Episode Topic / Working Title", {
+      topic("episode_topic_working_title", "Episode Topic / Working Title", "podcast_episode_topic", {
         helpText: "The angle for this one episode, not the show's overall theme.",
         placeholder: "e.g. Why two agency quotes for the same brief can differ by $40,000",
       }),

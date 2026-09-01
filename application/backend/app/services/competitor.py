@@ -67,13 +67,47 @@ _MAX_TOKENS = 16000
 # here, so the latency is not worth trading. Revisit if the prepass ever moves off the critical
 # path (e.g. runs ahead of time as its own queued job).
 #
-# `max_uses` is the search budget for one stage. 8 was tuned when every competitor stage was an
-# invisible prepass the operator was blocked on; raised to 12 because finding *ten* competitors that
-# each maintain a genuine pillar page on one topic — and opening each candidate to confirm it is a
-# cornerstone page rather than a thin service page — is several searches per keeper. Measured cost of
-# the extra budget is ~20-30s on a stage the operator has explicitly asked for and been told takes a
-# minute, which buys a fuller set and fewer "returned 2 of 10" runs.
-_WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 12}
+# `max_uses` is the search budget for one stage, and it is the single most expensive number in this
+# repo. 8 was tuned when every competitor stage was an invisible prepass the operator was blocked
+# on; it was raised to 12 because finding *ten* competitors that each maintain a genuine pillar page
+# on one topic — and opening each candidate to confirm it is a cornerstone page rather than a thin
+# service page — is several searches per keeper.
+#
+# What that raise actually cost, measured from `api_usage` over 22 real prepasses at `max_uses: 12`:
+#
+#   avg input 276,465 tokens/call   avg output 8,141   avg 10.5 searches   avg $0.739/call
+#
+# 276k input tokens against a ~1,500-token prompt file is not a bug — it is how a server-side tool
+# loop bills. Each of the ~11 internal iterations re-reads the prompt plus every result gathered so
+# far, so input grows with the square of the budget while the deliverable (a 10-row array) does not
+# grow at all. Those 22 calls were $16.27 of a $45.47 bill: 36% of total spend, on the stage with
+# the smallest output in the pipeline.
+#
+# Back to 8, which is a value this pipeline already ran in production rather than a guess, and
+# env-tunable so the tradeoff can be measured instead of argued about. Note what does *not* work
+# here: a `cache_control` breakpoint. The iterations happen inside one `messages.create`, so there
+# is no second request whose prefix could hit a cache — the only lever on this cost is how many
+# times the loop goes round.
+_DEFAULT_SEARCH_BUDGET = 8
+
+
+def _search_budget() -> int:
+    """`max_uses` for one competitor prepass. `COMPETITOR_SEARCH_BUDGET` overrides the default.
+
+    Clamped to 1-12: zero would declare a tool the model cannot use, and past 12 the input growth
+    described above outruns any improvement in the listing.
+    """
+    raw = os.environ.get("COMPETITOR_SEARCH_BUDGET", "").strip()
+    if not raw.isdigit():
+        return _DEFAULT_SEARCH_BUDGET
+    return max(1, min(int(raw), 12))
+
+
+def _web_search_tool() -> dict[str, object]:
+    """Built per call rather than held as a module constant, so `_search_budget`'s env read has the
+    same late-binding behaviour as `_web_search_enabled`'s — a test or a deploy can set either
+    without re-importing the module."""
+    return {"type": "web_search_20250305", "name": "web_search", "max_uses": _search_budget()}
 
 
 @dataclass(frozen=True)
@@ -618,6 +652,34 @@ def _schema_defaults(cfg: CompetitorConfig) -> dict[str, str]:
     return {f["field_id"]: str(f["default"]) for f in data["fields"] if f.get("default") is not None}
 
 
+_LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*\u2022])\s*")
+
+
+def _search_subject(value: str) -> str:
+    """One searchable subject out of an answer that may be a whole selection.
+
+    A multi-select suggestion gate (`blog_topic`, `podcast_episode_topic`) answers its field with a
+    numbered list carrying each pick's keyword and intent on indented lines beneath it. That is the
+    right thing to hand a stage that writes every one of them, and exactly the wrong thing to
+    substitute into a `{NICHE}` placeholder: the search would run on five titles and their metadata
+    at once and return whatever survived the noise.
+
+    So a list collapses to its first item, which the suggestion service has already ordered by
+    demand — the strongest pick, and a genuine subject for a competitor search. A single-line answer
+    is returned untouched, which is every other stage.
+    """
+    first = ""
+    for line in value.splitlines():
+        stripped = line.strip()
+        # Detail lines are indented under their item; skipping them keeps "Primary keyword: ..."
+        # out of the query when a list somehow leads with one.
+        if not stripped or line[:1].isspace():
+            continue
+        first = _LIST_MARKER.sub("", stripped)
+        break
+    return first.strip()
+
+
 def resolve_inputs(
     cfg: CompetitorConfig,
     main_answers: dict[str, str],
@@ -625,7 +687,8 @@ def resolve_inputs(
 ) -> dict[str, str]:
     """Derive this prepass's placeholder values from the paired main stage's intake answers,
     falling back to the run-level client profile for stages whose own intake never asks for a
-    URL/industry/region (blog, webinar, podcast collect only a topic)."""
+    URL/industry/region (blog, webinar, podcast collect only a topic — and blog and podcast collect
+    several, which `_search_subject` reduces to the one this prepass can search on)."""
     profile = client_profile or {}
     profile_fallback = {
         "target_url": profile.get("website_url", ""),
@@ -641,7 +704,7 @@ def resolve_inputs(
     for placeholder, candidates in cfg.source_fields.items():
         value = ""
         for field_id in candidates:
-            candidate = (main_answers.get(field_id) or "").strip()
+            candidate = _search_subject(main_answers.get(field_id) or "")
             if candidate and candidate.upper() not in {"N/A", "NONE", "UNKNOWN"}:
                 value = candidate
                 break
@@ -709,27 +772,32 @@ async def generate_competitor_analysis(
         "messages": [{"role": "user", "content": prompt}],
     }
     if _web_search_enabled():
-        kwargs["tools"] = [_WEB_SEARCH_TOOL]
+        kwargs["tools"] = [_web_search_tool()]
 
     logger.info(
-        "Running competitor stage=%s phase=%s target_url=%r service=%r web_search=%s",
+        "Running competitor stage=%s phase=%s target_url=%r service=%r web_search=%s budget=%s",
         asset_id,
         phase,
         inputs.get("target_url", ""),
         inputs.get("service", ""),
         _web_search_enabled(),
+        _search_budget() if _web_search_enabled() else 0,
     )
 
     started = time.monotonic()
     response = await client.messages.create(**kwargs)
     text = _extract_text(response.content)
 
+    # `searches` is logged next to `input_tokens` because those two numbers move together and are
+    # the whole cost story for this stage — see the `_DEFAULT_SEARCH_BUDGET` note.
     logger.info(
-        "Competitor prepass done stage=%s stop_reason=%s input_tokens=%s output_tokens=%s chars=%s",
+        "Competitor prepass done stage=%s stop_reason=%s input_tokens=%s output_tokens=%s "
+        "searches=%s chars=%s",
         asset_id,
         response.stop_reason,
         response.usage.input_tokens,
         response.usage.output_tokens,
+        getattr(getattr(response.usage, "server_tool_use", None), "web_search_requests", None),
         len(text),
     )
     if response.stop_reason == "max_tokens":

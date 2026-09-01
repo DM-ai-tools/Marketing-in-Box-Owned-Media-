@@ -4,7 +4,15 @@ export type FieldKind =
   | "enum_choice"
   | "boolean_flag"
   | "file_attach"
-  | "context_reference";
+  | "context_reference"
+  /** A topic/headline the operator picks from generated suggestions rather than types cold.
+   *
+   * Behaves like `text` everywhere downstream — the answer is a string, it renders into the
+   * stage's INPUTS block the same way — so nothing but the intake widget has to know about it.
+   * What changes is where the string comes from: the pipeline asks the backend for at least ten
+   * candidates built from this run's own keyword demand and the headline framework, and the
+   * operator chooses one (or several) or writes their own. See `headlineSlot`. */
+  | "headline_choice";
 
 export type FieldSource = "user_input" | "auto_from_context" | "live_fetch";
 
@@ -46,6 +54,14 @@ export interface FieldDef {
   conditional_children?: string[];
   /** informational only in this UI — field is always askable, required only when condition matches */
   required_if?: FieldCondition;
+  /** `headline_choice` fields only — which suggestion generator to run for this field.
+   *
+   * A slot, not an asset id: it names one *decision* ("the lead magnets", "the blog topic"), and a
+   * stage could grow a second one without either becoming a new asset. Must match a key in the
+   * backend's `SLOTS` (`app/services/headlines.py`), which owns everything about how that slot's
+   * candidates are built — the channel, its character budget, whether the operator picks one or
+   * many, and the extra fields a candidate carries. */
+  headlineSlot?: string;
   /** For `context_reference` fields that resolve successfully: pause and let the operator either
    * accept the upstream output or supply their own instead, rather than auto-filling silently.
    * Use it where an operator plausibly has a better source than the pipeline's own (a client's real

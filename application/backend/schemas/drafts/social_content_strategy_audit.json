@@ -122,7 +122,7 @@
     {
       "field_id": "topic_theme_taxonomy_optional",
       "label": "Topic/Theme Taxonomy (optional)",
-      "kind": "text",
+      "kind": "headline_choice", "headline_slot": "social_theme_taxonomy",
       "required": false,
       "source": "user_input",
       "raw_explanation": "YOUR ANSWER or leave blank to have 8-12 topic tags inferred from the industry and the actual posts collected",

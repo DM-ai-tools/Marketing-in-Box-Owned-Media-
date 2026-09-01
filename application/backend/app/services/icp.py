@@ -1,8 +1,10 @@
 """ICP (Ideal Customer Profile) generation via the Anthropic Messages API.
 
 "icp" is one of the three gated foundation stages (see `app.db.models.ModelTier` docstring):
-errors here cascade to every downstream stage, so this calls Claude Opus rather than a
-cheaper tier.
+errors here cascade to every downstream stage. It ran on Opus for that reason; it now runs on
+Sonnet 5 like the rest of the pipeline, because the cascade argument is answered by the human
+review gate that already sits on this stage rather than by the model tier, and Opus was 2.5x the
+price on both input and output for work a reviewer signs off on either way.
 
 This calls Claude with the *actual* canonical master prompt from
 `assets/Prompts/ICP.md` (read from disk, not paraphrased in code) — the same prompt a human
@@ -26,7 +28,7 @@ from app.services.claude_client import get_client
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-opus-5"
+MODEL = "claude-sonnet-5"
 
 # A full profile in the real prompt's format runs to ~8k words — see
 # manual_execution/ICP-TrafficRadius-ProblemAware-Melbourne-ProfessionalServices.md. Measured:

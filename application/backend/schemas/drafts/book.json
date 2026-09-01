@@ -49,7 +49,7 @@
     {
       "field_id": "book_topic_working_title",
       "label": "Book Topic / Working Title",
-      "kind": "file_attach",
+      "kind": "headline_choice", "headline_slot": "book_topic",
       "required": false,
       "source": "user_input",
       "accepted_types": [

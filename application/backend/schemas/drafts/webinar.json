@@ -4,7 +4,7 @@
   "source_prompt_file": "application/backend/assets/Prompts/universal-webinar-prompt.md",
   "notes": "Per user decision, this is ONE merged webinar-generation stage — confirmed against source: the ROLE section states the webinar's content is built by 'synthesising the strongest elements from competitor webinars,' and Steps 1-8 run linearly in a single prompt execution producing one combined 7-part output. The old DAG's separate 'competitor-sourced' and 'LLM-sourced' webinar stages are superseded by this single call.",
   "fields": [
-    { "field_id": "webinar_topic_working_title", "label": "Webinar Topic / Working Title", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "webinar_topic_working_title", "label": "Webinar Topic / Working Title", "kind": "headline_choice", "headline_slot": "webinar_topic", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
     { "field_id": "competitor_webinar_sources", "label": "Competitor Webinar Sources", "kind": "file_attach", "required": true, "source": "user_input",
       "accepted_types": ["file", "text"],
       "raw_explanation": "UPLOAD OR PASTE — transcripts, slide content, or URLs of 2-5 competitor webinars. Step 2 (Competitor Webinar Synthesis) reads all sources supplied here." },

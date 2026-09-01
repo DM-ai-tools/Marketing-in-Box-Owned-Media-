@@ -109,9 +109,14 @@ class ModelTier(str, enum.Enum):
 
     Added by the `add_model_tier_to_asset_definitions` migration, after the initial schema.
     See app/db/SCHEMA.md, "LLM model tiers" for the full rationale; in short:
-    - OPUS: the 3 gated foundation stages (icp, cro, pillar_page) — errors here cascade to
-      every downstream stage, and a human review gate already sits on top of them.
-    - SONNET: the 13 generation stages and all competitor-analysis stages — competitor
+    - OPUS: no longer used by any seeded stage. The 3 gated foundation stages (icp, cro,
+      pillar_page) were on this tier — errors there cascade to every downstream stage — and are
+      now on SONNET: the cascade is answered by the human review gate that already sits on those
+      three stages, which made Opus's 2.5x input/output premium hard to justify on output a
+      strategist signs off on regardless. Kept on the enum because rows from earlier runs carry
+      it; a read of those rows must still resolve. Do not reuse for new stages.
+    - SONNET: every generation stage bar the Haiku three, and all competitor-analysis stages, plus
+      the 3 foundation stages described above — competitor
       analysis specifically needs real verification reasoning (confirming a competitor is
       genuine, not a directory/aggregator) rather than cheap pattern-matching, to avoid
       hallucinating fake competitors.

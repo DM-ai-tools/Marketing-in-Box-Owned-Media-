@@ -158,7 +158,21 @@ export const PREPASS_BY_MAIN_ASSET: Record<string, { assetId: string; label: str
 /** Field ids across the 15 main schemas that identify the client, folded into one run-level
  * profile. The same fact is named differently per schema (each was transcribed from its own
  * source prompt's wording), so several field_ids map to the same profile key. */
-export type ClientFactKey = "client_name" | "website_url" | "industry" | "region";
+export type ClientFactKey =
+  | "client_name"
+  | "website_url"
+  | "industry"
+  | "region"
+  /** The service the run is actually selling, as opposed to the client's industry.
+   *
+   * These are not the same thing, and conflating them was a real bug: topic suggestions were
+   * anchored on `industry` (from ICP's "industry / niche" answer), so a client whose ICP answer
+   * leaned SEO got SEO topics on every gate no matter what they had typed into Target Service.
+   *
+   * Needed at the run level because four of the eight topic gates have no service field of their
+   * own, and three of those (blog, webinar, podcast) ask for the topic as their *first* question —
+   * so there is no stage answer to read and the fact has to come from earlier in the run. */
+  | "target_service";
 
 /** field_id -> the run-level fact it carries.
  *
@@ -187,6 +201,15 @@ export const CLIENT_PROFILE_SOURCES: Record<string, ClientFactKey> = {
   sub_vertical_niche: "industry",
   region_location: "region",
   region_country: "region",
+  // Every per-asset name for "the service this deliverable is for". Write-only (see below):
+  // the stages word them differently because they mean subtly different things, so the fact is
+  // collected for run-level use and never auto-fills another stage's question.
+  target_service_or_sub_service: "target_service",
+  target_service_offer: "target_service",
+  target_service_offer_to_ladder: "target_service",
+  target_service_if_different_from_pillar_page: "target_service",
+  service_or_product_line_being_funnel_mapped: "target_service",
+  primary_service_pillar_page_being_supported: "target_service",
 };
 
 /** Fields that feed the profile but must never be auto-filled *from* it, because they are a
@@ -195,8 +218,22 @@ export const CLIENT_PROFILE_SOURCES: Record<string, ClientFactKey> = {
  *   from the home URL would rewrite the wrong page.
  * - `sub_vertical_niche` — sits one level below `client_industry` ("social media marketing" under
  *   "Digital marketing"). Both map to `industry` so either can seed the competitor search, but reusing one
- *   value for both would collapse a distinction the CRO prompt deliberately asks for twice. */
-const WRITE_ONLY_PROFILE_FIELDS = new Set(["existing_page_url", "sub_vertical_niche"]);
+ *   value for both would collapse a distinction the CRO prompt deliberately asks for twice.
+ * - the six `target_service` sources — each stage means something subtly different by it (the
+ *   service a lead magnet feeds into is not the service a value ladder is built from), so they
+ *   all contribute the run-level fact that anchors topic suggestions while none of them answers
+ *   another stage's question. Reading in that direction would put the CRO page's service into
+ *   the Lead Magnet's "Target Service / Offer" unasked. */
+const WRITE_ONLY_PROFILE_FIELDS = new Set([
+  "existing_page_url",
+  "sub_vertical_niche",
+  "target_service_or_sub_service",
+  "target_service_offer",
+  "target_service_offer_to_ladder",
+  "target_service_if_different_from_pillar_page",
+  "service_or_product_line_being_funnel_mapped",
+  "primary_service_pillar_page_being_supported",
+]);
 
 /** The read direction of `CLIENT_PROFILE_SOURCES`, for auto-filling repeated questions. */
 export const FIELD_TO_CLIENT_FACT: Record<string, ClientFactKey> = Object.fromEntries(

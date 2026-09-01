@@ -3,7 +3,7 @@
   "version": 1,
   "source_prompt_file": "application/backend/assets/Prompts/universal-podcast-prompt.md",
   "fields": [
-    { "field_id": "episode_topic_working_title", "label": "Episode Topic / Working Title", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
+    { "field_id": "episode_topic_working_title", "label": "Episode Topic / Working Title", "kind": "headline_choice", "headline_slot": "podcast_episode_topic", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },
     { "field_id": "competitor_podcast_sources", "label": "Competitor Podcast Sources", "kind": "file_attach", "required": true, "source": "user_input",
       "accepted_types": ["file", "text"],
       "raw_explanation": "UPLOAD OR PASTE — transcripts, show notes, or episode descriptions from 2-5 competitor podcasts" },

@@ -33,9 +33,27 @@ _SCHEMAS_DIR = _BACKEND_ROOT / "schemas" / "drafts"
 
 _DEFAULT_MARKER_SUBSTR = "MASTER PROMPT (do not edit below this line)"
 
-OPUS = "claude-opus-5"
 SONNET = "claude-sonnet-5"
 HAIKU = "claude-haiku-4-5-20251001"
+
+# See the effort note below `STAGE_CONFIGS`. Named rather than inlined so a cost sweep is one edit.
+DEFAULT_EFFORT = "medium"
+SHORT_FORM_EFFORT = "low"
+
+# `output_config.effort` is not universal: it is accepted on Sonnet 5 and rejected outright on
+# Haiku 4.5, where sending it returns a 400 rather than being ignored. So the request builder gates
+# on the model as well as on the config — a stage retiered to Haiku later cannot silently start
+# sending an unsupported parameter, which would fail the stage rather than cost a little more.
+EFFORT_CAPABLE_MODELS: frozenset[str] = frozenset({SONNET})
+
+# Prompt-cache duration for the reference-library block. Deliberately an hour, not the 5-minute
+# default: every stage here sits behind an operator approval gate, and the measured start-to-start
+# gaps between calls on this pipeline were 12, 27, 33, 50 and 102 minutes. At the default TTL the
+# entry expired before the next stage ever read it — `api_usage` recorded
+# `cache_creation_input_tokens=18385` against `cache_read_input_tokens=0` on three consecutive
+# calls, i.e. the 1.25x write surcharge paid three times for zero reads. An hour costs 2x on the
+# write and pays for itself on the first prevented miss.
+_CACHE_TTL = "1h"
 
 
 @dataclass(frozen=True)
@@ -52,6 +70,10 @@ class StageConfig:
     # every Phase-1 config; see `PHASE2_OVERRIDES` for what fills them and why.
     drop_fields: frozenset[str] = frozenset()
     label_overrides: tuple[tuple[str, str], ...] = ()
+    # `output_config.effort`. See the effort note below `max_tokens`; "medium" is the pipeline
+    # default because these stages write documents, not one-line answers. `None` means "send no
+    # `output_config`", which is mandatory for the Haiku stages — see `EFFORT_CAPABLE_MODELS`.
+    effort: str | None = DEFAULT_EFFORT
 
 
 # max_tokens note: every stage here streams (`generate_stage_stream`), so the ~16k ceiling that
@@ -67,17 +89,25 @@ class StageConfig:
 #     for the tokens actually generated, so a 64k cap on a run that emits 9k costs exactly the same
 #     as a 9k cap would. Lowering it does not reduce spend — it cuts the document off *after* you
 #     have paid for everything up to the cut.
-#   * On Opus 5 the ceiling covers *thinking* as well as visible output, and adaptive thinking is on
-#     by default (nothing here configures it). Measured on this model: a small five-section page task
-#     capped at 1500 reported `output_tokens=1500` with only ~3.1k characters of visible text — close
-#     to half the budget went to reasoning that never reaches the document.
+#   * The ceiling covers *thinking* as well as visible output, and adaptive thinking is on by
+#     default on Sonnet 5. Measured: a small five-section page task capped at 1500 reported
+#     `output_tokens=1500` with only ~3.1k characters of visible text — close to half the budget
+#     went to reasoning that never reaches the document.
 #
-# To spend less, reduce what is *generated* rather than where it is truncated: `output_config`'s
-# `effort` (low/medium) cuts thinking depth and verbosity, or move the stage to a cheaper tier.
-# `generate_stage_stream` logs a WARNING naming the stage and the cap whenever one is hit.
+# To spend less, reduce what is *generated* rather than where it is truncated. That is what
+# `effort` below is for. `generate_stage_stream` logs a WARNING naming the stage and the cap
+# whenever one is hit.
+#
+# effort note: `output_config.effort` is the knob that actually lowers output spend, because
+# thinking bills as output and adaptive thinking is on by default. Measured on this account, on
+# the headline gate (`app/services/headlines.py`): the same prompt returned the same candidates in
+# 4,464 output tokens at `low` where default effort spent 14,727 — a 70% cut. These stages write
+# whole documents rather than naming ten headlines, so they sit at `medium` rather than `low`;
+# `low` is reserved for the stages whose deliverable is short and templated. Raise a single stage
+# by giving its config an explicit `effort=` rather than moving the default.
 STAGE_CONFIGS: dict[str, StageConfig] = {
     "icp": StageConfig("icp", "ICP.md", "icp.json", SONNET, 20000),
-    "cro": StageConfig("cro", "Master_Prompt_Universal_Page_Rewrite_v1.md", "cro.json", OPUS, 64000),
+    "cro": StageConfig("cro", "Master_Prompt_Universal_Page_Rewrite_v1.md", "cro.json", SONNET, 64000),
     # One merged stage, not two: `Master_Prompt_Universal_Page_Design_v1.md` is now v2.0 of that
     # prompt and carries the SEO/competitor-benchmark pass (its Step 2, Rules 8-9, PART 2 and
     # PART 4) that used to be run as a separate `seo_pillar_page` pass over the same file. The
@@ -86,7 +116,7 @@ STAGE_CONFIGS: dict[str, StageConfig] = {
     # competitive superiority plan, the built page, and the SEO implementation pack in one run —
     # hence the same 64k ceiling as the CRO rewrite.
     "pillar_page": StageConfig(
-        "pillar_page", "Master_Prompt_Universal_Page_Design_v1.md", "pillar_page.json", OPUS, 64000
+        "pillar_page", "Master_Prompt_Universal_Page_Design_v1.md", "pillar_page.json", SONNET, 64000
     ),
     "funnel": StageConfig("funnel", "Funnel_Prompt.md", "funnel.json", SONNET, 50000),
     "funnel_hub_media": StageConfig(
@@ -98,8 +128,24 @@ STAGE_CONFIGS: dict[str, StageConfig] = {
         marker_override="## PHASE 1 —",
     ),
     "offers": StageConfig("offers", "Master_Prompt_Universal_Value_Ladder_v2.md", "offers_v2.json", SONNET, 64000),
-    "lead_magnet": StageConfig("lead_magnet", "Lead-Magnet-Architect-Prompt.md", "lead_magnet.json", SONNET, 64000),
-    "blog": StageConfig("blog", "universal-blog-generation-prompt.md", "blog.json", SONNET, 40000),
+    # 128k, the highest this model allows, because this stage's deliverable is now plural. The
+    # operator picks concepts at the suggestion gate (`lead_magnet_concept` in
+    # `app/services/headlines.py`) — around ten — and Step 5 builds a complete single-file HTML
+    # lead magnet for every one of them, plus a brief each. One interactive build runs several
+    # thousand tokens on its own, so ten of them clear the old 64k ceiling comfortably; at 64k the
+    # response would truncate somewhere around the sixth file, having already been paid for.
+    #
+    # The ceiling costs nothing when unused (see the max_tokens note above — you pay for tokens
+    # generated, not for headroom), and the prompt is written to degrade honestly rather than pad:
+    # it builds what it can to full depth and names the concepts it did not reach.
+    "lead_magnet": StageConfig("lead_magnet", "Lead-Magnet-Architect-Prompt.md", "lead_magnet.json", SONNET, 128000),
+    # 128k for the same reason as `lead_magnet` above: this stage's deliverable is now plural. The
+    # operator picks topics at the suggestion gate (`blog_topic` in `app/services/headlines.py`) —
+    # around five — and Steps 3-7 run per topic, each producing an intent analysis, an outline, a
+    # full 1,800-2,200 word post, an SEO checklist and a content brief. One post ran comfortably
+    # inside the old 40k; five of them do not, and the truncation would land mid-post after the
+    # whole response had already been paid for.
+    "blog": StageConfig("blog", "universal-blog-generation-prompt.md", "blog.json", SONNET, 128000),
     "content_marketing_strategy": StageConfig(
         "content_marketing_strategy",
         "Content-Marketing-Strategy-Architect-Prompt.md",
@@ -115,9 +161,13 @@ STAGE_CONFIGS: dict[str, StageConfig] = {
         10000,
     ),
     "webinar": StageConfig("webinar", "universal-webinar-prompt.md", "webinar.json", SONNET, 20000),
-    "book": StageConfig("book", "Webinar-to-Book-Architect-Prompt.md", "book.json", HAIKU, 20000),
-    "podcast": StageConfig("podcast", "universal-podcast-prompt.md", "podcast.json", HAIKU, 20000),
-    "sms_sequence": StageConfig("sms_sequence", "universal-sms-sequence-prompt.md", "sms_sequence.json", HAIKU, 10000),
+    # effort=None on the three Haiku stages: `output_config.effort` is rejected on Haiku 4.5, so
+    # sending it would turn a working stage into a 400. See `EFFORT_CAPABLE_MODELS`.
+    "book": StageConfig("book", "Webinar-to-Book-Architect-Prompt.md", "book.json", HAIKU, 20000, effort=None),
+    "podcast": StageConfig("podcast", "universal-podcast-prompt.md", "podcast.json", HAIKU, 20000, effort=None),
+    "sms_sequence": StageConfig(
+        "sms_sequence", "universal-sms-sequence-prompt.md", "sms_sequence.json", HAIKU, 10000, effort=None
+    ),
     "plan_of_action": StageConfig(
         "plan_of_action", "Plan-of-Action-Architect-Prompt.md", "plan_of_action.json", SONNET, 30000
     ),
@@ -218,6 +268,7 @@ def _phase2_config(asset_id: str) -> StageConfig:
         marker_override=base.marker_override,
         drop_fields=override.drop_fields,
         label_overrides=override.label_overrides,
+        effort=base.effort,
     )
 
 
@@ -386,6 +437,82 @@ def _load_reference_library(asset_id: str) -> str:
     )
 
 
+# --------------------------------------------------------------------------------------
+# Brand design tokens
+#
+# The stages below build actual HTML that a client is expected to publish under their own brand.
+# Every one of their prompts already forbids inventing a palette — the Pillar Page prompt states it
+# as Rule 1, "No design invention. Every colour, button, layout, and visual element must trace back"
+# — and until now none of them had anything to trace back *to*: the design reference reached the
+# model through `scraper.py`, which strips every stylesheet and style attribute because its job is
+# extracting copy.
+#
+# So the instruction was unfollowable and the model did the only thing it could, which was invent a
+# plausible palette and present it as extracted. That failure is invisible in the output: a clean,
+# professional lead magnet in the wrong brand's colours looks exactly like a correct one.
+#
+# `app/services/design_tokens.py` measures the real page instead. What it produces is injected here
+# — beside the headline framework, through the same mechanism — so the values are in context before
+# the master prompt tells the model to build.
+# --------------------------------------------------------------------------------------
+
+BRAND_DESIGN_TOKENS = "BRAND_DESIGN_TOKENS"
+
+# Only the stages that emit HTML someone will publish. A stage that writes structure or copy has no
+# palette to get wrong: ICP, Funnel (stage structure), SMS, Plan of Action, and the Book/Podcast
+# scripts are all absent on purpose.
+BRAND_TOKEN_STAGES: frozenset[str] = frozenset(
+    {"cro", "pillar_page", "lead_magnet", "funnel_hub_media", "webinar"}
+)
+
+_BRAND_TOKEN_DIRECTIVE = (
+    "These are the client's REAL design tokens, read from their own live page's CSS — not a "
+    "suggestion, and not a starting point to improve on. Any HTML you produce anywhere in this "
+    "response must be built from them:\n"
+    "  - Use ONLY colours from the palette below. Do not invent a colour, do not 'refine' one, and "
+    "do not substitute a colour you consider more tasteful. A visitor must not be able to tell the "
+    "generated page from the client's own.\n"
+    "  - Take the page background, body text colour, and brand/accent colour from the Core table, "
+    "and honour the stated role of each palette colour — a colour listed as a border colour is not "
+    "a background.\n"
+    "  - Reproduce the font stacks verbatim, including their fallbacks, and include the webfont "
+    "links exactly as listed in the generated <head>. A font name without its link renders as "
+    "something else entirely.\n"
+    "  - Match the button styles as given: background, text colour, radius, padding, weight, and "
+    "the hover state where one is listed.\n"
+    "  - **Use the client's real logo exactly as supplied in the Logo section.** Paste the inline "
+    "SVG, or use the data URI, or reference the absolute URL — whichever that section gives you, "
+    "verbatim. Do NOT recreate the logo as styled text, do NOT redraw it as an SVG of your own, and "
+    "do NOT substitute an icon or a generic mark. A recreated wordmark is a drawing of a logo, not "
+    "the logo, and it is the single most obvious tell that an asset was not made by the client. "
+    "Preserve its aspect ratio: set one dimension and leave the other `auto`. Only if the Logo "
+    "section is absent may you fall back to a text treatment, and then say so explicitly.\n"
+    "  - Declare the supplied CSS custom properties at the top of your <style> block and reference "
+    "them throughout, rather than hard-coding the same hex in twenty places.\n"
+    "Where a token you need is genuinely absent from this sheet, derive it from what IS here "
+    "(a tint or shade of a listed colour) and say so in a comment — never introduce an unrelated "
+    "hue. If the sheet says NOT AVAILABLE, do not guess a palette: build in neutral greys and mark "
+    "every colour as a placeholder needing the client's real values."
+)
+
+
+def _brand_token_block(design_tokens_markdown: str | None) -> str:
+    """The extracted token sheet, fenced and bound, or "" when the stage has none.
+
+    Deliberately shares the reference-library framing rather than arriving as another INPUTS line.
+    An INPUTS field is something the operator filled in and the prompt may weigh against other
+    inputs; this is a measurement that overrides the model's taste, and it needs to read that way.
+    """
+    if not design_tokens_markdown or not design_tokens_markdown.strip():
+        return ""
+    return (
+        f"===== BEGIN {BRAND_DESIGN_TOKENS} =====\n"
+        f"HOW THIS DOCUMENT BINDS YOUR RESPONSE:\n{_BRAND_TOKEN_DIRECTIVE}\n\n"
+        f"{design_tokens_markdown.strip()}\n"
+        f"===== END {BRAND_DESIGN_TOKENS} =====\n\n"
+    )
+
+
 class UnknownStageError(KeyError):
     pass
 
@@ -473,27 +600,114 @@ def _render_field(label: str, value: str) -> str:
     return f"{label}:\n--- begin {label} ---\n{value}\n--- end {label} ---"
 
 
-def build_prompt(asset_id: str, answers: dict[str, str], phase: str = DEFAULT_PHASE) -> str:
-    """Any reference library this stage cites, then its own "fill in before submitting" INPUTS block
-    reproduced from the caller's intake, then the file's real master prompt unchanged.
+def _prompt_parts(
+    asset_id: str,
+    answers: dict[str, str],
+    phase: str = DEFAULT_PHASE,
+    design_tokens_markdown: str | None = None,
+) -> tuple[str, str]:
+    """This stage's prompt, split at its cache boundary: (reference library, everything else).
+
+    The split is the whole point, and it is why the brand tokens no longer lead. Prompt caching is a
+    prefix match: whatever sits first has to be byte-identical from call to call, or nothing after it
+    caches either. The reference library qualifies and the brand tokens do not — the library is one
+    file plus one fixed directive, identical across all eleven stages that cite it, while the tokens
+    are measured per client from a live page. Leading with the tokens (which is what this function
+    used to do, for the five HTML stages) put the volatile part in front of the 12k-token static part
+    and made the largest cacheable block in the pipeline uncacheable.
+
+    Moving them costs little: they still precede the INPUTS block and the master prompt body, so they
+    are still read before the instruction to build, which is what their directive needs.
+    """
+    cfg = _config(asset_id, phase)
+    answers = _apply_reference_injections(asset_id, answers)
+    lines = [_render_field(label, (answers.get(field_id) or "").strip()) for field_id, label in _load_schema_fields(cfg)]
+    brand = _brand_token_block(design_tokens_markdown) if asset_id in BRAND_TOKEN_STAGES else ""
+
+    return (
+        _load_reference_library(asset_id),
+        brand
+        + "— INPUTS (fill in before submitting) —\n\n"
+        + "\n".join(lines)
+        + "\n\n— END OF INPUTS —\n\n"
+        + _load_master_prompt_body(cfg),
+    )
+
+
+def build_prompt(
+    asset_id: str,
+    answers: dict[str, str],
+    phase: str = DEFAULT_PHASE,
+    design_tokens_markdown: str | None = None,
+) -> str:
+    """The whole prompt as one string: any reference library this stage cites, then its own "fill in
+    before submitting" INPUTS block reproduced from the caller's intake, then the file's real master
+    prompt unchanged.
 
     The library goes first and the master prompt last, because the master prompt is what the model
     has to act on: every one of these files ends by telling it to proceed ("Now proceed using the
     Wish/Mode selected in the inputs above"), and a 44KB reference document appended *after* that
     would put 11k tokens between the final instruction and the response. Front-loading the static
     document also keeps INPUTS directly above the body that refers to them as "the inputs above".
-    """
-    cfg = _config(asset_id, phase)
-    answers = _apply_reference_injections(asset_id, answers)
-    lines = [_render_field(label, (answers.get(field_id) or "").strip()) for field_id, label in _load_schema_fields(cfg)]
 
-    return (
-        _load_reference_library(asset_id)
-        + "— INPUTS (fill in before submitting) —\n\n"
-        + "\n".join(lines)
-        + "\n\n— END OF INPUTS —\n\n"
-        + _load_master_prompt_body(cfg)
-    )
+    `generate_stage_stream` sends these two halves as separate request fields rather than as this
+    concatenation, so the first half can carry a cache breakpoint — see `build_stage_request`. The
+    text the model sees is identical either way, which is what this function pins.
+    """
+    library, tail = _prompt_parts(asset_id, answers, phase, design_tokens_markdown)
+    return library + tail
+
+
+def build_stage_request(
+    asset_id: str,
+    answers: dict[str, str],
+    phase: str = DEFAULT_PHASE,
+    design_tokens_markdown: str | None = None,
+) -> tuple[list[dict[str, object]] | None, str]:
+    """The same prompt as `build_prompt`, as `(system_blocks, user_content)` ready for the API.
+
+    The reference library becomes a cached `system` block and everything volatile stays in the user
+    message. Two things make that worth doing:
+
+      * It is the same document for all eleven stages that cite it, so a run writes the entry once
+        and the rest read it at a tenth of the input price. Measured on the authored files, the
+        library is 12,300 of each stage's 13,805-17,812 static tokens.
+
+        Caches are scoped per model, so that is two entries rather than one: the nine Sonnet stages
+        share one, and `book` and `podcast` share a Haiku one. The Haiku pair roughly breaks even
+        (one write plus one read costs about what two uncached reads cost at Haiku rates) and is
+        left in for uniformity — the saving is the Sonnet group.
+      * The API renders `system` before `messages`, so the library is the prefix by construction
+        rather than by this module policing what might get prepended later.
+
+    Returns `None` for the system half on the four stages that have no library (icp, funnel,
+    sms_sequence, plan_of_action) rather than an empty block: a sub-minimum prefix does not cache,
+    and an empty `system` list is noise on the wire.
+    """
+    library, tail = _prompt_parts(asset_id, answers, phase, design_tokens_markdown)
+    if not library:
+        return None, tail
+    return [{"type": "text", "text": library, "cache_control": {"type": "ephemeral", "ttl": _CACHE_TTL}}], tail
+
+
+def _stream_kwargs(
+    cfg: StageConfig, system_blocks: list[dict[str, object]] | None, user_content: str
+) -> dict[str, object]:
+    """The request body shared by the generation and revision streams.
+
+    `effort` is gated on the model as well as on the config, because it is rejected outright on
+    Haiku 4.5 rather than ignored — see `EFFORT_CAPABLE_MODELS`.
+    """
+    kwargs: dict[str, object] = {
+        "model": cfg.model,
+        "max_tokens": cfg.max_tokens,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+    if system_blocks is not None:
+        kwargs["system"] = system_blocks
+    if cfg.effort and cfg.model in EFFORT_CAPABLE_MODELS:
+        kwargs["output_config"] = {"effort": cfg.effort}
+    return kwargs
 
 
 def build_revision_prompt(previous_draft: str, note: str) -> str:
@@ -524,31 +738,42 @@ async def generate_stage_stream(
     answers: dict[str, str],
     phase: str = DEFAULT_PHASE,
     on_usage: OnUsage | None = None,
+    design_tokens_markdown: str | None = None,
 ) -> AsyncIterator[str]:
     """Stream this stage's real generation as Markdown text deltas."""
     cfg = _config(asset_id, phase)
     client = get_client()
-    prompt = build_prompt(asset_id, answers, phase)
+    system_blocks, user_content = build_stage_request(asset_id, answers, phase, design_tokens_markdown)
 
-    logger.info("Streaming stage=%s phase=%s model=%s prompt=%s", asset_id, phase, cfg.model, cfg.prompt_file)
+    logger.info(
+        "Streaming stage=%s phase=%s model=%s effort=%s cached_prefix=%s prompt=%s",
+        asset_id,
+        phase,
+        cfg.model,
+        cfg.effort if cfg.model in EFFORT_CAPABLE_MODELS else "n/a",
+        system_blocks is not None,
+        cfg.prompt_file,
+    )
     started = time.monotonic()
 
-    async with client.messages.stream(
-        model=cfg.model,
-        max_tokens=cfg.max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
+    async with client.messages.stream(**_stream_kwargs(cfg, system_blocks, user_content)) as stream:
         async for text in stream.text_stream:
             yield text
 
         final = await stream.get_final_message()
+        # cache_read/cache_write are logged because they are the only way to tell a working
+        # breakpoint from a decorative one: a warmed run should show reads, not writes. Three
+        # consecutive writes with zero reads is the TTL-expiry signature that `_CACHE_TTL` fixes.
         logger.info(
-            "Stream done stage=%s model=%s stop_reason=%s input_tokens=%s output_tokens=%s",
+            "Stream done stage=%s model=%s stop_reason=%s input_tokens=%s output_tokens=%s "
+            "cache_read=%s cache_write=%s",
             asset_id,
             final.model,
             final.stop_reason,
             final.usage.input_tokens,
             final.usage.output_tokens,
+            getattr(final.usage, "cache_read_input_tokens", None),
+            getattr(final.usage, "cache_creation_input_tokens", None),
         )
         if final.stop_reason == "max_tokens":
             logger.warning("Stage=%s hit the %s-token cap and was truncated", asset_id, cfg.max_tokens)
@@ -575,14 +800,12 @@ async def generate_revision_stream(
     client = get_client()
     prompt = build_revision_prompt(previous_draft, note)
 
-    logger.info("Streaming revision stage=%s model=%s", asset_id, cfg.model)
+    logger.info("Streaming revision stage=%s model=%s effort=%s", asset_id, cfg.model, cfg.effort)
     started = time.monotonic()
 
-    async with client.messages.stream(
-        model=cfg.model,
-        max_tokens=cfg.max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
+    # No cached prefix: a revision prompt is the previous draft plus a note, and both are unique to
+    # this call. There is nothing stable in front of them to cache.
+    async with client.messages.stream(**_stream_kwargs(cfg, None, prompt)) as stream:
         async for text in stream.text_stream:
             yield text
 

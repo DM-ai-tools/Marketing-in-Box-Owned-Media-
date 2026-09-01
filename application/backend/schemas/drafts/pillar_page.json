@@ -22,7 +22,7 @@
       "raw_explanation": "LIST ALL SECTIONS IN ORDER, or write \"USE CONTENT ORDER\" to follow the content file's own structure, or \"USE DEFAULT\" for the 13-section universal architecture" },
     { "field_id": "new_sections_to_add_optional", "label": "New Sections to Add (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "LIST / NONE" },
 
-    { "field_id": "primary_keyword_head_term", "label": "Primary Keyword / Head Term", "kind": "text", "required": true, "source": "user_input",
+    { "field_id": "primary_keyword_head_term", "label": "Primary Keyword / Head Term", "kind": "headline_choice", "headline_slot": "pillar_head_term", "required": true, "source": "user_input",
       "raw_explanation": "YOUR ANSWER — the single term this pillar page must own. Added in v2 with the merged SEO pass: Step 0 item 8 resolves the search-structure requirements from it (single H1 carrying its intent, an H2 per sub-topic, jump navigation, cluster links), and it is also what the paired competitor prepass uses as its {SERVICE} placeholder when searching for competitor pillar pages on this topic." },
     { "field_id": "secondary_cluster_terms_optional", "label": "Secondary / Cluster Terms (optional)", "kind": "text", "required": false, "source": "user_input",
       "raw_explanation": "LIST / NONE" },

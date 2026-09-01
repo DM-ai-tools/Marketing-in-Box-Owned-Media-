@@ -1,0 +1,257 @@
+{
+  "service_hierarchy": [
+    {
+      "service": "SEO Services",
+      "seed_count": 2,
+      "keyword_count": 16,
+      "total_volume": 1860,
+      "seeds": [
+        {
+          "seed_index": 1,
+          "seed_label": "Seed 1",
+          "seed": "seo",
+          "target_type": "service",
+          "class_counts": {
+            "exact": 1,
+            "phrase": 3,
+            "related": 2,
+            "broad": 2
+          },
+          "keywords": [
+            {
+              "keyword": "seo",
+              "match_class": "exact",
+              "volume": 320,
+              "difficulty": 24,
+              "intent": "commercial",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "seo services",
+              "match_class": "phrase",
+              "volume": 210,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "seo company",
+              "match_class": "phrase",
+              "volume": 140,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "seo near me",
+              "match_class": "phrase",
+              "volume": 90,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": "near me"
+            },
+            {
+              "keyword": "seo cost",
+              "match_class": "related",
+              "volume": 70,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "seo pricing",
+              "match_class": "related",
+              "volume": 50,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "seo best agency",
+              "match_class": "broad",
+              "volume": 30,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "seo how to choose",
+              "match_class": "broad",
+              "volume": 20,
+              "difficulty": 20,
+              "intent": "commercial",
+              "topic_modifier": null
+            }
+          ]
+        },
+        {
+          "seed_index": 2,
+          "seed_label": "Seed 2",
+          "seed": "search engine optimisation",
+          "target_type": "service",
+          "class_counts": {
+            "exact": 1,
+            "phrase": 3,
+            "related": 2,
+            "broad": 2
+          },
+          "keywords": [
+            {
+              "keyword": "search engine optimisation",
+              "match_class": "exact",
+              "volume": 320,
+              "difficulty": 24,
+              "intent": "commercial",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "search engine optimisation services",
+              "match_class": "phrase",
+              "volume": 210,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "search engine optimisation company",
+              "match_class": "phrase",
+              "volume": 140,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "search engine optimisation near me",
+              "match_class": "phrase",
+              "volume": 90,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": "near me"
+            },
+            {
+              "keyword": "search engine optimisation cost",
+              "match_class": "related",
+              "volume": 70,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "search engine optimisation pricing",
+              "match_class": "related",
+              "volume": 50,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "search engine optimisation best agency",
+              "match_class": "broad",
+              "volume": 30,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "search engine optimisation how to choose",
+              "match_class": "broad",
+              "volume": 20,
+              "difficulty": 20,
+              "intent": "commercial",
+              "topic_modifier": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "service": "Google Ads Management",
+      "seed_count": 1,
+      "keyword_count": 8,
+      "total_volume": 930,
+      "seeds": [
+        {
+          "seed_index": 1,
+          "seed_label": "Seed 1",
+          "seed": "google ads",
+          "target_type": "service",
+          "class_counts": {
+            "exact": 1,
+            "phrase": 3,
+            "related": 2,
+            "broad": 2
+          },
+          "keywords": [
+            {
+              "keyword": "google ads",
+              "match_class": "exact",
+              "volume": 320,
+              "difficulty": 24,
+              "intent": "commercial",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "google ads services",
+              "match_class": "phrase",
+              "volume": 210,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "google ads company",
+              "match_class": "phrase",
+              "volume": 140,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "google ads near me",
+              "match_class": "phrase",
+              "volume": 90,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": "near me"
+            },
+            {
+              "keyword": "google ads cost",
+              "match_class": "related",
+              "volume": 70,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "google ads pricing",
+              "match_class": "related",
+              "volume": 50,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "google ads best agency",
+              "match_class": "broad",
+              "volume": 30,
+              "difficulty": 20,
+              "intent": "transactional",
+              "topic_modifier": null
+            },
+            {
+              "keyword": "google ads how to choose",
+              "match_class": "broad",
+              "volume": 20,
+              "difficulty": 20,
+              "intent": "commercial",
+              "topic_modifier": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "keyword_cleaning": {
+    "dropped": []
+  }
+}

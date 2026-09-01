@@ -11,12 +11,19 @@ import { BriefingCard } from "./BriefingCard";
 import { CompetitorCard } from "./CompetitorCard";
 import { CompetitorConsentCard } from "./CompetitorConsentCard";
 import { ContextChoiceCard } from "./ContextChoiceCard";
+import { HeadlineChoiceCard } from "./HeadlineChoiceCard";
 import { SourceRunCard } from "./SourceRunCard";
 import { EditAnswerButton } from "./EditAnswerButton";
 import { ScrapeCard } from "./ScrapeCard";
 import { PHASE_META, stageAt, stagesFor, totalStagesFor } from "./pipelineData";
 import { PipelineInputBar } from "./PipelineInputBar";
-import { fieldBeingAsked, messagesInPhase, selectNeedsResume, usePipelineStore } from "./pipelineStore";
+import {
+  fieldBeingAsked,
+  messagesInPhase,
+  selectCanRerun,
+  selectNeedsResume,
+  usePipelineStore,
+} from "./pipelineStore";
 import type { PipelineMessage } from "./pipelineStore";
 
 function SaveIcon() {
@@ -30,6 +37,90 @@ function SaveIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function RerunIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M20 12a8 8 0 1 1-2.34-5.66 M20 4v4h-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Start this asset over: re-ask its questions, then regenerate.
+ *
+ * Distinct from the two controls beside it, and the distinction is the reason it exists. Retry
+ * re-sends the *same* answers, so it only recovers a transient failure. Refine hands the model the
+ * draft plus a note, so it revises what is already there. Neither helps when the asset came out
+ * wrong because an *input* was wrong — a different target service, a different chosen headline, a
+ * different lead-magnet concept — which is the common case for a disappointing result.
+ *
+ * Rendered in the approved branch too, where it is the only control left: an asset the operator has
+ * already saved and later decides against had no route back at all.
+ */
+function RerunButton({ messageId, subtle }: { messageId: string; subtle?: boolean }) {
+  const rerunStage = usePipelineStore((s) => s.rerunStage);
+  const canRerun = usePipelineStore(selectCanRerun);
+  const [confirming, setConfirming] = useState(false);
+
+  // Confirmed rather than immediate. It discards the draft on screen, spends a fresh generation, and
+  // on an approved asset writes another Context Store version — none of which should happen on a
+  // misclick next to Download.
+  if (confirming) {
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="text-[0.78rem] text-[var(--fg-muted)]">Re-run this asset?</span>
+        <motion.button
+          type="button"
+          onClick={() => {
+            setConfirming(false);
+            rerunStage(messageId);
+          }}
+          whileTap={{ scale: 0.97 }}
+          className="min-h-10 cursor-pointer rounded-full px-3 py-1.5 text-[0.78rem] font-semibold text-white sm:min-h-0"
+          style={{ backgroundColor: "var(--color-signal-orange)" }}
+        >
+          Yes, re-run
+        </motion.button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="min-h-10 cursor-pointer rounded-full border border-[var(--border-strong)] px-3 py-1.5 text-[0.78rem] font-medium sm:min-h-0"
+        >
+          Cancel
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <motion.button
+      type="button"
+      disabled={!canRerun}
+      onClick={() => setConfirming(true)}
+      whileTap={canRerun ? { scale: 0.97 } : undefined}
+      title={
+        canRerun
+          ? "Re-ask this asset's questions and generate it again"
+          : "Not while something else is still running"
+      }
+      className={
+        "flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.78rem] font-medium " +
+        "disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 " +
+        (subtle ? "border border-[var(--border-strong)]" : "border-2")
+      }
+      style={subtle ? undefined : { borderColor: "var(--color-signal-orange)", color: "var(--color-signal-orange)" }}
+    >
+      <RerunIcon />
+      Re-run
+    </motion.button>
   );
 }
 
@@ -112,11 +203,10 @@ function ActionRow({ message, label, stageNumber }: { message: PipelineMessage; 
 
   if (message.refineSubmitted) {
     return (
-      exportButtons && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
-          {exportButtons}
-        </div>
-      )
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
+        {exportButtons}
+        <RerunButton messageId={message.id} subtle />
+      </div>
     );
   }
 
@@ -133,6 +223,7 @@ function ActionRow({ message, label, stageNumber }: { message: PipelineMessage; 
           Saved to Context Store
         </span>
         {exportButtons}
+        <RerunButton messageId={message.id} subtle />
       </div>
     );
   }
@@ -169,6 +260,7 @@ function ActionRow({ message, label, stageNumber }: { message: PipelineMessage; 
           <EditIcon />
           Refine / Request Changes
         </motion.button>
+        <RerunButton messageId={message.id} subtle />
         {exportButtons}
       </div>
     </div>
@@ -520,6 +612,9 @@ function MessageRow({ message }: { message: PipelineMessage }) {
       break;
     case "context-choice":
       content = <ContextChoiceCard message={message} />;
+      break;
+    case "headline-choice":
+      content = <HeadlineChoiceCard message={message} />;
       break;
     case "scrape":
       content = <ScrapeCard message={message} />;

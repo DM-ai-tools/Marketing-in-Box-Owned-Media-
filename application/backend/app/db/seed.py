@@ -53,10 +53,15 @@ logger = logging.getLogger(__name__)
 # `display_name` is a humanized form of asset_id (acronyms upper-cased) -- cosmetic only, not
 # read by any orchestrator logic.
 
+# `model_tier` note: no row declares `opus` any more. The three that did — `icp`, `cro`,
+# `pillar_page` — moved to `sonnet` when the pipeline dropped Opus entirely; see
+# `app/services/generation.py`'s STAGE_CONFIGS, which is what actually selects the model. The
+# `opus` member survives on the enum rather than being migrated away, because rows written by runs
+# made before the move still carry it and a monitoring read of those rows must still resolve.
 DAG_ROWS: list[dict] = [
-    {"asset_id": "icp", "depends_on": [], "is_gated": True, "model_tier": "opus"},
+    {"asset_id": "icp", "depends_on": [], "is_gated": True, "model_tier": "sonnet"},
     {"asset_id": "competitor_analysis_cro", "depends_on": [], "is_gated": False, "model_tier": "sonnet"},
-    {"asset_id": "cro", "depends_on": ["icp", "competitor_analysis_cro"], "is_gated": True, "model_tier": "opus"},
+    {"asset_id": "cro", "depends_on": ["icp", "competitor_analysis_cro"], "is_gated": True, "model_tier": "sonnet"},
     {"asset_id": "competitor_analysis_seo_pillar_page", "depends_on": [], "is_gated": False, "model_tier": "sonnet"},
     {
         # One merged Pillar Page stage. The former `seo_pillar_page` row (same prompt file, run a
@@ -71,7 +76,7 @@ DAG_ROWS: list[dict] = [
         "asset_id": "pillar_page",
         "depends_on": ["cro", "competitor_analysis_seo_pillar_page"],
         "is_gated": True,
-        "model_tier": "opus",
+        "model_tier": "sonnet",
     },
     {"asset_id": "competitor_analysis_offers", "depends_on": [], "is_gated": False, "model_tier": "sonnet"},
     {"asset_id": "offers", "depends_on": ["icp", "cro", "competitor_analysis_offers"], "is_gated": False, "model_tier": "sonnet"},

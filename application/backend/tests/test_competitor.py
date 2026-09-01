@@ -20,7 +20,9 @@ from app.services.competitor import (
     GATED_COMPETITOR_MAIN_ASSET_IDS,
     PREPASS_BY_MAIN_ASSET,
     CompetitorParseError,
+    config_for,
     parse_analysis,
+    resolve_inputs,
     to_prompt_text,
 )
 
@@ -178,3 +180,54 @@ def test_search_citation_markup_is_stripped_from_every_text_field():
     assert row.offering_summary == "Active blog; one post opens Every single B2B buyer researches first."
     assert row.category == "B2B social"
     assert parsed.notes == "Returned 7 of 10 after excluding three dormant blogs."
+
+
+# --------------------------------------------------------------------------------------
+# Resolving what to search on
+#
+# Two of the paired stages (blog, podcast) source their `{NICHE}` from a multi-select suggestion
+# gate, so the answer they hand over is a numbered list with each pick's keyword and intent
+# indented beneath it. That is the right input for the stage that writes all of them and the wrong
+# input for a search: pasted whole, it would run one query over five titles and their metadata.
+# --------------------------------------------------------------------------------------
+
+MULTI_TOPIC_ANSWER = (
+    "1. What Social Media Marketing Costs In Melbourne\n"
+    "   - Primary keyword: social media marketing cost melbourne\n"
+    "   - Search intent: commercial\n"
+    "2. Agency Or In-House For Social\n"
+    "   - Primary keyword: agency vs in-house social"
+)
+
+
+def test_a_multi_topic_answer_searches_on_its_first_topic():
+    """The first is the one the suggestion service ordered by demand — the strongest pick, and a
+    real subject for a search."""
+    resolved = resolve_inputs(
+        config_for("competitor_analysis_blog"),
+        {"blog_topic_working_title": MULTI_TOPIC_ANSWER},
+        {"website_url": "https://acme.com.au", "industry": "Digital marketing"},
+    )
+    assert resolved["niche"] == "What Social Media Marketing Costs In Melbourne"
+
+
+def test_a_single_topic_answer_is_left_exactly_as_it_was():
+    """Every other stage answers this field with one line, and those must reach the prompt
+    untouched."""
+    resolved = resolve_inputs(
+        config_for("competitor_analysis_webinars"),
+        {"webinar_topic_working_title": "What agencies don't tell you about pricing"},
+        {"website_url": "https://acme.com.au"},
+    )
+    assert resolved["niche"] == "What agencies don't tell you about pricing"
+
+
+def test_an_empty_topic_still_falls_back_to_the_run_profile():
+    """The gate can be skipped. The prepass then searches the client's industry, as it did before
+    any of this existed."""
+    resolved = resolve_inputs(
+        config_for("competitor_analysis_blog"),
+        {"blog_topic_working_title": ""},
+        {"website_url": "https://acme.com.au", "industry": "Digital marketing"},
+    )
+    assert resolved["niche"] == "Digital marketing"

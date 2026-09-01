@@ -5,22 +5,32 @@ import { findNextAskable, resolveContext } from "../lib/fieldResolution";
 import { useChatSessionsStore } from "../store/chatSessionsStore";
 import type { ContextEntry, ContextStore } from "../store/chatStore.types";
 import {
+  buildRunKeywords,
   createChatSession,
   createRun,
   fetchCompetitorBriefing,
   fetchRunContext,
   getChatSession,
+  listHeadlineSlots,
   listSourceRuns,
   runCompetitorAnalysis,
   saveCompetitorAnalysis,
+  saveHeadlineSelection,
   saveStageOutput,
   scrapePage,
   streamGenerateStage,
   streamRefineStage,
+  suggestHeadlines,
   updateChatSession,
 } from "./pipelineApi";
 import { ApiFaultError, StreamTruncatedError } from "./pipelineApi";
-import type { ApiFault, CompetitorAnalysisResult, PrepassEvent, SourceRunSummary } from "./pipelineApi";
+import type {
+  ApiFault,
+  CompetitorAnalysisResult,
+  HeadlineCandidate,
+  PrepassEvent,
+  SourceRunSummary,
+} from "./pipelineApi";
 import {
   CLIENT_PROFILE_SOURCES,
   COMPETITOR_BRIEFING_STAGES,
@@ -49,6 +59,8 @@ export type PipelineMessageKind =
   | "competitor"
   | "competitor-consent"
   | "context-choice"
+  /** At least ten suggested topics for a field the operator would otherwise have typed cold. */
+  | "headline-choice"
   | "scrape"
   /** Phase 2 only: which finished Phase 1 run this sub-service run builds on. */
   | "source-run"
@@ -109,8 +121,15 @@ export interface CompetitorRunInputs {
 export interface CompetitorConsentState {
   competitorAssetId: string;
   label: string;
-  /** The topic the search would be run on — this stage's own head term / working title. */
+  /** The topic the search would be run on — this stage's own head term / working title.
+   *
+   * One topic, even where the field holds several: a multi-select gate (blog, podcast) answers its
+   * field with a numbered list, and a search run on five titles at once returns nothing useful.
+   * `firstSelectedTopic` takes the first, which the suggestion service ordered by demand. */
   topic: string;
+  /** How many topics that field actually holds, when it holds more than one. The card says so —
+   * an operator who picked five and is shown one is otherwise entitled to think four were lost. */
+  topicCount?: number;
   /** What is being searched for, for the card's own sentence: "pillar pages", "blogs", "webinars". */
   subject: string;
   targetUrl: string;
@@ -134,6 +153,54 @@ export interface BriefingState {
   status: "running" | "done" | "error";
   summary?: string;
   error?: string;
+}
+
+/** The suggestion gate attached to a `kind: "headline-choice"` message.
+ *
+ * Held on the message, not in a single slice of store state, for the same reason every other card
+ * here is: an operator can edit an earlier answer and land back on this field, and the first card
+ * has to stay in the transcript as history (`superseded`) while a second one asks again. A
+ * store-level "current suggestions" would be overwritten by the second and lose the first.
+ *
+ * `rejected` accumulates across re-rolls rather than being replaced, so "show me ten more" keeps
+ * excluding everything already turned down — otherwise round three re-offers round one. */
+export interface HeadlineChoiceState {
+  slot: string;
+  status: "loading" | "pending" | "chosen" | "error";
+  /** What the whole batch is anchored on — Phase 1's service or Phase 2's sub-service. Shown on
+   * the card, because "are these actually about my service?" is the question an operator has when
+   * a machine hands them ten headlines. */
+  serviceAnchor?: string;
+  /** Where the anchor came from, so a broad one can be labelled as broad rather than silently
+   * producing broad topics. */
+  anchorSource?: string;
+  label?: string;
+  subject?: string;
+  channel?: string;
+  charBudget?: string;
+  multi?: boolean;
+  suggestedSelection?: number;
+  candidates?: HeadlineCandidate[];
+  /** True when a keyword report backed these. False means framework-only grounding — still usable,
+   * but no candidate carries demand evidence, and the card says so rather than staying quiet. */
+  groundedInKeywords?: boolean;
+  webSearchUsed?: boolean;
+  /** Dropped before the operator saw them, for not being about the anchored service. Surfaced as a
+   * count: a batch that comes back short should say why rather than looking thin. */
+  rejectedCount?: number;
+  /** Every headline offered so far in this gate, so a re-roll can exclude all of them. */
+  rejected?: string[];
+  chosenIds?: string[];
+  /** Set when the operator wrote their own instead of picking one. */
+  ownHeadline?: string;
+  error?: string;
+  /** A re-roll is in flight over an already-rendered batch — the list stays visible and usable
+   * rather than collapsing back to a spinner. */
+  reloading?: boolean;
+  /** Incremented on every request for this card. The progress panel keys off it so a retry
+   * restarts the phase script from the top instead of resuming mid-sequence - a freshly
+   * restarted call still showing the final step would be reporting work it has not done. */
+  attempt?: number;
 }
 
 /** A field an announcement message offers to edit. `label` is carried rather than looked up so
@@ -179,6 +246,8 @@ export interface PipelineMessage {
   /** Populated on `kind: "context-choice"` — an upstream output the operator can accept or replace. */
   contextChoice?: { label: string; text: string };
   contextChoiceStatus?: "pending" | "accepted" | "overridden";
+  /** Populated on `kind: "headline-choice"` — the suggested topics for this field. */
+  headlines?: HeadlineChoiceState;
   /** Populated on `kind: "source-run"` — the Phase 1 runs on offer, and which was taken. */
   sourceRuns?: SourceRunSummary[];
   sourceRunStatus?: "loading" | "pending" | "chosen" | "standalone" | "error";
@@ -258,6 +327,20 @@ interface PipelineState {
   messages: PipelineMessage[];
   context: ContextStore;
   currentIndex: number;
+  /** Where to go back to once a re-run of an earlier stage is approved.
+   *
+   * A re-run moves `currentIndex` *backwards* onto the stage being redone, which is what makes
+   * its intake and generation run again. Without remembering the way back, approving it would
+   * advance to `index + 1` and re-run every stage after it in sequence — turning one corrected
+   * asset into a full replay of the pipeline. Null whenever no re-run is in flight. */
+  rerunReturnIndex: number | null;
+  /** The intake parked when the re-run started, restored when it is approved.
+   *
+   * A re-run is allowed while a *later* stage is mid-intake — that is most of the time, and
+   * forbidding it would make the feature useless. But entering the re-run has to clear `intake`,
+   * so without parking it the operator's half-answered questions on the stage they were on are
+   * silently discarded. */
+  rerunReturnIntake: SerializedIntake | null;
   activeStatus: ActiveStatus;
   progress: number;
   intake: IntakeFlow | null;
@@ -290,6 +373,12 @@ interface PipelineState {
   submitRefine: (messageId: string, note: string) => Promise<void>;
   saveStage: (messageId: string) => Promise<void>;
   retryGeneration: (messageId: string) => Promise<void>;
+  /** Re-run one asset from the top: re-ask its own questions, then regenerate it.
+   *
+   * For the case Retry does not cover. Retry re-sends the *same* answers, which only helps a
+   * transient failure; a merely disappointing asset usually needs a different input — another
+   * target service, another headline, another lead-magnet concept. */
+  rerunStage: (messageId: string) => void;
   saveCompetitorStep: (messageId: string) => Promise<void>;
   retryCompetitorStep: (messageId: string) => Promise<void>;
   /** Re-read the page for a scrape that failed, while its field is still the one being asked. */
@@ -307,6 +396,14 @@ interface PipelineState {
   dismissFault: () => void;
   acceptContextChoice: (messageId: string) => void;
   overrideContextChoice: (messageId: string) => void;
+  /** Take the selected suggestion(s) as this field's answer and carry on with the intake. */
+  chooseHeadlines: (messageId: string, ids: string[]) => Promise<void>;
+  /** Use a headline the operator typed instead of any of the suggestions. */
+  writeOwnHeadline: (messageId: string, headline: string) => Promise<void>;
+  /** Another batch, excluding everything already offered in this gate. */
+  rerollHeadlines: (messageId: string) => Promise<void>;
+  /** Re-request suggestions after the first attempt failed. */
+  retryHeadlines: (messageId: string) => Promise<void>;
   /** Phase 2: build this run on `runId`'s approved assets, or on nothing when it is null. */
   chooseSourceRun: (messageId: string, runId: string | null) => Promise<void>;
   /** Re-list the Phase 1 runs after a failed load. */
@@ -351,6 +448,10 @@ interface PhaseSlot {
   runId: string | null;
   sourceRunId: string | null;
   currentIndex: number;
+  /** Parked with the cursor it belongs to: switching phases mid-re-run and back must not lose
+   * the way home, or approving the re-run would replay the rest of that leg. */
+  rerunReturnIndex?: number | null;
+  rerunReturnIntake?: SerializedIntake | null;
   subStep: "competitor" | null;
   intake: SerializedIntake | null;
   context: ContextStore;
@@ -374,6 +475,9 @@ interface PipelineSnapshot {
   messages: PipelineMessage[];
   context: ContextStore;
   currentIndex: number;
+  /** Absent on chats saved before re-run existed, and on any chat with none in flight. */
+  rerunReturnIndex?: number | null;
+  rerunReturnIntake?: SerializedIntake | null;
   activeStatus: ActiveStatus;
   progress: number;
   clientProfile: Record<string, string>;
@@ -393,6 +497,8 @@ function serializeSnapshot(state: PipelineState): PipelineSnapshot {
     messages: state.messages,
     context: state.context,
     currentIndex: state.currentIndex,
+    rerunReturnIndex: state.rerunReturnIndex,
+    rerunReturnIntake: state.rerunReturnIntake,
     activeStatus: state.activeStatus,
     progress: state.progress,
     clientProfile: state.clientProfile,
@@ -420,6 +526,10 @@ const INTERRUPTED_SOURCE_RUNS =
   "The list of Phase 1 runs was still loading when the chat was closed.";
 const INTERRUPTED_BRIEFING =
   "This summary was still being written when the chat was closed. The competitor analysis above is unaffected.";
+const INTERRUPTED_HEADLINES =
+  "Topic suggestions were still being generated when the chat was closed, so they never arrived.";
+const HEADLINE_TIMED_OUT =
+  "Topic suggestions took too long to come back. The search may be slow right now - trying again often works.";
 /** The backend's own default for a run with no client name yet. Recognised rather than assumed away:
  * it is a real value in the database on every run created before runs carried a name, and it must
  * never be mistaken for one. */
@@ -452,6 +562,24 @@ function repairInterruptedMessages(messages: PipelineMessage[]): PipelineMessage
 
     if (m.kind === "competitor" && !m.competitor && !m.competitorError) {
       return { ...m, prepass, streaming: false, competitorError: INTERRUPTED_COMPETITOR };
+    }
+
+    // Suggestions that were still being generated when the tab closed. This one strands the chat
+    // hardest of any card here — the gate is what the intake is blocked on, and its loading state
+    // has no buttons at all — so it is restored as the retryable failure it is. The error card
+    // offers both exits: try again, or type the topic yourself.
+    if (m.kind === "headline-choice" && m.headlines?.status === "loading") {
+      return {
+        ...m,
+        prepass,
+        headlines: { ...m.headlines, status: "error" as const, reloading: false, error: INTERRUPTED_HEADLINES },
+      };
+    }
+
+    // A re-roll that died mid-flight over a batch that had already arrived: the batch is still
+    // good and still choosable, so only the in-flight flag is cleared.
+    if (m.kind === "headline-choice" && m.headlines?.reloading) {
+      return { ...m, prepass, headlines: { ...m.headlines, reloading: false } };
     }
 
     // The Phase 1 run listing was still loading, so the card would spin with nothing to click. Its
@@ -536,7 +664,17 @@ function deriveResumeActivity(
   const own = messagesInPhase(messages, phase);
   for (let i = own.length - 1; i >= 0; i--) {
     const m = own[i];
+    // Superseded cards are history, not work. A re-run marks every unsaved draft and every intake
+    // question of the stage being replaced `superseded` (see `rerunStage`), and `GenerationStream`
+    // stops rendering their actions — so a card matched here would park the run on something the
+    // operator cannot see, let alone act on. That is the shape the re-run dead-end took: return to
+    // Stage 09, find a superseded Stage 08 draft still reading `savePhase !== "saved"`, and report
+    // "Awaiting Review" of a hidden card with no way forward.
+    if (m.superseded) continue;
     if (m.kind === "context-choice" && m.contextChoiceStatus === "pending") return awaitingInput;
+    // A suggestion gate is waiting on the operator whether the batch has arrived or not: while
+    // it loads there is nothing else for them to do, and once it has they have to choose.
+    if (m.kind === "headline-choice" && m.headlines?.status !== "chosen") return awaitingInput;
     if (m.kind === "competitor-consent" && m.consent?.status === "pending") return awaitingInput;
     // A Phase 2 chat closed on its opening question is parked on it, exactly like any other question.
     if (m.kind === "source-run" && (m.sourceRunStatus === "pending" || m.sourceRunStatus === "error")) {
@@ -565,7 +703,11 @@ export function selectNeedsResume(s: PipelineState): boolean {
   if (own.some((m) => m.streaming)) return false;
 
   const actionable = own.some((m) => {
+    // See `deriveResumeActivity` — a superseded card is history and cannot be acted on, so counting
+    // it as actionable is what suppressed the resume banner on a chat that genuinely needed it.
+    if (m.superseded) return false;
     if (m.kind === "context-choice") return m.contextChoiceStatus === "pending";
+    if (m.kind === "headline-choice") return m.headlines?.status !== "chosen";
     if (m.kind === "competitor-consent") return m.consent?.status === "pending";
     if (m.kind === "source-run") return m.sourceRunStatus === "pending" || m.sourceRunStatus === "error";
     if (m.kind === "competitor") return m.savePhase !== "saved";
@@ -810,6 +952,24 @@ export function selectCanEditAnswers(s: PipelineState): boolean {
   if (s.messages.some((m) => m.kind === "competitor" && !m.competitor && !m.competitorError)) return false;
   if (s.messages.some((m) => m.kind === "competitor-consent" && m.consent?.status === "pending")) return false;
   return Boolean(s.intake) || Boolean(editableDraft(s));
+}
+
+/** Whether an asset can be re-run right now.
+ *
+ * Shares `selectCanEditAnswers`'s reasons for refusing — nothing mid-stream, nothing mid-search,
+ * no consent card outstanding — but not its final condition. That one requires a *live* intake or an
+ * editable draft, because editing a single answer only makes sense against the stage in hand. A
+ * re-run deliberately targets a stage the operator has already finished and moved past, which is the
+ * whole point of it.
+ */
+export function selectCanRerun(s: PipelineState): boolean {
+  if (s.isLoadingSession || s.subStep === "competitor") return false;
+  if (s.messages.some((m) => m.streaming || m.scrape?.status === "running")) return false;
+  if (s.messages.some((m) => m.kind === "competitor" && !m.competitor && !m.competitorError)) return false;
+  if (s.messages.some((m) => m.kind === "competitor-consent" && m.consent?.status === "pending")) return false;
+  // A suggestion gate mid-flight owns the input bar; re-entering a stage under it would strand it.
+  if (s.messages.some((m) => m.kind === "headline-choice" && m.headlines?.status === "loading")) return false;
+  return s.started;
 }
 
 /** One chip per field, first mention wins — the same field can be auto-filled on more than one
@@ -1136,6 +1296,285 @@ function applyAnswerAndAdvance(
   advanceIntake(get, set, get().currentIndex, intake.asset, intake.answers, 0);
 }
 
+/** Stages after which the keyword clustering prepass runs.
+ *
+ * ICP in Phase 1, because that is where the run first knows its service, market and brand.
+ *
+ * Phase 2 has no entry here at all, and that is not an omission. It skips ICP (it inherits the
+ * parent's), and its very first stage — Pillar Page — carries a headline gate of its own, so
+ * anything keyed off a stage *save* would fire after the gate that needed it. Phase 2 therefore
+ * triggers earlier and from somewhere else entirely: the moment the operator names the sub-service,
+ * in `submitAnswer`, before stage 0 begins.
+ *
+ * Both legs cluster exactly once, on their own service, and neither can read the other's —
+ * `PHASE_SCOPED_CONTEXT_KEYS` on the backend refuses to inherit `keyword_clusters` down the
+ * `source_run_id` chain even though every other key is inherited.
+ */
+const KEYWORD_PREPASS_AFTER: Partial<Record<PipelinePhase, string>> = { phase1: "icp" };
+
+/** Build this run's keyword cluster report, if it has not already got a current one.
+ *
+ * Fire-and-forget by design. Failure is announced, not raised: without a keyword report the
+ * headline gates still work — they fall back to framework-only grounding and say so on the card —
+ * so a keyword provider outage costs evidence, not the run.
+ */
+async function runKeywordPrepass(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+) {
+  const runId = get().runId;
+  const phase = get().phase;
+  if (!runId) return;
+
+  try {
+    const result = await buildRunKeywords(runId, get().clientProfile, phase, {
+      chatSessionId: get().sessionId,
+    });
+    if (result.status === "skipped") return; // no service anchored yet — nothing to say
+
+    const clusters = result.clusters.length;
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text:
+        `Mapped search demand for ${result.service}: ${result.total_keywords} keywords in ` +
+        `${clusters} topic ${clusters === 1 ? "cluster" : "clusters"}. Topic suggestions from here ` +
+        `on are built from this.`,
+    });
+  } catch (err) {
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text:
+        "Couldn't map search demand for this run — topic suggestions will still work, but they " +
+        `won't carry search volumes. (${err instanceof Error ? err.message : String(err)})`,
+    });
+  }
+}
+
+/** Intake answers reduced to the strings the suggestion API takes.
+ *
+ * `intake.answers` holds whatever `submitAnswer` was given — numbers from `number` fields, booleans
+ * from `boolean_flag` — so it cannot be handed over as-is. Only the values that read as text can
+ * name a service, which is all the anchor resolver is looking for.
+ */
+function stringAnswers(answers: Record<string, unknown> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(answers ?? {})) {
+    if (typeof value === "string") out[key] = value;
+    else if (typeof value === "number") out[key] = String(value);
+  }
+  return out;
+}
+
+/** Fetch (or re-fetch) the suggestions for one headline-choice card.
+ *
+ * `exclude` carries every headline already offered in this gate, so a re-roll changes the angle
+ * instead of rewording round one.
+ *
+ * A failure is deliberately *not* fatal to the stage. The card falls back to "write your own",
+ * which is exactly the question the operator would have been asked without this feature — so a
+ * suggestion service that is down costs them convenience, not the run.
+ */
+/** In-flight suggestion calls, by the card that owns them.
+ *
+ * Kept outside the store because an `AbortController` is not state to render or persist — it is a
+ * handle on a live socket, meaningless once the tab reloads. What it buys is that "Start over"
+ * actually means it: the previous request is cancelled rather than left running to resolve later
+ * and overwrite the batch the operator asked for.
+ */
+const headlineRequests = new Map<string, AbortController>();
+
+/** How long a suggestion call may run before the card gives up on it.
+ *
+ * Generous, because the honest ceiling is high: a web search plus ten candidates against a 45KB
+ * framework legitimately takes tens of seconds, and killing a call that was about to succeed wastes
+ * the spend and the operator's wait. But unbounded is worse — a request that never settles leaves
+ * the gate spinning with no buttons, and the gate is what the whole intake is blocked on. At the
+ * timeout the card becomes a normal error card, which already has Try again on it.
+ */
+const HEADLINE_TIMEOUT_MS = 120_000;
+
+async function loadHeadlineSuggestions(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  messageId: string,
+  opts: { reroll?: boolean } = {},
+) {
+  const message = liveMessage(get(), messageId);
+  const state = message?.headlines;
+  if (!message || !state) return;
+
+  // Supersede whatever this card had running. Without this a second call races the first.
+  headlineRequests.get(messageId)?.abort();
+  const controller = new AbortController();
+  headlineRequests.set(messageId, controller);
+  const timeout = setTimeout(() => controller.abort(new Error(HEADLINE_TIMED_OUT)), HEADLINE_TIMEOUT_MS);
+
+  const alreadyOffered = state.rejected ?? [];
+  patchMessage(get, set, messageId, {
+    headlines: {
+      ...state,
+      // A re-roll keeps the current list on screen and usable while the next one loads; a first
+      // load has nothing to keep, so it shows the loading state proper.
+      status: opts.reroll ? state.status : "loading",
+      reloading: opts.reroll,
+      error: undefined,
+      // Stamped so the progress panel can restart its phase script on a retry rather than resuming
+      // mid-sequence — a restarted call showing "checking every one is on-brief" would be a lie.
+      attempt: (state.attempt ?? 0) + 1,
+    },
+  });
+
+  try {
+    const result = await suggestHeadlines(state.slot, {
+      runId: get().runId,
+      profile: get().clientProfile,
+      // This stage's answers so far. The anchor is resolved from its own service field first,
+      // which is the whole point — without these the backend falls back to run-level facts.
+      answers: stringAnswers(get().intake?.answers),
+      phase: get().phase,
+      exclude: alreadyOffered,
+      chatSessionId: get().sessionId,
+      signal: controller.signal,
+    });
+
+    const current = liveMessage(get(), messageId)?.headlines ?? state;
+    patchMessage(get, set, messageId, {
+      headlines: {
+        ...current,
+        status: "pending",
+        reloading: false,
+        serviceAnchor: result.service_anchor,
+        anchorSource: result.anchor_source,
+        label: result.label,
+        subject: result.subject,
+        channel: result.channel,
+        charBudget: result.char_budget,
+        multi: result.multi,
+        suggestedSelection: result.suggested_selection,
+        candidates: result.candidates,
+        groundedInKeywords: result.grounded_in_keywords,
+        webSearchUsed: result.web_search_used,
+        rejectedCount: result.rejected_count,
+        rejected: [...alreadyOffered, ...result.candidates.map((c) => c.headline)],
+        chosenIds: undefined,
+        error: undefined,
+      },
+    });
+  } catch (err) {
+    // Superseded rather than failed: a newer call for this same card aborted this one and now owns
+    // the card's state. Writing an error here would stamp "cancelled" over a request that is
+    // running perfectly well, and the operator would see their own retry report a failure.
+    if (headlineRequests.get(messageId) !== controller) return;
+
+    const timedOut = controller.signal.aborted;
+    const current = liveMessage(get(), messageId)?.headlines ?? state;
+    patchMessage(get, set, messageId, {
+      headlines: {
+        ...current,
+        // A failed re-roll leaves the batch that already worked on screen; a failed first load has
+        // nothing to fall back to but the write-your-own field.
+        status: opts.reroll && current.candidates?.length ? "pending" : "error",
+        reloading: false,
+        error: timedOut ? HEADLINE_TIMED_OUT : recordFailure(set, err),
+      },
+    });
+  } finally {
+    clearTimeout(timeout);
+    if (headlineRequests.get(messageId) === controller) headlineRequests.delete(messageId);
+  }
+}
+
+/** Re-read the slot table and apply it to any gate still waiting on an answer.
+ *
+ * A suggestion card is snapshotted into the chat with everything it was built from — its
+ * candidates and its `multi` flag alike — so a slot that later becomes multi-select leaves every
+ * already-open gate single-select, restored that way on every reopen. Restarting both halves does
+ * not touch it: the stale value is in the saved chat, not in either process. This is the one place
+ * that can put it right without making the operator throw the chat away.
+ *
+ * Config only. The candidates on screen are the operator's to keep — they were paid for, they are
+ * still perfectly good topics, and refetching them here would spend a call to replace a list
+ * nobody complained about. Best-effort: a card left on the old config is still answerable.
+ */
+async function refreshPendingHeadlineGates(get: () => PipelineState, set: (partial: Partial<PipelineState>) => void) {
+  const pending = get().messages.filter((m) => m.kind === "headline-choice" && m.headlines?.status === "pending");
+  if (!pending.length) return;
+
+  try {
+    const bySlot = new Map((await listHeadlineSlots()).map((s) => [s.slot, s]));
+    for (const message of pending) {
+      const state = message.headlines;
+      const cfg = state?.slot ? bySlot.get(state.slot) : undefined;
+      if (!state || !cfg) continue;
+      if (cfg.multi === Boolean(state.multi) && cfg.suggested_selection === state.suggestedSelection) continue;
+      patchMessage(get, set, message.id, {
+        headlines: {
+          ...state,
+          multi: cfg.multi,
+          suggestedSelection: cfg.suggested_selection,
+          channel: cfg.channel,
+          charBudget: cfg.char_budget,
+        },
+      });
+    }
+  } catch (err) {
+    // Not surfaced: the gate is answerable either way, and a warning here would be about a
+    // difference the operator never knew existed.
+    console.warn("Could not refresh the headline slot config for this chat", err);
+  }
+}
+
+/** Shared tail of every way a headline gate is settled: record the choice, file it so the rest of
+ * the leg stays on theme, answer the field, and continue the intake.
+ *
+ * The selection is written to the Context Store as well as to the answer because the two bind
+ * different things — the answer binds this stage, `selected_headlines` binds the ones after it.
+ * That write is best-effort: an operator who has chosen a topic should not be blocked from
+ * generating because a bookkeeping row failed. It does double duty, though — its response carries
+ * the canonical rendering of the selection, which is what this stage's answer becomes.
+ */
+async function settleHeadlineChoice(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  messageId: string,
+  answer: string,
+  selected: Record<string, unknown>[],
+  source: "suggested" | "operator",
+) {
+  const message = liveMessage(get(), messageId);
+  const field = message?.field;
+  const state = message?.headlines;
+  const { intake } = get();
+  if (!message || !field || !state || !intake) return;
+
+  intake.answers[field.field_id] = answer;
+  markQuestionAnswered(get, set, field.field_id);
+
+  const runId = get().runId;
+  if (runId) {
+    try {
+      const saved = await saveHeadlineSelection(runId, state.slot, selected, source, get().phase);
+      // The backend's rendering wins, and it is richer than the one above: on a multi-select slot
+      // it carries each pick's format and mechanic (lead magnets) or keyword, intent and funnel
+      // stage (blog topics) under its numbered line. That detail is the whole reason a stage can
+      // build ten different assets or write five posts that don't compete with each other — a bare
+      // list of titles would leave it guessing at every one. `render_selection` in
+      // `app/services/headlines.py` owns the format so both sides agree on it.
+      if (saved.rendered) intake.answers[field.field_id] = saved.rendered;
+    } catch (err) {
+      // Logged, not surfaced: the chosen topic is already in `intake.answers` and the stage will
+      // generate correctly. What is missing is the cross-stage theme binding, and the per-pick
+      // detail — the local rendering above still names every pick, in order.
+      console.warn("Could not record the headline selection for later stages", err);
+    }
+  }
+
+  const fromIndex = intake.asset.fields.findIndex((f) => f.field_id === field.field_id) + 1;
+  advanceIntake(get, set, get().currentIndex, intake.asset, intake.answers, fromIndex);
+}
+
 function advanceIntake(
   get: () => PipelineState,
   set: (partial: Partial<PipelineState>) => void,
@@ -1184,6 +1623,24 @@ function advanceIntake(
     if (offerCompetitorResearch(get, set, asset, answers, scrapeField)) return;
 
     set({ intake: { asset, answers, awaitingFieldId: result.field.field_id } });
+
+    // A topic the operator would otherwise type cold: offer suggestions first. The gate sits here
+    // rather than inside the question card because it has to be able to *not* appear — a field with
+    // no slot, or a run with no service anchored yet, falls straight through to the normal
+    // question, which is still a perfectly good way to answer it.
+    const headlineField = result.field;
+    const headlineSlot = headlineField.kind === "headline_choice" ? headlineField.headlineSlot : undefined;
+    if (headlineSlot) {
+      const card = push(get, set, {
+        role: "assistant",
+        kind: "headline-choice",
+        assetId: asset.asset_id,
+        field: headlineField,
+        headlines: { slot: headlineSlot, status: "loading" },
+      });
+      void loadHeadlineSuggestions(get, set, card.id);
+      return;
+    }
 
     if (result.plan?.action === "confirm-context") {
       // Resolvable, but the operator gets first refusal on it.
@@ -1339,6 +1796,28 @@ async function runCompetitorStep(
   }
 }
 
+/** The first item of a multi-select answer, or the answer itself when it is a single line.
+ *
+ * A multi-select suggestion gate renders its answer as `1. Headline` with the pick's keyword and
+ * intent on indented lines beneath it (`render_selection` in `app/services/headlines.py`). That is
+ * what the stage needs to build every pick, and it is not something a competitor search can be run
+ * on. The backend guards its own path the same way — see `_search_subject` in
+ * `app/services/competitor.py`. */
+function firstSelectedTopic(answer: string): string {
+  for (const line of answer.split("\n")) {
+    // Detail lines are indented under their item; a leading space is what marks them.
+    if (!line.trim() || /^\s/.test(line)) continue;
+    return line.trim().replace(/^(?:\d+[.)]|[-*\u2022])\s*/, "").trim();
+  }
+  return "";
+}
+
+/** How many items that answer holds — 1 for a plain single-line answer. */
+function countSelectedTopics(answer: string): number {
+  const items = answer.split("\n").filter((line) => line.trim() && !/^\s/.test(line));
+  return items.length || 1;
+}
+
 /** Offer to research this field instead of asking for it, when the walk reaches a field listed in
  * this phase's `COMPETITOR_CONSENT_FIELDS`. Returns false when the offer can't be made — no topic to
  * search on,
@@ -1354,7 +1833,9 @@ function offerCompetitorResearch(
   if (!config) return false;
 
   const profile = get().clientProfile;
-  const topic = String(answers[config.topicFieldId] ?? "").trim();
+  const answer = String(answers[config.topicFieldId] ?? "").trim();
+  const topic = firstSelectedTopic(answer);
+  const topicCount = countSelectedTopics(answer);
   const targetUrl = String(answers["client_website_url"] ?? "").trim() || profile.website_url || "";
   // Both are load-bearing for the search prompt: without the topic it would return whoever ranks
   // for anything, and without a client URL the backend has nothing to benchmark against.
@@ -1371,6 +1852,7 @@ function offerCompetitorResearch(
       competitorAssetId: config.competitorAssetId,
       label,
       topic,
+      topicCount,
       targetUrl,
       location: profile.region,
       niche: profile.industry,
@@ -1528,6 +2010,112 @@ function beginStage(get: () => PipelineState, set: (partial: Partial<PipelineSta
   beginMainIntake(get, set, index);
 }
 
+/** Put the card the returned-to stage is waiting on back at the bottom of the transcript.
+ *
+ * This is the other half of "I cannot move forward with Stage 09", and the half that is not a state
+ * bug at all. A re-run inserts a whole stage's worth of cards — its intake questions, its draft, its
+ * save notices — *after* the card the operator was parked on. The state stays correct
+ * (`intake.awaitingFieldId` still names the field, and the question card is still there, unanswered)
+ * but it is now scrolled tens of messages out of view, and `GenerationStream` auto-scrolls to the
+ * bottom. So the operator reads the last thing on screen — "Next up is Stage 09" — sees no question
+ * under it, and concludes the stage is dead. Measured on a real session: the pending question for
+ * `primary_service_pillar_page_being_supported` sat ~40 messages above the end, above two blog
+ * re-runs.
+ *
+ * Cloning the pending card to the end and superseding the original moves the question to where the
+ * operator is actually looking. It costs nothing and asks nothing again: the clone carries whatever
+ * the original had already loaded, so a headline gate keeps its fetched candidates rather than
+ * paying for a fresh suggestion call, and a context choice keeps its text.
+ */
+function resurfacePendingCard(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  index: number,
+) {
+  const state = get();
+  const stage = stagesFor(state.phase)[index];
+  if (!stage) return;
+
+  // Scoped to the stage being returned to, and to its competitor sub-step, which is a separate
+  // asset id on the same stage. Unscoped, this reaches for the newest pending card anywhere in the
+  // leg and can resurface a card belonging to the stage that was just re-run — which is not what
+  // the operator is being sent back to, and would put the wrong question under the wrong heading.
+  const competitor = competitorStageFor(state.phase, stage.asset.asset_id);
+  const ownsIt = (m: PipelineMessage) =>
+    m.assetId === stage.asset.asset_id || (!!competitor && m.assetId === competitor.assetId);
+
+  const isPending = (m: PipelineMessage) => {
+    if (m.superseded || !ownsIt(m)) return false;
+    if (m.kind === "question") return !m.answered;
+    if (m.kind === "headline-choice") return m.headlines?.status !== "chosen";
+    if (m.kind === "context-choice") return m.contextChoiceStatus === "pending";
+    if (m.kind === "competitor-consent") return m.consent?.status === "pending";
+    return false;
+  };
+
+  // `intake.awaitingFieldId` is the authoritative answer to "what is this stage waiting on", so the
+  // card for that field wins outright. The newest pending card for the stage is the fallback, for a
+  // gate that owns the turn without the intake naming a field (a consent card, say).
+  const own = messagesInPhase(state.messages, state.phase);
+  const awaiting = state.intake?.awaitingFieldId;
+  const pending =
+    (awaiting ? [...own].reverse().find((m) => isPending(m) && m.field?.field_id === awaiting) : undefined) ??
+    [...own].reverse().find(isPending);
+  if (!pending) return;
+  // Already the last thing on screen: nothing was inserted after it, so it needs no help.
+  if (state.messages[state.messages.length - 1]?.id === pending.id) return;
+
+  set({ messages: state.messages.map((m) => (m.id === pending.id ? { ...m, superseded: true } : m)) });
+  const { id: _id, createdAt: _createdAt, ...content } = pending;
+  push(get, set, { ...content, superseded: false });
+}
+
+/** The next stage in execution sequence: the first one this leg has no approved output for.
+ *
+ * Read off the transcript rather than off `context`, and scoped to the current phase, because
+ * `context` is not a record of what *this* leg produced: a Phase 2 run inherits its Phase 1 run's
+ * context (that is what `source_run_id` is for), and every Phase 2 stage id — `pillar_page`,
+ * `blog`, `lead_magnet` — also exists in Phase 1. Keyed off `context`, a fresh Phase 2 leg would
+ * see its own stage 01 as already executed and skip the whole phase.
+ *
+ * Superseded cards are counted, not skipped: a superseded *saved* generation is a real Context
+ * Store version that a later re-run has replaced, and the stage it belongs to has certainly been
+ * executed.
+ */
+function nextUnexecutedIndex(state: PipelineState): number {
+  const approved = new Set(
+    messagesInPhase(state.messages, state.phase)
+      .filter((m) => m.kind === "generation" && m.savePhase === "saved" && m.assetId)
+      .map((m) => m.assetId as string),
+  );
+  const stages = stagesFor(state.phase);
+  for (let i = 0; i < stages.length; i++) {
+    if (!approved.has(stages[i].asset.asset_id)) return i;
+  }
+  return stages.length;
+}
+
+/** Enter `index` as the stage now being worked on, asking its first question.
+ *
+ * Split out of `resumeStage` because the re-run return path needs exactly the same thing: both
+ * arrive at a stage that the run has already advanced its `currentIndex` past the start of, but
+ * whose first question was never asked — one because the tab closed in the gap, the other because
+ * the operator hit Re-run on the previous stage while standing in it. */
+function enterStage(get: () => PipelineState, set: (partial: Partial<PipelineState>) => void, index: number) {
+  const state = get();
+  const stage = stagesFor(state.phase)[index];
+
+  // Skip straight to the stage's own intake when its competitor sub-step was already approved: this
+  // stage has been part-way entered before, and re-entering `beginStage` would re-run — and
+  // re-charge for — a prepass whose output is already in the Context Store.
+  const competitor = competitorStageFor(state.phase, stage.asset.asset_id);
+  if (competitor && state.context[competitor.assetId]) {
+    beginMainIntake(get, set, index);
+    return;
+  }
+  beginStage(get, set, index);
+}
+
 export const usePipelineStore = create<PipelineState>((set, get) => ({
   started: false,
   phase: "phase1",
@@ -1538,6 +2126,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   messages: [],
   context: {},
   currentIndex: 0,
+  rerunReturnIndex: null,
+  rerunReturnIntake: null,
   activeStatus: null,
   progress: 0,
   intake: null,
@@ -1641,6 +2231,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         intake: null,
         editSeed: null,
       });
+      // Phase 2's keyword prepass, and the only moment it can run: the sub-service is the fact the
+      // whole leg's clustering is anchored on, and Phase 2's first stage carries a headline gate,
+      // so anything triggered off a stage save would arrive after the gate that needed it. Not
+      // awaited — `beginStage` has several questions to ask before the gate is reached.
+      void runKeywordPrepass(get, set);
       beginStage(get, set, 0);
       return;
     }
@@ -1719,6 +2314,78 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     );
   },
 
+  rerunStage: (messageId) => {
+    const state = get();
+    if (!selectCanRerun(state)) return;
+
+    const message = liveMessage(state, messageId);
+    const assetId = message?.assetId;
+    if (!assetId) return;
+
+    const stages = stagesFor(state.phase);
+    const index = stages.findIndex((s) => s.asset.asset_id === assetId);
+    if (index < 0) return;
+    const stage = stages[index];
+
+    // Where to come back to. Only recorded when the re-run is of an *earlier* stage: re-running the
+    // one the operator is already on should carry on forward normally, and storing the same index
+    // as a "return" would park the run on a stage it had just approved.
+    const returnIndex = index < state.currentIndex ? state.currentIndex : null;
+
+    // Unsaved cards for this asset become history at once — not just the one whose button was
+    // pressed. A stage that was refined, or retried, or edited leaves several drafts behind, and any
+    // of them still offering Save would let the operator approve an old draft after asking for a
+    // new one.
+    //
+    // An *approved* generation card is deliberately left alone. It is not a stale draft — it is a
+    // real Context Store version, and `GenerationStream` hides the whole action row of a superseded
+    // card, which would take its Download and Share buttons with it. The previous version is
+    // precisely the thing an operator may still want a copy of while judging the replacement.
+    set({
+      messages: state.messages.map((m) => {
+        if (m.assetId !== assetId || (m.phase ?? state.phase) !== state.phase) return m;
+        if (m.kind === "generation") {
+          return m.savePhase === "saved" ? m : { ...m, superseded: true, refining: false };
+        }
+        // Intake history: these questions are about to be asked again, so the old cards must stop
+        // offering their own edit affordances.
+        if (m.kind === "headline-choice" || m.kind === "question") {
+          return { ...m, superseded: true };
+        }
+        return m;
+      }),
+      intake: null,
+      editSeed: null,
+      rerunReturnIndex: returnIndex,
+      // Only parked when there is somewhere to go back to; a re-run of the current stage just
+      // restarts it, and its own intake is the thing being replaced.
+      rerunReturnIntake: returnIndex !== null ? serializeIntake(state.intake) : null,
+    });
+
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text:
+        `Re-running Stage ${String(stage.stageNumber).padStart(2, "0")}: ${stage.asset.label}. ` +
+        "I'll ask its own questions again — everything approved in earlier stages is kept, and the " +
+        "previous version stays in the Context Store rather than being overwritten." +
+        // `returnIndex` can be one past the last stage, when the phase was already complete — in
+        // which case there is no stage to name and the honest sentence is a different one.
+        (returnIndex === null
+          ? ""
+          : stages[returnIndex]
+            ? ` When it's approved we'll pick back up at Stage ${String(stages[returnIndex].stageNumber).padStart(2, "0")}.`
+            : ` ${PHASE_META[state.phase].label} is otherwise complete, so we'll return there once it's approved.`),
+    });
+
+    // `beginMainIntake`, not `beginStage`: the gated competitor search is a separately approved
+    // asset of its own, and its result is already in the Context Store where this stage's intake
+    // reads it. Re-running it would spend another web-search call to re-answer a question the
+    // operator did not complain about — and if they *do* want a fresh competitor set, that card has
+    // its own Re-run.
+    beginMainIntake(get, set, index);
+  },
+
   retryGeneration: async (messageId) => {
     const message = liveMessage(get(), messageId);
     if (!message?.assetId || !message.answers) return;
@@ -1783,9 +2450,102 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
       const phase = get().phase;
       const total = totalStagesFor(phase);
-      const nextIndex = get().currentIndex + 1;
-      if (nextIndex < total) {
-        beginStage(get, set, nextIndex);
+
+      // ICP is the first point at which the run knows what service it is for, in what market, under
+      // what brand — everything the keyword expansion needs. So the clustering prepass fires here,
+      // once, and every later headline gate reads the report it produced. Deliberately not awaited:
+      // it takes a minute, nothing in the next stage's opening questions depends on it, and the
+      // first gate that does need it is several questions away.
+      if (KEYWORD_PREPASS_AFTER[phase] === message.assetId) {
+        void runKeywordPrepass(get, set);
+      }
+
+      // A re-run of an earlier stage is finished: go back to where the operator was, rather than
+      // advancing. Without this, approving one corrected asset would walk forward from its index and
+      // re-run every stage after it — a full replay of the pipeline off a single button.
+      //
+      // Where to go next is computed, not remembered. `currentIndex` cannot be trusted here: a
+      // re-run ends in `beginMainIntake`, which parks `currentIndex` on the stage being re-run, so
+      // the old `currentIndex + 1` fallthrough meant "the stage after the one just re-run" — it
+      // would re-enter and regenerate Stage 08 after a re-run of Stage 07, overwriting an asset
+      // nobody asked about. And `rerunReturnIndex` cannot be trusted either: it is a single slot, so
+      // starting a second re-run before the first is approved overwrites it, after which the same
+      // fallthrough runs.
+      //
+      // `nextUnexecutedIndex` has neither failure mode. It asks the transcript which stages already
+      // have an approved output and returns the first that does not — which is exactly "the next
+      // asset remaining to execute", and is the same answer on the ordinary forward path (approve
+      // Stage 08, go to Stage 09) as on any re-run path.
+      const returnIndex = get().rerunReturnIndex;
+      const isRerun = returnIndex !== null;
+      const target = nextUnexecutedIndex(get());
+      const done = target >= total;
+
+      if (isRerun) {
+        // The parked intake belongs to whichever stage the operator was standing in. Restored only
+        // when that is still where we are going; carried onto a different stage it would seed the
+        // wrong asset's answers.
+        const restored = returnIndex === target ? hydrateIntake(get().rerunReturnIntake) : null;
+        set({
+          rerunReturnIndex: null,
+          rerunReturnIntake: null,
+          currentIndex: done ? total : target,
+          intake: restored,
+        });
+        // Derived rather than asserted. The stage being returned to might be mid-intake, sitting on
+        // an unapproved draft, or finished — and `deriveResumeActivity` is the one place that already
+        // works that out from the transcript. Setting "Ready" here would leave the input bar disabled
+        // over an unanswered question.
+        set(deriveResumeActivity(get().messages, restored, target, done ? 100 : get().progress, phase));
+
+        const stage = done ? null : stageAt(phase, target);
+        push(get, set, {
+          role: "assistant",
+          kind: "text",
+          text: stage
+            ? `Saved as a new version. Next up is Stage ${String(stage.stageNumber).padStart(2, "0")}: ${stage.asset.label}.`
+            : `Saved as a new version. ${PHASE_META[phase].label} is complete.`,
+        });
+        // Every asset built after the one just replaced was built on its *previous* version. Which
+        // of them still holds is a judgement about content, not something the pipeline can compute —
+        // so it names the risk and leaves the call to the operator, rather than quietly leaving them
+        // stale or re-running eleven assets uninvited.
+        const rerunStageNumber = stagesFor(phase).find((s) => s.asset.asset_id === message.assetId)?.stageNumber;
+        if (rerunStageNumber !== undefined && rerunStageNumber < totalStagesFor(phase)) {
+          push(get, set, {
+            role: "assistant",
+            kind: "text",
+            text:
+              `Assets generated after Stage ${String(rerunStageNumber).padStart(2, "0")} were built on ` +
+              "its previous version. Re-run any of them too if this change affects them.",
+          });
+        }
+
+        // ...and then actually hand the operator that stage. Restoring `currentIndex` is not the same
+        // as being able to work on it: the common re-run is "approve Stage 08, move to Stage 09, and
+        // immediately spot something wrong with 08", which fires Re-run while Stage 09 is still in
+        // the gap between `currentIndex` advancing and its first question being asked. Nothing here
+        // ever asked that question, so the run came back to a named stage with no card, no pending
+        // field, and `navStatus: "Ready"` — a dead end reachable by the most ordinary sequence in
+        // the pipeline.
+        //
+        // Gated on `selectNeedsResume` rather than on the intake being empty, because that selector
+        // is already the definition of "this leg has nothing to act on": a stage returned to
+        // mid-question, or sitting on its own unapproved draft, fails it and is left exactly as it
+        // was. Only the genuinely empty case is started.
+        if (!done && selectNeedsResume(get())) {
+          enterStage(get, set, target);
+        } else if (!done) {
+          // The other case, and the one that actually reads as "Stage 09 shows no questions": the
+          // stage was already part-way through, so there is nothing to start — its question is just
+          // buried above everything the re-run added. Bring it back into view.
+          resurfacePendingCard(get, set, target);
+        }
+        return;
+      }
+
+      if (!done) {
+        beginStage(get, set, target);
       } else {
         set({ activeStatus: null, currentIndex: total, navStatus: "Ready" });
         push(get, set, {
@@ -1797,8 +2557,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     } catch (err) {
       const msg = recordFailure(set, err);
       patchMessage(get, set, messageId, { savePhase: "error", saveError: msg });
-    }
-  },
+    }  },
 
   acceptCompetitorResearch: async (messageId) => {
     const message = liveMessage(get(), messageId);
@@ -1948,6 +2707,71 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     push(get, set, { role: "assistant", kind: "text", text: "Left that answer as it was." });
     set({ editSeed: null });
     advanceIntake(get, set, get().currentIndex, intake.asset, intake.answers, 0);
+  },
+
+chooseHeadlines: async (messageId, ids) => {
+    const message = liveMessage(get(), messageId);
+    const state = message?.headlines;
+    if (!state?.candidates?.length || !ids.length) return;
+
+    const chosen = state.candidates.filter((c) => ids.includes(c.id));
+    if (!chosen.length) return;
+
+    // The card renders the chosen list from here, so patch before the await — otherwise the
+    // buttons stay live through a network round-trip and a second click double-answers the field.
+    patchMessage(get, set, messageId, {
+      headlines: { ...state, status: "chosen", chosenIds: ids, reloading: false },
+    });
+
+    const selected = chosen.map((c) => ({
+      headline: c.headline,
+      primary_keyword: c.primary_keyword,
+      funnel: c.funnel,
+      intent: c.intent,
+      search_volume: c.search_volume,
+      ...c.extras,
+    }));
+    // Single-select renders as the bare headline (that is what the master prompts have always been
+    // handed for these fields); multi-select as a numbered list carrying each item's extras. The
+    // backend owns that rendering so both sides agree on it — this is only the fallback for a run
+    // with no `runId` yet, where nothing was persisted to render from.
+    const answer =
+      chosen.length === 1 && !state.multi
+        ? chosen[0].headline
+        : chosen.map((c, i) => `${i + 1}. ${c.headline}`).join("\n");
+
+    push(get, set, {
+      role: "user",
+      kind: "text",
+      text: chosen.length === 1 ? chosen[0].headline : `Selected ${chosen.length}:\n${answer}`,
+    });
+    set({ editSeed: null });
+
+    await settleHeadlineChoice(get, set, messageId, answer, selected, "suggested");
+  },
+
+  writeOwnHeadline: async (messageId, headline) => {
+    const trimmed = headline.trim();
+    if (!trimmed) return;
+    const message = liveMessage(get(), messageId);
+    const state = message?.headlines;
+    if (!state) return;
+
+    patchMessage(get, set, messageId, {
+      headlines: { ...state, status: "chosen", ownHeadline: trimmed, reloading: false },
+    });
+    push(get, set, { role: "user", kind: "text", text: trimmed });
+    set({ editSeed: null });
+
+    await settleHeadlineChoice(get, set, messageId, trimmed, [{ headline: trimmed }], "operator");
+  },
+
+  rerollHeadlines: async (messageId) => {
+    await loadHeadlineSuggestions(get, set, messageId, { reroll: true });
+  },
+
+  retryHeadlines: async (messageId) => {
+    await loadHeadlineSuggestions(get, set, messageId);
   },
 
   acceptContextChoice: (messageId) => {
@@ -2141,7 +2965,16 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     if (state.phase === phase) return;
 
     if (!state.started) {
-      set({ phase, currentIndex: 0, progress: 0, intake: null, subStep: null, navStatus: "Ready" });
+      set({
+        phase,
+        currentIndex: 0,
+        rerunReturnIndex: null,
+        rerunReturnIntake: null,
+        progress: 0,
+        intake: null,
+        subStep: null,
+        navStatus: "Ready",
+      });
       return;
     }
 
@@ -2154,6 +2987,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       runId: state.runId,
       sourceRunId: state.sourceRunId,
       currentIndex: state.currentIndex,
+      rerunReturnIndex: state.rerunReturnIndex,
+      rerunReturnIntake: state.rerunReturnIntake,
       subStep: state.subStep,
       intake: serializeIntake(state.intake),
       context: state.context,
@@ -2173,6 +3008,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       // `beginPhase2` announces the link instead of asking which run to build on.
       sourceRunId: resuming ? resuming.sourceRunId : phase === "phase2" ? parked.runId : null,
       currentIndex: resuming?.currentIndex ?? 0,
+      rerunReturnIndex: resuming?.rerunReturnIndex ?? null,
+      rerunReturnIntake: resuming?.rerunReturnIntake ?? null,
       subStep: resuming?.subStep ?? null,
       intake: hydrateIntake(resuming?.intake ?? null),
       context: resuming?.context ?? (phase === "phase2" ? { ...state.context } : {}),
@@ -2232,6 +3069,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       messages: [],
       context: {},
       currentIndex: 0,
+      rerunReturnIndex: null,
+      rerunReturnIntake: null,
       activeStatus: null,
       progress: 0,
       intake: null,
@@ -2273,6 +3112,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         messages,
         context: snap.context ?? {},
         currentIndex,
+        rerunReturnIndex: snap.rerunReturnIndex ?? null,
+        rerunReturnIntake: snap.rerunReturnIntake ?? null,
         intake,
         navStatus: activity.navStatus,
         activeStatus: activity.activeStatus,
@@ -2282,6 +3123,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         phaseSlots: snap.phaseSlots ?? {},
       });
       useChatSessionsStore.setState({ error: null });
+      // After the state is set, not before: it reads the messages it is about to patch.
+      void refreshPendingHeadlineGates(get, set);
     } catch (err) {
       console.error("Failed to open chat session", err);
       useChatSessionsStore.setState({
@@ -2304,13 +3147,6 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       text: `Picking up where this chat left off — Stage ${String(stage.stageNumber).padStart(2, "0")}: ${stage.asset.label}.`,
     });
 
-    // Skip straight to the stage's own intake when its competitor sub-step was already approved
-    // in the earlier session — re-entering `beginStage` would re-run (and re-charge for) it.
-    const competitor = competitorStageFor(state.phase, stage.asset.asset_id);
-    if (competitor && state.context[competitor.assetId]) {
-      beginMainIntake(get, set, index);
-      return;
-    }
-    beginStage(get, set, index);
+    enterStage(get, set, index);
   },
 }));

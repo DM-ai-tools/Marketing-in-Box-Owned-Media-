@@ -278,13 +278,14 @@ Retiring a stage does not delete its row: it is parked above `PARK_BASE` so pre-
 still FK to it. Rationale for the three tiers, applied consistently across all
 25 seeded stages plus the Interviewer Agent:
 
-- **`opus`** — the 3 gated foundation stages: `icp`, `cro`, `pillar_page`. These are the DAG's
-  foundation: every other stage (directly or transitively) reads their output, so an error here
-  cascades further than an error anywhere else in the pipeline. They are also the only stages
-  that are `is_gated = true` — a human strategist already reviews their output before anything
-  downstream is unblocked, so the cost of the strongest available model is justified by both the
-  blast radius of a mistake *and* the fact that a human is already in the loop to catch what
-  Opus itself misses.
+- **`opus`** — **no longer assigned to any stage.** It held the 3 gated foundation stages
+  (`icp`, `cro`, `pillar_page`), on the argument that every other stage reads their output so an
+  error there cascades further than one anywhere else. Those three are now `sonnet`. What changed
+  is the reading of the second half of that argument: they are also the only `is_gated = true`
+  stages, so a human strategist reviews their output before anything downstream unblocks — and a
+  review gate, not a model tier, is what actually contains the blast radius. Against that, Opus
+  cost 2.5x Sonnet on both input and output. The enum member is retained (not migrated away)
+  because `asset_definitions` rows written before the move still carry it.
 - **`sonnet`** — 11 of the 12 generation stages (`offers`, `funnel`, `funnel_hub_media`,
   `lead_magnet`, `plan_of_action`, `blog`, `content_marketing_strategy`,
   `social_content_strategy_audit`, `webinar`, `book`, `podcast` — `sms_sequence` is the

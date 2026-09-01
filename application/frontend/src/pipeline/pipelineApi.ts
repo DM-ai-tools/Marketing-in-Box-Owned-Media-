@@ -444,20 +444,237 @@ export interface ChatSessionDetail extends ChatSessionSummary {
 async function unwrap<T>(res: Response, action: string): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    // A classified fault arrives as FastAPI's `detail` object; anything else falls back to the
-    // status line, which is all there is to say about it.
+
+    // Parsing is kept separate from throwing on purpose. Folding them into one try/catch means the
+    // `catch` sees both a non-JSON body *and* the errors raised deliberately below — and since
+    // `JSON.parse` fails with a `SyntaxError`, no `instanceof Error` test can tell them apart.
+    let parsed: { detail?: unknown } | null = null;
     try {
-      const parsed = JSON.parse(body) as { detail?: unknown };
+      parsed = JSON.parse(body) as { detail?: unknown };
+    } catch {
+      parsed = null; // not JSON — the status line is all there is to say
+    }
+
+    if (parsed) {
+      // A classified fault arrives as FastAPI's `detail` object.
       const fault = faultFromUnknown(parsed.detail);
       if (fault) throw new ApiFaultError(fault);
-    } catch (err) {
-      if (err instanceof ApiFaultError) throw err;
-      // Not JSON — fall through to the generic message below.
+      // A plain-string `detail` is a sentence written for the operator (an unrecognised location,
+      // an empty provider response). Surfacing it as-is beats wrapping the raw JSON body in a
+      // status line, which is what the fall-through below would do.
+      if (typeof parsed.detail === "string" && parsed.detail.trim()) throw new Error(parsed.detail);
     }
+
     throw new Error(`${action} failed (${res.status}): ${body || res.statusText}`);
   }
   return res.json();
 }
+
+/** Build (or reuse) this run's keyword cluster report — the search-demand evidence every headline
+ * suggestion is grounded in.
+ *
+ * Runs once per run as a prepass after ICP, not per stage: one clustering pass costs real money at
+ * the keyword provider, and running it per stage would hand the blog and the pillar page different
+ * keyword universes for the same service, so the topics chosen at one stage would stop lining up
+ * with the topics chosen at the next.
+ *
+ * `phase` is load-bearing rather than routine here. Phase 1 clusters the headline service ("Social
+ * Media Marketing"); Phase 2 clusters the sub-service ("Meta Ads"). They are different keyword sets
+ * and neither approximates the other, which is why the backend also refuses to inherit this key
+ * down the `source_run_id` chain.
+ */
+export interface KeywordClusterSummary {
+  name: string;
+  intent: string | null;
+  funnel: string | null;
+  content_type: string | null;
+  recommended_content: string | null;
+  recommended_url: string | null;
+  primary_keyword: string | null;
+  keyword_count: number;
+  total_volume: number;
+}
+
+export interface KeywordReportResult {
+  run_id: string;
+  /** `skipped` is not a failure — the run does not know its service yet, so there is nothing to
+   * cluster and the caller carries on without keyword grounding. */
+  status: "built" | "reused" | "skipped";
+  phase: string;
+  service: string | null;
+  provider: string | null;
+  version: number | null;
+  total_keywords: number;
+  clusters: KeywordClusterSummary[];
+  warnings: string[];
+  reason?: string | null;
+}
+
+export async function buildRunKeywords(
+  runId: string,
+  profile: Record<string, string>,
+  phase: PipelinePhase = "phase1",
+  attribution: { chatSessionId?: string | null } = {},
+): Promise<KeywordReportResult> {
+  const res = await fetch(`/api/pipeline/runs/${runId}/keywords/build`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      phase,
+      profile,
+      chat_session_id: attribution.chatSessionId ?? null,
+    }),
+  });
+  return unwrap(res, "Keyword clustering");
+}
+
+/** One suggested headline, with the evidence behind it.
+ *
+ * The evidence fields are not decoration — they are what makes this a choice rather than a lottery.
+ * `search_volume` is real demand from this run's own keyword set (null when the candidate is not
+ * grounded in it), `framework_formula` and `curiosity_elements` are how the headline framework was
+ * applied, and `trend_evidence` is what a live search actually found, or null when nothing was
+ * verified. A null trend is the honest answer and is rendered as one. */
+export interface HeadlineCandidate {
+  id: string;
+  headline: string;
+  primary_keyword: string | null;
+  source_cluster: string | null;
+  intent: string | null;
+  funnel: string | null;
+  traffic_temperature: string | null;
+  framework_formula: string | null;
+  curiosity_elements: string[];
+  specificity: string | null;
+  why_it_works: string | null;
+  trend_evidence: string | null;
+  char_count: number;
+  channel_limit_ok: boolean;
+  checklist_pass: boolean;
+  checklist_notes: string;
+  search_volume: number | null;
+  difficulty: number | null;
+  /** False when the candidate's keyword is not in this run's cleaned keyword set. It still may be
+   * the right pick — but it carries no demand evidence, and the card says so rather than letting it
+   * pass as measured. */
+  grounded: boolean;
+  extras: Record<string, unknown>;
+}
+
+export interface HeadlineSuggestions {
+  slot: string;
+  asset_id: string;
+  phase: string;
+  service_anchor: string;
+  /** Where the anchor came from — a stage field, a run-level fact, or the client's industry as
+   * a last resort. Shown on the card: an anchor that fell through to `industry` is a category
+   * rather than a service, and the operator should see that instead of wondering why the topics
+   * are broad. */
+  anchor_source: string;
+  label: string;
+  subject: string;
+  channel: string;
+  char_budget: string;
+  multi: boolean;
+  suggested_selection: number;
+  candidates: HeadlineCandidate[];
+  grounded_in_keywords: boolean;
+  web_search_used: boolean;
+  rejected_count: number;
+}
+
+/** Ask for at least `count` candidate headlines for one slot.
+ *
+ * `exclude` is what makes "show me more" mean something: the headlines already turned down are sent
+ * back so the next batch changes the angle rather than the wording. */
+export async function suggestHeadlines(
+  slot: string,
+  args: {
+    runId?: string | null;
+    profile: Record<string, string>;
+    /** Answers collected for this stage so far. The anchor comes first from this stage's own
+     * service field, so omitting these leaves the backend with only run-level facts. */
+    answers?: Record<string, string>;
+    phase?: PipelinePhase;
+    count?: number;
+    exclude?: string[];
+    operatorNote?: string;
+    chatSessionId?: string | null;
+    /** Abandons the request. Load-bearing for the retry controls: without it a restart races the
+     * call it was meant to replace, and whichever resolves *last* wins — so a retry could be
+     * overwritten seconds later by the stale response it was issued to escape. */
+    signal?: AbortSignal;
+  },
+): Promise<HeadlineSuggestions> {
+  const res = await fetch(`/api/pipeline/headlines/${slot}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: args.signal,
+    body: JSON.stringify({
+      run_id: args.runId ?? null,
+      phase: args.phase ?? "phase1",
+      profile: args.profile,
+      answers: args.answers ?? {},
+      count: args.count ?? 10,
+      exclude: args.exclude ?? [],
+      operator_note: args.operatorNote ?? "",
+      chat_session_id: args.chatSessionId ?? null,
+    }),
+  });
+  return unwrap(res, "Headline suggestions");
+}
+
+/** One row of the backend's slot table (`SLOTS` in `app/services/headlines.py`). */
+export interface HeadlineSlotConfig {
+  slot: string;
+  asset_id: string;
+  label: string;
+  subject: string;
+  channel: string;
+  char_budget: string;
+  multi: boolean;
+  suggested_selection: number;
+}
+
+/** The slot table as it stands now. No model call and no run needed — it is the config itself.
+ *
+ * Read on hydration so a gate restored from a chat snapshot follows the *current* config rather
+ * than the one it was created under. A slot that becomes multi-select after a card was already on
+ * screen would otherwise stay single-select in that chat forever, through any number of restarts,
+ * because the card's behaviour was saved along with its candidates. */
+export async function listHeadlineSlots(): Promise<HeadlineSlotConfig[]> {
+  const res = await fetch("/api/pipeline/headlines/slots");
+  return unwrap(res, "Headline slots");
+}
+
+export interface SaveHeadlineSelectionResponse {
+  run_id: string;
+  slot: string;
+  asset_id: string;
+  version: number;
+  rendered: string;
+}
+
+/** Record what the operator chose, so later stages in the same leg stay on the chosen theme.
+ *
+ * Separate from the intake answer on purpose: the answer binds this stage, and this binds the rest
+ * of the leg. Phase-scoped on the backend, so a Phase 2 run builds its own rather than inheriting
+ * the topics chosen for the parent service. */
+export async function saveHeadlineSelection(
+  runId: string,
+  slot: string,
+  selected: Record<string, unknown>[],
+  source: "suggested" | "operator",
+  phase: PipelinePhase = "phase1",
+): Promise<SaveHeadlineSelectionResponse> {
+  const res = await fetch(`/api/pipeline/runs/${runId}/headlines/select`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slot, phase, selected, source }),
+  });
+  return unwrap(res, "Headline selection");
+}
+
 
 export async function listChatSessions(): Promise<ChatSessionSummary[]> {
   const res = await fetch("/api/chat-sessions");

@@ -52,6 +52,15 @@
       "raw_explanation": "YOUR ANSWER — the specific service or product this lead magnet must feed into"
     },
     {
+      "field_id": "selected_lead_magnet_concepts",
+      "label": "Selected Lead Magnet Concepts",
+      "kind": "headline_choice",
+      "headline_slot": "lead_magnet_concept",
+      "required": true,
+      "source": "user_input",
+      "raw_explanation": "The concepts the operator picked from the suggestion gate — a numbered list, each with its format, mechanic and primary keyword. The prompt's Step 2 scores exactly these instead of inventing its own candidates, and Step 5 builds every one of them."
+    },
+    {
       "field_id": "funnel_entry_point_optional",
       "label": "Funnel Entry Point (optional)",
       "kind": "text",

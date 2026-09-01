@@ -262,6 +262,33 @@ body {
   animation: dot-pulse 1.5s cubic-bezier(0.33, 1, 0.68, 1) infinite;
 }
 
+/* Placeholder rows standing in for content that is on its way, in the shape it will arrive in.
+   Distinct from `.progress-shimmer`, which sweeps a filled bar: this one is the surface itself,
+   so the sweep is tinted rather than white and stays legible on both themes. The state it encodes
+   is "this space is reserved and being filled" — which is why the skeleton must match the real
+   row's height, or its arrival shifts the page under a cursor that is already moving. */
+@keyframes skeleton-sweep {
+  0% { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+.skeleton-line {
+  border-radius: 999px;
+  background-color: var(--bg-sunken);
+  background-image: linear-gradient(
+    100deg,
+    transparent 38%,
+    color-mix(in srgb, var(--fg-faint) 22%, transparent) 50%,
+    transparent 62%
+  );
+  background-size: 180% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.6s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+}
+/* The per-row stagger that makes the block read as filling rather than blinking as one is set as an
+   inline `animation-delay` by the component. It is not done here with `:nth-child`, because these
+   lines are not siblings — each row nests a headline bar and a row of chips — so positional
+   selectors would land on the wrong elements. */
+
 @media (prefers-reduced-motion: reduce) {
   .node-running,
   .node-hitl,
@@ -271,8 +298,18 @@ body {
   .badge-pulsing,
   .dot-pulsing,
   .stream-cursor,
-  .msg-rise {
+  .msg-rise,
+  .skeleton-line {
     animation: none !important;
+  }
+}
+
+/* With motion off, the skeleton must still read as "pending" rather than as empty rows that look
+   like a rendering bug. The sweep goes; a visible resting surface stays. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    background-image: none;
+    background-color: color-mix(in srgb, var(--fg-faint) 14%, var(--bg-sunken));
   }
 }
 

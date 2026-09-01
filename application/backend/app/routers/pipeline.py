@@ -36,7 +36,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -68,7 +68,13 @@ from app.services.competitor import (
     resolve_inputs,
     to_prompt_text,
 )
-from app.services import insights, usage as usage_service
+from app.services import (
+    design_tokens as design_tokens_service,
+    headlines as headlines_service,
+    insights,
+    keywords as keywords_service,
+    usage as usage_service,
+)
 from app.services.api_errors import classify as classify_api_error
 from app.services.generation import (
     DEFAULT_PHASE,
@@ -643,15 +649,42 @@ class RunContextResponse(BaseModel):
 _MAX_SOURCE_RUN_HOPS = 4
 
 
+# Context keys that stop at the run that wrote them, instead of being inherited down the
+# `source_run_id` chain like everything else.
+#
+# Inheritance is the right default and is what Phase 2 is built on: a sub-service run reads its
+# parent's ICP, CRO rewrite and pillar page precisely so those are not re-derived per sub-service.
+# These two keys are the exception, and the distinction is about *scope*, not about freshness:
+#
+#   `keyword_clusters`    — search demand for the service the run is for. Phase 1's is demand for
+#                           "Social Media Marketing"; Phase 2's is demand for "Meta Ads". They are
+#                           different keyword universes with different volumes and different
+#                           competition, and one is not an approximation of the other.
+#   `selected_headlines`  — the topics the operator picked, which are what every later stage in
+#                           that leg is written about. Inheriting them would put Phase 2's Meta Ads
+#                           blog, lead magnets and SMS sequence under a headline chosen for the
+#                           parent service — the exact topic drift the selection gate exists to
+#                           stop, reintroduced silently one level down.
+#
+# So a Phase-2 run that has not built its own gets a 404 and builds one, rather than quietly
+# working from the parent's. Everything else still inherits.
+PHASE_SCOPED_CONTEXT_KEYS: frozenset[str] = frozenset({"keyword_clusters", "selected_headlines"})
+
+
 async def _latest_context_entry(
     session: AsyncSession, run_uuid: uuid.UUID, context_key: str
 ) -> tuple[ContextEntry, uuid.UUID] | None:
     """The newest approved entry for `context_key` on this run, or on the nearest run it inherits
-    from. Returns the entry and the run it was actually found on."""
+    from. Returns the entry and the run it was actually found on.
+
+    Keys in `PHASE_SCOPED_CONTEXT_KEYS` never leave the run that wrote them — the walk is capped at
+    one hop for those, so a Phase-2 run cannot read its parent's keyword set or chosen topics.
+    """
     seen: set[uuid.UUID] = set()
     current: uuid.UUID | None = run_uuid
+    max_hops = 1 if context_key in PHASE_SCOPED_CONTEXT_KEYS else _MAX_SOURCE_RUN_HOPS
 
-    for _ in range(_MAX_SOURCE_RUN_HOPS):
+    for _ in range(max_hops):
         if current is None or current in seen:
             return None
         seen.add(current)
@@ -714,6 +747,766 @@ async def get_run_context(run_id: str, context_key: str) -> RunContextResponse:
             content=content,
             inherited_from_run_id=str(found_on) if found_on != run_uuid else None,
         )
+
+
+# --------------------------------------------------------------------------------------
+# Keyword clustering
+#
+# Runs once per run as a prepass immediately after ICP is approved — the first moment the run knows
+# what service it is for, which region, and under what brand. Not a stage: there is no reviewable
+# deliverable here and nothing for the operator to approve. It produces the search-demand evidence
+# every later headline suggestion is grounded in, so it behaves like `_run_competitor_prepass` —
+# it runs, it reports a status, and its output is filed to the Context Store.
+#
+# Deliberately per-run rather than per-stage. One clustering pass costs real money at DataForSEO
+# (three calls per seed) and, more importantly, running it per stage would give the blog and the
+# pillar page *different* keyword universes for the same service — so the topics chosen at one
+# stage would stop lining up with the topics chosen at the next.
+# --------------------------------------------------------------------------------------
+
+KEYWORD_CONTEXT_KEY = "keyword_clusters"
+
+
+class BuildKeywordsRequest(BaseModel):
+    phase: str = DEFAULT_PHASE
+    # The run-level client facts the UI has collected (client_name, website_url, region, industry,
+    # and for Phase 2 sub_service). Sent rather than re-read from the database because the profile
+    # lives in the session, not in a table — same reason the competitor routes take it.
+    profile: dict[str, str] = {}
+    competitor_brands: list[str] = []
+    # Rebuild even when a matching report is already stored. The button behind this is "refresh",
+    # not the normal path — the fingerprint check below handles the normal path on its own.
+    force: bool = False
+    chat_session_id: str | None = None
+
+
+class KeywordClusterOut(BaseModel):
+    name: str
+    intent: str | None = None
+    funnel: str | None = None
+    content_type: str | None = None
+    recommended_content: str | None = None
+    recommended_url: str | None = None
+    primary_keyword: str | None = None
+    keyword_count: int = 0
+    total_volume: int = 0
+
+
+class KeywordReportResponse(BaseModel):
+    run_id: str
+    # `skipped` is not a failure: a run whose service is not known yet has nothing to cluster, and
+    # the caller carries on without keyword grounding rather than showing an error for a step the
+    # operator never asked for.
+    status: Literal["built", "reused", "skipped"]
+    phase: str
+    service: str | None = None
+    provider: str | None = None
+    version: int | None = None
+    total_keywords: int = 0
+    clusters: list[KeywordClusterOut] = []
+    warnings: list[str] = []
+    reason: str | None = None
+
+
+def _cluster_summaries(report: dict) -> list[KeywordClusterOut]:
+    out: list[KeywordClusterOut] = []
+    for cluster in report.get("clusters") or []:
+        entries = cluster.get("keywords") or []
+        out.append(
+            KeywordClusterOut(
+                name=str(cluster.get("name") or "(unnamed)"),
+                intent=cluster.get("intent"),
+                funnel=cluster.get("funnel"),
+                content_type=cluster.get("content_type"),
+                recommended_content=cluster.get("recommended_content"),
+                recommended_url=cluster.get("recommended_url"),
+                primary_keyword=cluster.get("primary_keyword"),
+                keyword_count=len(entries),
+                total_volume=sum(int(e.get("volume") or 0) for e in entries),
+            )
+        )
+    return out
+
+
+async def _stored_keyword_entry(session: AsyncSession, run_uuid: uuid.UUID) -> ContextEntry | None:
+    """This run's own latest keyword report, never an inherited one.
+
+    Queried directly rather than through `_latest_context_entry` because the phase-scoping rule
+    matters more here than anywhere else: reusing a parent run's report is precisely the bug this
+    whole key is fenced off to prevent.
+    """
+    result = await session.execute(
+        select(ContextEntry)
+        .where(ContextEntry.run_id == run_uuid, ContextEntry.context_key == KEYWORD_CONTEXT_KEY)
+        .order_by(ContextEntry.version.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+@router.post("/runs/{run_id}/keywords/build", response_model=KeywordReportResponse)
+async def build_run_keywords(run_id: str, payload: BuildKeywordsRequest) -> KeywordReportResponse:
+    """Build this run's keyword cluster report, or hand back the one already stored.
+
+    Reuse is decided on the config fingerprint, not on mere presence: an operator who corrects the
+    region or the service name after ICP was approved has changed what should be clustered, and
+    gets a rebuild. Re-entering a stage has changed nothing, and does not.
+    """
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid run_id: {run_id!r}") from exc
+
+    config = keywords_service.config_from_profile(
+        payload.profile,
+        payload.phase,
+        competitor_brands=payload.competitor_brands,
+    )
+    if config is None:
+        # Phase 1 without an industry, or Phase 2 before the sub-service has been chosen.
+        return KeywordReportResponse(
+            run_id=run_id,
+            status="skipped",
+            phase=payload.phase,
+            reason="No service is known for this run yet, so there is nothing to cluster.",
+        )
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        run = await session.get(Run, run_uuid)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+        existing = await _stored_keyword_entry(session, run_uuid)
+        if existing is not None and not payload.force:
+            stored = existing.value if isinstance(existing.value, dict) else {}
+            if stored.get("config_fingerprint") == config.fingerprint():
+                report = stored.get("keyword_report") or {}
+                logger.info("Reusing keyword report run_id=%s v%s", run_id, existing.version)
+                return KeywordReportResponse(
+                    run_id=run_id,
+                    status="reused",
+                    phase=payload.phase,
+                    service=stored.get("service"),
+                    provider=stored.get("provider"),
+                    version=existing.version,
+                    total_keywords=int(report.get("total_keywords") or 0),
+                    clusters=_cluster_summaries(report),
+                    warnings=list(stored.get("warnings") or []),
+                )
+
+    async def on_usage(call_usage: usage_service.CallUsage) -> None:
+        await usage_service.record(
+            call_usage,
+            kind="keywords",
+            chat_session_id=payload.chat_session_id,
+            run_id=run_id,
+            phase=payload.phase,
+        )
+
+    try:
+        result = await keywords_service.build_keyword_report(config, on_usage)
+    except keywords_service.KeywordProviderError as exc:
+        # The provider refusing is not a run-blocking fault: headline suggestions degrade to
+        # framework-only grounding, which is worse but still works. Surfaced as a 502 so the caller
+        # can say so, and so a bad `location_name` is visible rather than silently absorbed.
+        logger.warning("Keyword provider failed for run_id=%s: %s", run_id, exc)
+        raise HTTPException(status_code=502, detail=f"Keyword provider failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — classified into the shared fault shape below
+        fault = classify_api_error(exc)
+        logger.exception("Keyword clustering failed run_id=%s fault=%s", run_id, fault.code)
+        raise HTTPException(status_code=502, detail=fault.as_event()) from exc
+
+    async with session_factory() as session:
+        version = await _next_version(session, run_uuid, KEYWORD_CONTEXT_KEY)
+        session.add(
+            ContextEntry(
+                run_id=run_uuid,
+                context_key=KEYWORD_CONTEXT_KEY,
+                version=version,
+                value=result.to_context_value(),
+                # No `asset_definitions` row backs this: it is a prepass, not an asset. The column
+                # is nullable precisely for context a stage did not write.
+                written_by_asset_id=None,
+            )
+        )
+        await session.commit()
+
+    logger.info(
+        "Built keyword report run_id=%s phase=%s service=%r provider=%s clusters=%d v%s",
+        run_id,
+        payload.phase,
+        result.service,
+        result.provider,
+        len(result.report.get("clusters") or []),
+        version,
+    )
+    return KeywordReportResponse(
+        run_id=run_id,
+        status="built",
+        phase=payload.phase,
+        service=result.service,
+        provider=result.provider,
+        version=version,
+        total_keywords=int(result.report.get("total_keywords") or 0),
+        clusters=_cluster_summaries(result.report),
+        warnings=result.warnings,
+    )
+
+
+@router.get("/runs/{run_id}/keywords", response_model=KeywordReportResponse)
+async def get_run_keywords(run_id: str) -> KeywordReportResponse:
+    """This run's stored keyword report. 404 when it has none of its own — including a Phase 2 run
+    whose parent has one, which is the point of `PHASE_SCOPED_CONTEXT_KEYS`."""
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid run_id: {run_id!r}") from exc
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        entry = await _stored_keyword_entry(session, run_uuid)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"No keyword report for run {run_id}")
+
+    stored = entry.value if isinstance(entry.value, dict) else {}
+    report = stored.get("keyword_report") or {}
+    return KeywordReportResponse(
+        run_id=run_id,
+        status="reused",
+        phase=DEFAULT_PHASE,
+        service=stored.get("service"),
+        provider=stored.get("provider"),
+        version=entry.version,
+        total_keywords=int(report.get("total_keywords") or 0),
+        clusters=_cluster_summaries(report),
+        warnings=list(stored.get("warnings") or []),
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Headline / topic suggestion
+#
+# The human gate in front of a stage that has a topic to decide. The operator sees at least ten
+# candidates built from this run's own search demand and the headline framework, picks one (or
+# several), or writes their own — and the stage is then generated about what they picked.
+#
+# Not a stage and not saved from here: a suggestion is an *input* to a stage, so the selection
+# travels back as that stage's intake answer and is persisted with it. What IS saved from here is
+# `selected_headlines`, so every later stage in the same leg stays on the chosen theme.
+# --------------------------------------------------------------------------------------
+
+SELECTED_HEADLINES_CONTEXT_KEY = "selected_headlines"
+
+# What each slot's suggestion call reads for competitive context, by the asset it belongs to.
+# Stored under the competitor stage's own asset_id (see `save_competitor_stage`).
+_COMPETITOR_CONTEXT_PREFIX = "competitor_analysis_"
+
+
+class SuggestHeadlinesRequest(BaseModel):
+    run_id: str | None = None
+    phase: str = DEFAULT_PHASE
+    profile: dict[str, str] = {}
+    # The answers collected for this stage so far. Load-bearing: the anchor comes first from
+    # this stage's own service field (a Lead Magnet's "Target Service / Offer"), and without
+    # these the resolver can only fall back to run-level facts — which is how every gate ended
+    # up anchored on the client's *industry* rather than the service the operator typed.
+    answers: dict[str, str] = {}
+    count: int = headlines_service.DEFAULT_COUNT
+    # Headlines already shown and turned down, so a re-roll is genuinely different.
+    exclude: list[str] = []
+    operator_note: str = ""
+    chat_session_id: str | None = None
+
+
+class HeadlineCandidateOut(BaseModel):
+    id: str
+    headline: str
+    primary_keyword: str | None = None
+    source_cluster: str | None = None
+    intent: str | None = None
+    funnel: str | None = None
+    traffic_temperature: str | None = None
+    framework_formula: str | None = None
+    curiosity_elements: list[str] = []
+    specificity: str | None = None
+    why_it_works: str | None = None
+    trend_evidence: str | None = None
+    char_count: int = 0
+    channel_limit_ok: bool = True
+    checklist_pass: bool = False
+    checklist_notes: str = ""
+    search_volume: int | None = None
+    difficulty: int | None = None
+    grounded: bool = True
+    extras: dict = {}
+
+
+class SuggestHeadlinesResponse(BaseModel):
+    slot: str
+    asset_id: str
+    phase: str
+    service_anchor: str
+    anchor_source: str
+    label: str
+    subject: str
+    channel: str
+    char_budget: str
+    multi: bool
+    suggested_selection: int
+    candidates: list[HeadlineCandidateOut]
+    # True when the run had a keyword report to ground these in. False means the candidates are
+    # framework-grounded only — still usable, but carrying no demand evidence, and the card says so
+    # rather than presenting them as if they did.
+    grounded_in_keywords: bool
+    web_search_used: bool
+    # Why the batch came back short, when it did.
+    rejected_count: int = 0
+
+
+class SaveHeadlineSelectionRequest(BaseModel):
+    slot: str
+    phase: str = DEFAULT_PHASE
+    # The candidates the operator chose, or one they wrote themselves.
+    selected: list[dict] = []
+    source: Literal["suggested", "operator"] = "suggested"
+
+
+class SaveHeadlineSelectionResponse(BaseModel):
+    run_id: str
+    slot: str
+    asset_id: str
+    version: int
+    rendered: str
+
+
+async def _context_text(session: AsyncSession, run_uuid: uuid.UUID, context_key: str) -> str:
+    """One approved document as plain text, or "" when the run has none.
+
+    Uses the inheriting lookup on purpose: the ICP and the competitor listing a Phase 2 run reads
+    are its Phase 1 parent's, and that is exactly what should happen — a sub-service sells to the
+    same people. Only `PHASE_SCOPED_CONTEXT_KEYS` is fenced off from that.
+    """
+    found = await _latest_context_entry(session, run_uuid, context_key)
+    if found is None:
+        return ""
+    entry, _run = found
+    value = entry.value if isinstance(entry.value, dict) else {}
+    return str(value.get("content") or "")
+
+
+class HeadlineSlotOut(BaseModel):
+    slot: str
+    asset_id: str
+    label: str
+    subject: str
+    channel: str
+    char_budget: str
+    multi: bool
+    suggested_selection: int
+
+
+@router.get("/headlines/slots", response_model=list[HeadlineSlotOut])
+async def list_headline_slots() -> list[HeadlineSlotOut]:
+    """The slot table as it stands now — no model call, no run required.
+
+    Exists because a suggestion card is snapshotted into the chat with the answer it was built
+    from, `multi` included. A slot that later becomes multi-select (blog topics did) would leave
+    every already-open gate stuck on the old behaviour, restored from the snapshot on every reopen,
+    with a restart of both halves changing nothing. The frontend re-reads this on hydration so a
+    pending gate follows the current config rather than the config it was born under.
+
+    Declared above `POST /headlines/{slot}` for readability only — the two never collide, the
+    methods differ.
+    """
+    return [
+        HeadlineSlotOut(
+            slot=cfg.slot,
+            asset_id=cfg.asset_id,
+            label=cfg.label,
+            subject=cfg.subject,
+            channel=cfg.channel,
+            char_budget=cfg.char_budget,
+            multi=cfg.multi,
+            suggested_selection=cfg.suggested_selection,
+        )
+        for cfg in headlines_service.SLOTS.values()
+    ]
+
+
+@router.post("/headlines/{slot}", response_model=SuggestHeadlinesResponse)
+async def suggest_headlines_route(slot: str, payload: SuggestHeadlinesRequest) -> SuggestHeadlinesResponse:
+    """At least `count` candidate headlines for one slot, grounded in this run's own evidence."""
+    if not headlines_service.has_slot(slot):
+        raise HTTPException(status_code=404, detail=f"Unknown headline slot: {slot!r}")
+    cfg = headlines_service.slot_config(slot)
+
+    # The service THIS stage is for, not the client's industry. See `resolve_service_anchor`.
+    service_anchor, anchor_source = headlines_service.resolve_service_anchor(
+        cfg.asset_id, payload.answers, payload.profile, payload.phase
+    )
+    if not service_anchor:
+        # Nothing to anchor on. Suggesting headlines against no service is precisely the drift
+        # this gate exists to prevent, so it refuses rather than guessing.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This run does not know what service it is for yet, so topics cannot be "
+                "anchored to anything. Answer the Target Service question, or complete the "
+                "ICP stage first."
+            ),
+        )
+    logger.info(
+        "Headline anchor slot=%s asset=%s phase=%s anchor=%r via=%s",
+        slot,
+        cfg.asset_id,
+        payload.phase,
+        service_anchor,
+        anchor_source,
+    )
+
+    context = headlines_service.HeadlineContext(
+        service_anchor=service_anchor,
+        anchor_source=anchor_source,
+        phase=payload.phase,
+        business_name=(payload.profile.get("client_name") or "").strip(),
+        region=(payload.profile.get("region") or "").strip(),
+        exclude=list(payload.exclude),
+        operator_note=payload.operator_note,
+    )
+
+    if payload.run_id:
+        try:
+            run_uuid = uuid.UUID(payload.run_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid run_id: {payload.run_id!r}") from exc
+
+        session_factory = get_sessionmaker()
+        async with session_factory() as session:
+            # This run's own keyword report — never an inherited one (`_stored_keyword_entry`).
+            entry = await _stored_keyword_entry(session, run_uuid)
+            if entry is not None and isinstance(entry.value, dict):
+                context.keyword_report = entry.value.get("keyword_report") or {}
+                context.keyword_service = entry.value.get("service") or ""
+                context.clean_keywords = entry.value.get("clean_keywords") or []
+                context.vocabulary = entry.value.get("vocabulary") or []
+
+            context.icp_document = await _context_text(session, run_uuid, "icp")
+            context.competitor_document = await _context_text(
+                session, run_uuid, f"{_COMPETITOR_CONTEXT_PREFIX}{cfg.asset_id}"
+            )
+
+    async def on_usage(call_usage: usage_service.CallUsage) -> None:
+        await usage_service.record(
+            call_usage,
+            kind="headlines",
+            chat_session_id=payload.chat_session_id,
+            run_id=payload.run_id,
+            asset_id=cfg.asset_id,
+            phase=payload.phase,
+        )
+
+    try:
+        result = await headlines_service.suggest_headlines(slot, context, payload.count, on_usage)
+    except headlines_service.HeadlineParseError as exc:
+        logger.warning("Headline suggestion for slot=%s returned unparseable output: %s", slot, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — classified into the shared fault shape
+        fault = classify_api_error(exc)
+        logger.exception("Headline suggestion failed slot=%s fault=%s", slot, fault.code)
+        raise HTTPException(status_code=502, detail=fault.as_event()) from exc
+
+    return SuggestHeadlinesResponse(
+        slot=slot,
+        asset_id=cfg.asset_id,
+        phase=payload.phase,
+        service_anchor=result.service_anchor,
+        anchor_source=anchor_source,
+        label=cfg.label,
+        subject=cfg.subject,
+        channel=cfg.channel,
+        char_budget=cfg.char_budget,
+        multi=cfg.multi,
+        suggested_selection=cfg.suggested_selection,
+        candidates=[
+            HeadlineCandidateOut(
+                id=c.id,
+                headline=c.headline,
+                primary_keyword=c.primary_keyword,
+                source_cluster=c.source_cluster,
+                intent=c.intent,
+                funnel=c.funnel,
+                traffic_temperature=c.traffic_temperature,
+                framework_formula=c.framework_formula,
+                curiosity_elements=c.curiosity_elements,
+                specificity=c.specificity,
+                why_it_works=c.why_it_works,
+                trend_evidence=c.trend_evidence,
+                char_count=c.char_count,
+                channel_limit_ok=c.channel_limit_ok,
+                checklist_pass=c.checklist_pass,
+                checklist_notes=c.checklist_notes,
+                search_volume=c.search_volume,
+                difficulty=c.difficulty,
+                grounded=c.grounded,
+                extras=c.extras,
+            )
+            for c in result.candidates
+        ],
+        grounded_in_keywords=result.grounded_in_keywords,
+        web_search_used=result.web_search_used,
+        rejected_count=len(result.rejected),
+    )
+
+
+@router.post("/runs/{run_id}/headlines/select", response_model=SaveHeadlineSelectionResponse)
+async def save_headline_selection(
+    run_id: str, payload: SaveHeadlineSelectionRequest
+) -> SaveHeadlineSelectionResponse:
+    """Record what the operator chose, so later stages in this leg stay on the same theme.
+
+    Written as a versioned `selected_headlines` entry accumulating one slot at a time, because the
+    binding is cross-stage: a blog topic chosen at stage 08 should still be visible to the SMS
+    sequence at stage 14. Phase-scoped — a Phase 2 leg builds its own from scratch rather than
+    inheriting the parent's chosen topics.
+    """
+    if not headlines_service.has_slot(payload.slot):
+        raise HTTPException(status_code=404, detail=f"Unknown headline slot: {payload.slot!r}")
+    cfg = headlines_service.slot_config(payload.slot)
+
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid run_id: {run_id!r}") from exc
+
+    rendered = headlines_service.render_selection(cfg, payload.selected)
+    if not rendered:
+        raise HTTPException(status_code=400, detail="No headline was selected.")
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        run = await session.get(Run, run_uuid)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+        # Carry forward what earlier slots in this leg already chose. `context_entries` is
+        # append-only, so a new version restates the whole map rather than patching the old row.
+        previous = await _latest_context_entry(session, run_uuid, SELECTED_HEADLINES_CONTEXT_KEY)
+        selections: dict = {}
+        if previous is not None:
+            entry, found_on = previous
+            # Belt and braces over `PHASE_SCOPED_CONTEXT_KEYS`: never build on a parent run's map.
+            if found_on == run_uuid and isinstance(entry.value, dict):
+                selections = dict(entry.value.get("selections") or {})
+
+        selections[payload.slot] = {
+            "asset_id": cfg.asset_id,
+            "phase": payload.phase,
+            "source": payload.source,
+            "rendered": rendered,
+            "selected": payload.selected,
+        }
+
+        version = await _next_version(session, run_uuid, SELECTED_HEADLINES_CONTEXT_KEY)
+        session.add(
+            ContextEntry(
+                run_id=run_uuid,
+                context_key=SELECTED_HEADLINES_CONTEXT_KEY,
+                version=version,
+                value={
+                    # `content` is what any prompt consuming this as a document reads.
+                    "content": "\n\n".join(
+                        f"{headlines_service.slot_config(s).label}:\n{v['rendered']}"
+                        for s, v in selections.items()
+                        if headlines_service.has_slot(s)
+                    ),
+                    "selections": selections,
+                },
+                written_by_asset_id=None,
+            )
+        )
+        await session.commit()
+
+    logger.info(
+        "Saved headline selection run_id=%s slot=%s source=%s items=%d v%s",
+        run_id,
+        payload.slot,
+        payload.source,
+        len(payload.selected),
+        version,
+    )
+    return SaveHeadlineSelectionResponse(
+        run_id=run_id,
+        slot=payload.slot,
+        asset_id=cfg.asset_id,
+        version=version,
+        rendered=rendered,
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Brand design tokens
+#
+# Read once per run from the client's own live page, cached as context, and handed to every stage
+# that builds publishable HTML (`BRAND_TOKEN_STAGES` in `app/services/generation.py`).
+#
+# The page it reads is `existing_page_url` — the parent page the CRO stage is rewriting, which is
+# exactly the page a generated lead magnet or funnel step has to look like it came from. It falls
+# back to the client's website URL, which is the same brand at worse resolution.
+#
+# Inheritable down the `source_run_id` chain, unlike the keyword and headline keys: a sub-service
+# is the same client with the same brand, and re-reading the same CSS per sub-service would spend
+# a fetch to arrive at the same palette.
+# --------------------------------------------------------------------------------------
+
+DESIGN_TOKENS_CONTEXT_KEY = "brand_design_tokens"
+
+# In preference order. The parent page first — a company's brand is most concretely expressed on
+# the page actually being extended, and a home page can differ from a service page's template.
+_DESIGN_SOURCE_FIELDS = ("existing_page_url", "parent_pillar_page_url", "client_website_url")
+_DESIGN_SOURCE_FACTS = ("website_url",)
+
+
+def _design_source_url(answers: dict[str, str], profile: dict[str, str]) -> str | None:
+    for field_id in _DESIGN_SOURCE_FIELDS:
+        value = (answers.get(field_id) or "").strip()
+        if value and not value.startswith("[[context:"):
+            return value
+    for fact in _DESIGN_SOURCE_FACTS:
+        value = (profile.get(fact) or "").strip()
+        if value:
+            return value
+    return None
+
+
+async def _stored_design_tokens(session: AsyncSession, run_uuid: uuid.UUID) -> tuple[dict, uuid.UUID] | None:
+    found = await _latest_context_entry(session, run_uuid, DESIGN_TOKENS_CONTEXT_KEY)
+    if found is None:
+        return None
+    entry, on_run = found
+    return (entry.value if isinstance(entry.value, dict) else {}), on_run
+
+
+async def resolve_design_tokens(
+    run_id: str | None,
+    answers: dict[str, str],
+    profile: dict[str, str],
+) -> str | None:
+    """This run's brand token sheet as Markdown, extracting it first if it has none.
+
+    Returns None when there is no page to read or the read failed. That is deliberately not an
+    error: `build_prompt` simply omits the block, and the stage's own prompt falls back to asking
+    for brand values. Never returns a partial or invented sheet — a generated page in a plausible
+    but wrong palette is indistinguishable from a correct one until someone who knows the brand
+    looks at it, which is the whole failure mode this exists to prevent.
+    """
+    url = _design_source_url(answers, profile)
+    session_factory = get_sessionmaker()
+
+    run_uuid: uuid.UUID | None = None
+    if run_id:
+        try:
+            run_uuid = uuid.UUID(run_id)
+        except ValueError:
+            run_uuid = None
+
+    if run_uuid is not None:
+        async with session_factory() as session:
+            stored = await _stored_design_tokens(session, run_uuid)
+        if stored is not None:
+            value, _on_run = stored
+            # Re-extract when the operator has since pointed the run at a different page; reuse
+            # otherwise. A brand does not change between stages, and the fetch is not free.
+            if not url or value.get("source_url") == url:
+                return value.get("content") or None
+
+    if not url:
+        return None
+
+    tokens = await design_tokens_service.extract_design_tokens(url)
+    markdown = design_tokens_service.tokens_to_markdown(tokens)
+
+    if run_uuid is not None:
+        # Stored either way. An unavailable sheet is a real finding worth keeping: it stops every
+        # later stage in the run from re-fetching a page that is known to refuse readers, and it
+        # tells the operator why their HTML came out in placeholder greys.
+        async with session_factory() as session:
+            if await session.get(Run, run_uuid) is not None:
+                version = await _next_version(session, run_uuid, DESIGN_TOKENS_CONTEXT_KEY)
+                session.add(
+                    ContextEntry(
+                        run_id=run_uuid,
+                        context_key=DESIGN_TOKENS_CONTEXT_KEY,
+                        version=version,
+                        value={
+                            "content": markdown,
+                            "source_url": url,
+                            "available": tokens.available,
+                            "reason": tokens.reason,
+                            "css": design_tokens_service.tokens_to_css(tokens),
+                            "accent": tokens.accent,
+                            "page_background": tokens.page_background,
+                            "body_text": tokens.body_text,
+                        },
+                        written_by_asset_id=None,
+                    )
+                )
+                await session.commit()
+                logger.info(
+                    "Stored brand design tokens run_id=%s url=%s available=%s v%s",
+                    run_id,
+                    url,
+                    tokens.available,
+                    version,
+                )
+
+    return markdown
+
+
+class DesignTokensRequest(BaseModel):
+    url: str
+    # Page source the operator pasted, for a site that refuses server-side reads. Some hosts answer
+    # a server with a JS captcha while serving browsers normally (SiteGround's `sgcaptcha` does),
+    # and no header or cookie gets a server past it — but the operator's own browser already has
+    # the page. `url` is still required alongside it: relative stylesheet and logo references have
+    # nothing to resolve against without the page's own address.
+    html: str | None = None
+
+
+class DesignTokensResponse(BaseModel):
+    source_url: str
+    available: bool
+    reason: str | None = None
+    page_background: str | None = None
+    body_text: str | None = None
+    accent: str | None = None
+    heading_font: str | None = None
+    palette: list[str] = []
+    font_links: list[str] = []
+    markdown: str
+    css: str
+
+
+@router.post("/design-tokens", response_model=DesignTokensResponse)
+async def read_design_tokens(payload: DesignTokensRequest) -> DesignTokensResponse:
+    """Read one page's design system. Used by the UI to show what was picked up before a build."""
+    if payload.html and payload.html.strip():
+        tokens = await design_tokens_service.extract_design_tokens_from_html(payload.html, payload.url)
+    else:
+        tokens = await design_tokens_service.extract_design_tokens(payload.url)
+    return DesignTokensResponse(
+        source_url=tokens.source_url,
+        available=tokens.available,
+        reason=tokens.reason,
+        page_background=tokens.page_background,
+        body_text=tokens.body_text,
+        accent=tokens.accent,
+        heading_font=tokens.heading_font,
+        palette=[c.hex for c in tokens.palette[:12]],
+        font_links=tokens.font_links,
+        markdown=design_tokens_service.tokens_to_markdown(tokens),
+        css=design_tokens_service.tokens_to_css(tokens),
+    )
 
 
 class SourceRunAsset(BaseModel):
@@ -1007,6 +1800,11 @@ async def _generation_sse_stream(
         if prepass_event is not None:
             yield _sse(prepass_event)
 
+        # Read once per run and cached; None when there is no page to read or it refused.
+        # `build_prompt` simply omits the block then, and the stage's own prompt falls back
+        # to asking for brand values rather than inventing a palette.
+        design_tokens_markdown = await resolve_design_tokens(run_id, answers, client_profile)
+
         async for delta in generate_stage_stream(
             asset_id,
             answers,
@@ -1018,6 +1816,7 @@ async def _generation_sse_stream(
                 asset_id=asset_id,
                 phase=phase,
             ),
+            design_tokens_markdown=design_tokens_markdown,
         ):
             yield _sse({"type": "delta", "text": delta})
     except Exception as exc:  # noqa: BLE001 - every failure is classified and streamed, never swallowed
