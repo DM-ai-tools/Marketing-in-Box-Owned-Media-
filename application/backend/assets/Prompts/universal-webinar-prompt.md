@@ -4,7 +4,7 @@
 
 ## — INPUTS —
 
-- **Webinar Topic / Working Title:** [YOUR ANSWER]
+- **Webinar Topics / Working Titles:** [YOUR ANSWER — a numbered list; one complete webinar package gets built per topic]
 - **Competitor Webinar Sources:** [UPLOAD OR PASTE — transcripts, slide content, or URLs of 2–5 competitor webinars]
 - **Webinar Format:** [YOUR ANSWER]
 - **Target Duration:** [YOUR ANSWER]
@@ -23,7 +23,9 @@
 
 ### ROLE
 
-You are an expert webinar strategist, content architect, and conversion copywriter who adapts to any industry and any offer type — service providers, product sellers, e-commerce brands, SaaS companies, clinics and practices, trades, manufacturers, distributors, retailers, membership businesses, B2B vendors, and education providers. Your task is to produce a complete, world-class webinar content package for the client we have been working on in this conversation.
+You are an expert webinar strategist, content architect, and conversion copywriter who adapts to any industry and any offer type — service providers, product sellers, e-commerce brands, SaaS companies, clinics and practices, trades, manufacturers, distributors, retailers, membership businesses, B2B vendors, and education providers. Your task is to produce a complete, world-class webinar content package for **every topic listed in Webinar Topics / Working Titles**, for the client we have been working on in this conversation.
+
+The topics have already been chosen. That input is a numbered list a human operator picked from a larger set of suggestions, each one already checked against this system's headline framework and against real search demand for this service. The list is the brief, not a starting point: build every topic on it. Do not substitute your own topic for one of theirs, do not merge two topics into one webinar, and do not pick a favourite and build only that one. If the input holds a single topic, this is a one-webinar run and everything below applies to that webinar alone.
 
 The defining feature of this webinar is that its content is built by synthesising the strongest elements from competitor webinars — then combining, elevating, and repositioning them into original, superior content for the client. The output must be better than anything a competitor has produced on this topic: deeper, more specific, better structured, and more directly aligned to the client's ICP.
 
@@ -56,6 +58,8 @@ Before analysing any competitor content, extract the following from earlier in t
 ---
 
 ### STEP 2 — COMPETITOR WEBINAR SYNTHESIS
+
+Do this **once for the whole set**, however many topics were supplied. This step analyses the market, not a topic: the same competitor webinars, the same dominant angles and the same gaps inform every webinar being built here, and repeating the analysis per topic would spend the response's budget restating it instead of writing the packages it is supposed to inform.
 
 This is the most critical step. Read all competitor webinar sources provided in the inputs. For each source, extract and document:
 
@@ -94,7 +98,26 @@ Document this synthesis strategy clearly before building the webinar content. Ev
 
 ---
 
+### STEP 2B — PLAN THE SET
+
+Do this once, after the synthesis and before building anything. Skip it only if a single topic was supplied.
+
+Several webinars built out of one shared context and one shared competitor analysis will quietly converge unless they are planned against each other — three variations on one hour is not three webinars, and the operator chose distinct topics precisely to avoid that. Produce a set plan as a table, one row per selected topic:
+
+| # | Working title | Transformation promised | ICP awareness level | Primary conversion goal | Position in the programme |
+
+Rules for the plan:
+
+- **One transformation, one webinar.** No two rows may promise the same outcome to the same awareness level. Where two selected topics do overlap, keep both and separate them — move one to a different awareness level, a different segment of the ICP, or a different stage of the same journey — and state in the plan exactly how you separated them. Two webinars competing for the same hour of the same person's calendar means one of them was built for nothing.
+- **Order by conversion proximity, then by funnel.** The webinar closest to the Primary Conversion Goal goes first, so the most valuable package is complete even if the response has to be continued. Where two are equally close, order the set so it reads as a progression from awareness to decision.
+- **Name the programme, not just the parts.** State how the set connects: which webinar an attendee is invited to next from each one, and what the follow-up email sequence of webinar N should say about webinar N+1. A set that cross-promotes is a programme; a set that doesn't is three orphans that happen to share a brand.
+- **The Format, Duration, Conversion Goal and Compliance inputs apply to every webinar**, unless a topic's own position in the programme clearly contradicts them — a top-of-funnel awareness session under a demo-booking goal, say. Where you depart from an input for a row, say so in that row and give the reason.
+
+---
+
 ### STEP 3 — WEBINAR STRATEGY & ARCHITECTURE
+
+Steps 3 through 8 run **once per webinar**, in the set plan's order. Carry each webinar through Step 8 before starting the next, so every package that gets started gets finished. Everything in these steps refers to the webinar currently being built.
 
 **3A) Strategic Rationale**
 
@@ -321,14 +344,23 @@ Table mapping each webinar section against the 5 psychological layers: Dopamine 
 
 Deliver in this order:
 
-1. **PART 1** — Competitor Webinar Synthesis Report
-2. **PART 2** — Webinar Strategy & Architecture
-3. **PART 3** — Full Webinar Script / Speaker Notes
-4. **PART 4** — Slide Deck Brief
-5. **PART 5** — Registration Page Copy (if requested)
-6. **PART 6** — Email Sequence (if requested)
-7. **PART 7** — Implementation Notes
+1. **PART 1** — Competitor Webinar Synthesis Report (Step 2 — once for the whole set)
+2. **PART 2** — The Set Plan (Step 2B — the table and the programme map). Omit only on a single-topic run.
+3. Then, for every selected topic in the plan's order, one block headed `## Webinar N — [Working Title]`, containing in this order:
+   - **Webinar Strategy & Architecture** (Step 3)
+   - **Full Webinar Script / Speaker Notes** (Step 4 — complete, presenter-ready)
+   - **Slide Deck Brief** (Step 5)
+   - **Registration Page Copy** (Step 6 — if requested)
+   - **Email Sequence** (Step 7 — if requested)
+   - **Implementation Notes** (Step 8)
+
+Each block must be independently complete and separable: a presenter opening Webinar 3 has not read Webinars 1-2, so nothing in it may refer back to another block for its content. The one place the blocks are allowed to know about each other is the cross-promotion the set plan specified — the follow-up emails naming the next webinar in the programme.
 
 Write everything in full. No section summaries in place of actual content. The script must be ready to hand to a presenter with minimal briefing. The slide brief must be ready to hand to a designer immediately. The registration page and emails must be publish-ready.
+
+Two rules that only bite when there are several, and both matter more than they look:
+
+- **One voice, different hours.** Every package carries the same brand voice, the same locked terminology, the same proof points and the same CTA vocabulary, so the programme reads as one operation. But each one teaches a different transformation to a different reader at a different awareness level.
+- **Depth is not traded for count.** Every script is written through to the target duration with real specificity: every section scripted, every slide briefed, no padding to reach a number and nothing thinned to reach the end of the list. If the set genuinely cannot be built to that standard in one response, build as many as you can to full depth and end with a single line naming exactly which topics remain. A truthful short set the operator can ask you to continue beats a full set of hollow packages.
 
 Now proceed using everything established in this conversation.

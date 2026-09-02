@@ -1,7 +1,7 @@
 """Keyword expansion and topical clustering, as a service the pipeline can call.
 
 This is `experiments/keyword_clustering/run_keyword_clustering.py` promoted into the app. The
-experiment proved the pipeline end to end against real DataForSEO data; what changes here is
+experiment proved the pipeline end to end against real DataForTopicClusttering data; what changes here is
 everything around the edges, not the logic:
 
   * No terminal. `KeywordRunConfig` is built from the run-level client profile the ICP stage has
@@ -13,7 +13,7 @@ everything around the edges, not the logic:
   * Usage is reported through the same `on_usage` callback every other calling service uses, so
     keyword spend lands in the usage panel next to generation spend instead of being invisible.
   * `KEYWORDS_PROVIDER=stub` replaces the experiment's `--dry-run` flag, so the whole feature can
-    be exercised — frontend included — without spending anything at DataForSEO.
+    be exercised — frontend included — without spending anything at DataForTopicClusttering.
 
 The Step 2 cleaning pipeline and the Step 3 validator are ported essentially verbatim. They are
 pure functions over strings, they are the part the experiment's saved output was verified against,
@@ -52,13 +52,13 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[2]  # .../application/backend
 _PROMPT_PATH = _BACKEND_ROOT / "assets" / "word_fetching_prompt" / "key_word_clusttering.txt"
 
 # The prompt's Step 4 preserves each seed's exact / phrase / related / broad keywords. Those are
-# Google-Ads match classes, and DataForSEO Labs has one endpoint per class — this is the mapping.
+# Google-Ads match classes, and DataForTopicClusttering Labs has one endpoint per class — this is the mapping.
 MATCH_CLASS_ENDPOINTS = {
-    "phrase": "dataforseo_labs/google/keyword_suggestions/live",
-    "related": "dataforseo_labs/google/related_keywords/live",
-    "broad": "dataforseo_labs/google/keyword_ideas/live",
+    "phrase": "DataForTopicClusttering_labs/google/keyword_suggestions/live",
+    "related": "DataForTopicClusttering_labs/google/related_keywords/live",
+    "broad": "DataForTopicClusttering_labs/google/keyword_ideas/live",
 }
-DATAFORSEO_BASE = "https://api.dataforseo.com/v3/"
+DataForTopicClusttering_BASE = "https://api.DataForTopicClusttering.com/v3/"
 
 MODEL = "claude-sonnet-5"
 _MAX_TOKENS = 64000
@@ -76,13 +76,13 @@ _EFFORT = "medium"
 _CACHE_TTL = "1h"
 
 # Expansion is 3 HTTP calls per seed and seeds are independent, so they go out together. Bounded
-# because DataForSEO rate-limits per account and a 12-seed run would otherwise open 36 sockets at
+# because DataForTopicClusttering rate-limits per account and a 12-seed run would otherwise open 36 sockets at
 # once against an API that answers in seconds, not milliseconds.
 _MAX_CONCURRENT_EXPANSIONS = 6
 
 
 class KeywordProviderError(RuntimeError):
-    """DataForSEO refused a request, or answered in a shape we cannot read."""
+    """DataForTopicClusttering refused a request, or answered in a shape we cannot read."""
 
 
 # ======================================================================================
@@ -131,7 +131,7 @@ class KeywordRunConfig:
 
 
 # Seeds are the service name plus the handful of phrasings a buyer actually searches for. Kept
-# deliberately small: every seed costs three DataForSEO calls, and the expansion endpoints return
+# deliberately small: every seed costs three DataForTopicClusttering calls, and the expansion endpoints return
 # the long tail anyway — a seed list is a set of *starting points*, not a keyword list.
 _SEED_SUFFIXES = ("services", "agency")
 
@@ -220,7 +220,7 @@ class RawKeyword:
 def _dig(item: dict, *paths: tuple[str, ...]) -> Any:
     """First non-None value among several nested paths.
 
-    DataForSEO nests differently per endpoint — `keyword_suggestions` wraps everything under
+    DataForTopicClusttering nests differently per endpoint — `keyword_suggestions` wraps everything under
     `keyword_data`, `keyword_ideas` sometimes returns it flat. Rather than branch per endpoint
     (and break the moment one of them changes shape), try both and take whichever answers.
     """
@@ -236,13 +236,13 @@ def _dig(item: dict, *paths: tuple[str, ...]) -> Any:
     return None
 
 
-class DataForSEOClient:
-    """Minimal async DataForSEO Labs client — just the four calls the match classes need."""
+class DataForTopicClustteringClient:
+    """Minimal async DataForTopicClusttering Labs client — just the four calls the match classes need."""
 
     def __init__(self, login: str, password: str, timeout: float = 90.0) -> None:
         token = base64.b64encode(f"{login}:{password}".encode()).decode()
         self._client = httpx.AsyncClient(
-            base_url=DATAFORSEO_BASE,
+            base_url=DataForTopicClusttering_BASE,
             headers={"Authorization": f"Basic {token}", "Content-Type": "application/json"},
             timeout=timeout,
         )
@@ -259,7 +259,7 @@ class DataForSEOClient:
         if not tasks:
             raise KeywordProviderError(f"{endpoint}: no tasks in response ({body.get('status_message')})")
         task = tasks[0]
-        # DataForSEO reports per-task failures inside a 200 response — an unknown location_name
+        # DataForTopicClusttering reports per-task failures inside a 200 response — an unknown location_name
         # arrives here, not as an HTTP error.
         if task.get("status_code") != 20000:
             raise KeywordProviderError(f"{endpoint}: {task.get('status_code')} {task.get('status_message')}")
@@ -323,7 +323,7 @@ class DataForSEOClient:
     ) -> dict[str, tuple[int | None, int | None]]:
         """Volume/difficulty for the seeds themselves — the `exact` match class."""
         items = await self._post(
-            "dataforseo_labs/google/keyword_overview/live",
+            "DataForTopicClusttering_labs/google/keyword_overview/live",
             {
                 "keywords": keywords,
                 "location_name": config.location_name,
@@ -349,7 +349,7 @@ class DataForSEOClient:
 # ======================================================================================
 # Location resolution
 #
-# `location_name` is filled from the ICP intake's free-text "region" answer, and DataForSEO Labs
+# `location_name` is filled from the ICP intake's free-text "region" answer, and DataForTopicClusttering Labs
 # accepts only names from its own list. Verified against the live API: that list holds **94 entries
 # and every one is a country**. There is no Melbourne, no Victoria, no California — not under any
 # spelling, because sub-national locations are not supported by these endpoints at all.
@@ -361,7 +361,7 @@ class DataForSEOClient:
 # matching against the real list is a guess at nothing.
 # ======================================================================================
 
-_LOCATIONS_ENDPOINT = "dataforseo_labs/locations_and_languages"
+_LOCATIONS_ENDPOINT = "DataForTopicClusttering_labs/locations_and_languages"
 
 # Cached for the process. The list is 94 country names and changes about never, so re-fetching it
 # per run would spend a request to learn the same thing.
@@ -449,7 +449,7 @@ def match_location(region: str, supported: Iterable[str]) -> str | None:
     return None
 
 
-async def supported_locations(dfs: DataForSEOClient) -> tuple[str, ...]:
+async def supported_locations(dfs: DataForTopicClustteringClient) -> tuple[str, ...]:
     """Every `location_name` the Labs endpoints accept, fetched once per process.
 
     Returns an empty tuple if the list cannot be fetched. The caller then leaves the operator's
@@ -473,7 +473,7 @@ async def supported_locations(dfs: DataForSEOClient) -> tuple[str, ...]:
         return _supported_locations
 
 
-async def resolve_location(dfs: DataForSEOClient, config: KeywordRunConfig) -> str:
+async def resolve_location(dfs: DataForTopicClustteringClient, config: KeywordRunConfig) -> str:
     """The supported location name for this run, resolved from the operator's free-text region.
 
     Resolved once, up front, so the ~12 expansion calls that follow all carry a name known to work
@@ -519,14 +519,14 @@ def provider_name() -> str:
     `stub` is the experiment's `--dry-run` promoted to configuration: it exercises the whole
     pipeline — clean, hierarchy, cluster, validate, and every piece of UI downstream of it — on
     fabricated keywords, at zero provider spend. It is also the automatic fallback when no
-    DataForSEO credentials are present, so a developer without a key gets a working pipeline
+    DataForTopicClusttering credentials are present, so a developer without a key gets a working pipeline
     rather than a 500.
     """
     configured = (os.environ.get("KEYWORDS_PROVIDER") or "").strip().lower()
-    if configured in {"stub", "dataforseo"}:
+    if configured in {"stub", "DataForTopicClusttering"}:
         return configured
-    if os.environ.get("DATAFORSEO_LOGIN") and os.environ.get("DATAFORSEO_PASSWORD"):
-        return "dataforseo"
+    if os.environ.get("DataForTopicClusttering_LOGIN") and os.environ.get("DataForTopicClusttering_PASSWORD"):
+        return "DataForTopicClusttering"
     return "stub"
 
 
@@ -553,7 +553,7 @@ def _stub_keywords(config: KeywordRunConfig) -> list[RawKeyword]:
 
 async def fetch_keywords(
     config: KeywordRunConfig,
-    dfs: DataForSEOClient | None,
+    dfs: DataForTopicClustteringClient | None,
     errors: list[str] | None = None,
 ) -> list[RawKeyword]:
     """Service -> seed -> {exact, phrase, related, broad}. Every seed is kept even when empty,
@@ -599,13 +599,13 @@ async def fetch_keywords(
             logger.warning("%s / %s / %s: no keywords returned", service, seed, match_class)
         else:
             logger.info("%s / %s / %s: %d keywords", service, seed, match_class, len(rows))
-        return [RawKeyword(kw, vol, diff, match_class, seed, service, "dataforseo") for kw, vol, diff in rows]
+        return [RawKeyword(kw, vol, diff, match_class, seed, service, "DataForTopicClusttering") for kw, vol, diff in rows]
 
     jobs = []
     for service, seeds in config.services.items():
         for seed in seeds:
             volume, difficulty = exact_metrics.get(seed.lower(), (None, None))
-            raw.append(RawKeyword(seed, volume, difficulty, "exact", seed, service, "dataforseo"))
+            raw.append(RawKeyword(seed, volume, difficulty, "exact", seed, service, "DataForTopicClusttering"))
             jobs += [one(service, seed, cls_) for cls_ in ("phrase", "related", "broad")]
 
     for batch in await asyncio.gather(*jobs):
@@ -1258,9 +1258,9 @@ class KeywordReport:
 async def build_keyword_report(config: KeywordRunConfig, on_usage: OnUsage | None = None) -> KeywordReport:
     """Fetch, clean, cluster and validate — the whole experiment, once, for one config."""
     provider = provider_name()
-    dfs: DataForSEOClient | None = None
-    if provider == "dataforseo":
-        dfs = DataForSEOClient(os.environ["DATAFORSEO_LOGIN"], os.environ["DATAFORSEO_PASSWORD"])
+    dfs: DataForTopicClustteringClient | None = None
+    if provider == "DataForTopicClusttering":
+        dfs = DataForTopicClustteringClient(os.environ["DataForTopicClusttering_LOGIN"], os.environ["DataForTopicClusttering_PASSWORD"])
 
     provider_errors: list[str] = []
     resolved_location = config.location_name
@@ -1299,7 +1299,7 @@ async def build_keyword_report(config: KeywordRunConfig, on_usage: OnUsage | Non
         # Lead with what the provider actually said. These failures are near-always one
         # configuration mistake repeated across every call — most often a `location_name` the API
         # does not recognise, because it comes straight from a free-text "region" answer in the ICP
-        # intake and DataForSEO accepts only its own location names. Reporting that sentence is the
+        # intake and DataForTopicClusttering accepts only its own location names. Reporting that sentence is the
         # difference between a one-line fix and an afternoon.
         if provider_errors:
             unique = list(dict.fromkeys(provider_errors))

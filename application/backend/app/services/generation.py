@@ -160,7 +160,14 @@ STAGE_CONFIGS: dict[str, StageConfig] = {
         SONNET,
         10000,
     ),
-    "webinar": StageConfig("webinar", "universal-webinar-prompt.md", "webinar.json", SONNET, 20000),
+    # 128k, same reason as `lead_magnet` and `blog` above: the deliverable went plural. The operator
+    # picks topics at the suggestion gate (`webinar_topic` in `app/services/headlines.py`) — around
+    # three — and Steps 3-8 run per webinar, each producing an architecture, a full presenter script,
+    # a slide brief, registration copy and an email sequence. The old 20k was sized for exactly one
+    # of those, so three would truncate mid-script after the whole response had been paid for.
+    # Step 2's competitor synthesis stays shared across the set rather than being repeated per
+    # topic, which is what keeps three packages inside one response at all.
+    "webinar": StageConfig("webinar", "universal-webinar-prompt.md", "webinar.json", SONNET, 128000),
     # effort=None on the three Haiku stages: `output_config.effort` is rejected on Haiku 4.5, so
     # sending it would turn a working stage into a 400. See `EFFORT_CAPABLE_MODELS`.
     "book": StageConfig("book", "Webinar-to-Book-Architect-Prompt.md", "book.json", HAIKU, 20000, effort=None),

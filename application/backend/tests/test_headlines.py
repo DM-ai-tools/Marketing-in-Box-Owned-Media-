@@ -138,8 +138,12 @@ def test_the_slot_table_is_readable_without_a_model_call() -> None:
     assert by_slot.keys() == set(H.SLOTS)
     assert by_slot["blog_topic"]["multi"] is True
     assert by_slot["blog_topic"]["suggested_selection"] == H.slot_config("blog_topic").suggested_selection
-    # The single-select slots must not be swept along with it.
-    assert by_slot["webinar_topic"]["multi"] is False
+    # A webinar is a programme, not one hour, so this slot is multi-select too — and its own
+    # suggested figure has to travel, because it is three where the blog's is five.
+    assert by_slot["webinar_topic"]["multi"] is True
+    assert by_slot["webinar_topic"]["suggested_selection"] == 3
+    # The single-select slots must not be swept along with them.
+    assert by_slot["book_topic"]["multi"] is False
 
 
 def test_unknown_slot_raises() -> None:
@@ -298,11 +302,29 @@ def test_already_rejected_headlines_are_not_offered_again(context: H.HeadlineCon
         context.exclude = []
 
 
+def test_a_repeat_wearing_different_punctuation_is_still_a_repeat(context: H.HeadlineContext) -> None:
+    """Round two returning round one with a colon and a capital letter changed is not a new topic."""
+    context.exclude = ["What Your Agency Won't Tell You About Social Media Marketing Pricing"]
+    try:
+        kept, rejected = H.ground_candidates(
+            [_candidate("what your agency won't tell you about social media marketing pricing?")],
+            H.slot_config("blog_topic"),
+            context,
+            10,
+        )
+        assert kept == []
+        assert any("duplicate" in r["reason"] for r in rejected)
+    finally:
+        context.exclude = []
+
+
 def test_duplicates_within_one_batch_collapse(context: H.HeadlineContext) -> None:
     kept, _rejected = H.ground_candidates(
         [
             _candidate("Social Media Marketing Pricing, Benchmarked"),
             _candidate("social media marketing pricing, benchmarked"),
+            # Punctuation is not an angle either: this is the third wording of one topic.
+            _candidate("Social media marketing pricing - benchmarked!"),
         ],
         H.slot_config("blog_topic"),
         context,
@@ -368,10 +390,22 @@ def test_framework_is_loaded_and_carries_its_real_character_limits() -> None:
 
 
 def test_single_select_renders_as_a_bare_line() -> None:
-    """`webinar_topic_working_title` has always been one line of text and the master prompt reads
-    it as one — a numbered list would change what the prompt receives."""
-    rendered = H.render_selection(H.slot_config("webinar_topic"), [{"headline": "A Real Title"}])
+    """`book_topic_working_title` is one line of text and the master prompt reads it as one — a
+    numbered list would change what the prompt receives."""
+    rendered = H.render_selection(H.slot_config("book_topic"), [{"headline": "A Real Title"}])
     assert rendered == "A Real Title"
+
+
+def test_a_webinar_programme_renders_as_a_list() -> None:
+    """One pick or three, the webinar prompt now reads its topic input as a numbered list and
+    builds a package per line — so a bare line arriving there is how "build every one of these"
+    quietly becomes "build this"."""
+    rendered = H.render_selection(
+        H.slot_config("webinar_topic"),
+        [{"headline": "Cut Your Ad Spend in 30 Days"}, {"headline": "Why Your Funnel Leaks at Step 3"}],
+    )
+    assert rendered.startswith("1. Cut Your Ad Spend in 30 Days")
+    assert "2. Why Your Funnel Leaks at Step 3" in rendered
 
 
 def test_a_multi_slot_numbers_even_a_single_pick() -> None:

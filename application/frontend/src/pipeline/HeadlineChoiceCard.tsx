@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { motion } from "framer-motion";
 import { FieldHint } from "../components/FieldHint";
 import { HeadlineSearchProgress } from "./HeadlineSearchProgress";
@@ -42,6 +42,10 @@ export function HeadlineChoiceCard({ message }: { message: PipelineMessage }) {
   // Not memoised on purpose: this sits below the `!state` early return, so a `useMemo` here would
   // be a conditional hook. It filters at most a couple of dozen rows.
   const chosen = candidates.filter((c) => (state.chosenIds ?? []).includes(c.id));
+
+  // The index the most recent re-roll's rows start at, or -1 when there is no boundary to draw:
+  // a first batch, or a re-roll that added nothing.
+  const newBatchFrom = state.lastAdded ? candidates.length - state.lastAdded : -1;
 
   function toggle(id: string) {
     if (busy) return;
@@ -184,18 +188,38 @@ export function HeadlineChoiceCard({ message }: { message: PipelineMessage }) {
           )}
 
           <ul className="mt-2 space-y-1.5" style={state.reloading ? { opacity: 0.55 } : undefined}>
-            {candidates.map((candidate) => (
-              <CandidateRow
-                key={candidate.id}
-                candidate={candidate}
-                selected={picked.includes(candidate.id)}
-                multi={multi}
-                expanded={expanded === candidate.id}
-                onToggle={() => toggle(candidate.id)}
-                onExpand={() => setExpanded(expanded === candidate.id ? null : candidate.id)}
-              />
+            {candidates.map((candidate, index) => (
+              <Fragment key={candidate.id}>
+                {/* Where the latest batch starts. The list grows rather than being replaced, so
+                    without this the operator gets a longer list and has to work out by reading
+                    which rows are the ones they just asked for. */}
+                {index === newBatchFrom && (
+                  <li aria-hidden className="flex items-center gap-2 pt-1.5 text-[0.68rem] text-[var(--fg-faint)]">
+                    <span className="h-px flex-1 bg-[var(--border)]" />
+                    {state.lastAdded} more
+                    <span className="h-px flex-1 bg-[var(--border)]" />
+                  </li>
+                )}
+                <CandidateRow
+                  candidate={candidate}
+                  selected={picked.includes(candidate.id)}
+                  multi={multi}
+                  expanded={expanded === candidate.id}
+                  onToggle={() => toggle(candidate.id)}
+                  onExpand={() => setExpanded(expanded === candidate.id ? null : candidate.id)}
+                />
+              </Fragment>
             ))}
           </ul>
+
+          {/* The one outcome of a re-roll that needs saying: it came back with nothing this gate
+              had not already offered. Silence there reads as a broken button. */}
+          {state.lastAdded === 0 && !state.reloading && (
+            <p className="mt-1.5 text-[0.7rem] text-[var(--fg-faint)]">
+              That batch came back with nothing new — these {candidates.length} look to be the
+              angles this run's keywords support. Write your own below if none of them fit.
+            </p>
+          )}
 
           {/* Said plainly rather than hidden: a short batch is the anchor filter working, and an
               operator who sees eight where ten were promised should know why. */}

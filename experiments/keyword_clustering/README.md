@@ -22,7 +22,7 @@ per match class.
 
 | Flag | What it does |
 |---|---|
-| `--dry-run` | Stub keywords instead of DataForSEO. No provider spend. |
+| `--dry-run` | Stub keywords instead of DataForTopicClusttering. No provider spend. |
 | `--no-llm` | Fetch + clean + write the keyword set, skip the Claude call. |
 | `--save-config run.json` | Save this run's answers. |
 | `--config run.json` | Reuse them instead of retyping. |
@@ -37,7 +37,7 @@ Cheapest first loop — no spend at all:
 
 ## What it actually does
 
-1. **Fetch.** Each seed is expanded through DataForSEO Labs, one endpoint per match class the
+1. **Fetch.** Each seed is expanded through DataForTopicClusttering Labs, one endpoint per match class the
    prompt's Step 4 requires: `exact` (the seed's own metrics via `keyword_overview`), `phrase`
    (`keyword_suggestions`), `related` (`related_keywords`), `broad` (`keyword_ideas`).
    Ahrefs is an optional difficulty overlay — its v3 keyword endpoints are plan-gated, so a
@@ -69,7 +69,7 @@ aspirational.
 
 ## Known rough edges
 
-- `location_name` is passed to DataForSEO verbatim. An unknown one comes back as a per-task error
+- `location_name` is passed to DataForTopicClusttering verbatim. An unknown one comes back as a per-task error
   inside an HTTP 200; the message is printed. Use e.g. `Australia` or
   `Melbourne,Victoria,Australia`.
 - Relevance is token-overlap against your service and seed words. Broad services keep more; narrow

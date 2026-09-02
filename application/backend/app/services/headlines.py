@@ -215,9 +215,25 @@ SLOTS: dict[str, SlotConfig] = {
         subject="webinar",
         channel="Landing page headline",
         char_budget="60-80 characters",
+        # Plural for the same reason `blog_topic` is: a business runs a programme of webinars, not
+        # one. Single-select made the operator re-enter the whole stage for a second one, paying
+        # again for the same ICP, competitor synthesis and keyword context to get it — and the
+        # competitor synthesis is the expensive half, which is shared across every topic in a set
+        # rather than being per-topic work.
+        multi=True,
+        # Three, against the blog's five and the lead magnet's ten, because a pick here is not a
+        # title — it is a script, a slide brief, a registration page and an email sequence. Three
+        # is a quarter's programme and about what one response carries to full depth. The card
+        # states it as guidance; the operator can take more.
+        suggested_selection=3,
         guidance=(
             "A webinar title has to promise a transformation worth an hour of someone's calendar. "
-            "Lead with the outcome and the timeframe; a topic that reads like a syllabus fails."
+            "Lead with the outcome and the timeframe; a topic that reads like a syllabus fails. "
+            "The operator picks several and every pick is built as its own full package, so this "
+            "is a programme rather than a shortlist for one slot: no two candidates may promise "
+            "the same transformation to the same awareness level, and the set should span the "
+            "funnel so an attendee has a reason to come back for the next one instead of choosing "
+            "between near-identical hours."
         ),
     ),
     "podcast_episode_topic": SlotConfig(
@@ -755,7 +771,11 @@ def build_headline_prompt(cfg: SlotConfig, count: int, context: HeadlineContext)
         parts += ["", f"FOR THIS SLOT SPECIFICALLY: {cfg.guidance}"]
 
     if context.exclude:
-        rejected = "\n".join(f"  - {line}" for line in context.exclude[:40])
+        # The *most recent* sixty, not the first sixty. The list only grows — every re-roll
+        # appends the batch it just showed — and truncating from the front is what would let
+        # round one back in on round seven, which is precisely the repeat the operator is
+        # clicking away from.
+        rejected = "\n".join(f"  - {line}" for line in context.exclude[-60:])
         parts += [
             "",
             "ALREADY REJECTED — the operator has seen these and did not want them. Do not repeat "
@@ -979,6 +999,19 @@ def _coerce_candidate(raw: dict, index: int, cfg: SlotConfig) -> Candidate | Non
     )
 
 
+def _dedupe_key(headline: str) -> str:
+    """What counts as "the same headline already offered".
+
+    Not a bare `.lower()`. A re-roll's job is to produce topics the operator has not seen, and a
+    model handed "do not repeat these" will happily return round one with the capitalisation
+    changed, a colon swapped for a dash, or a question mark added. Those are the same topic. So the
+    key drops everything but letters, digits and single spaces before comparing, which makes
+    "How to Price Social Media Marketing?" and "How to price social media marketing" one entry
+    rather than two.
+    """
+    return re.sub(r"[^a-z0-9]+", " ", headline.lower()).strip()
+
+
 def ground_candidates(
     raw_candidates: list[dict],
     cfg: SlotConfig,
@@ -999,7 +1032,7 @@ def ground_candidates(
     vocabulary_matches_anchor = context.keyword_service_matches_anchor()
     index = _keyword_index(context)
     limit = _char_limit(cfg)
-    already = {h.strip().lower() for h in context.exclude}
+    already = {_dedupe_key(h) for h in context.exclude if _dedupe_key(h)}
 
     kept: list[Candidate] = []
     rejected: list[dict] = []
@@ -1012,7 +1045,7 @@ def ground_candidates(
         if candidate is None:
             continue
 
-        normalized = candidate.headline.strip().lower()
+        normalized = _dedupe_key(candidate.headline)
         if normalized in seen or normalized in already:
             rejected.append({"headline": candidate.headline, "reason": "duplicate of one already offered"})
             continue

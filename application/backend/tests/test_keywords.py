@@ -70,7 +70,7 @@ def test_keyword_context_keys_are_phase_scoped() -> None:
 def test_fingerprint_changes_with_region_and_service() -> None:
     """What decides whether a stored report is reused.
 
-    Region is in here because DataForSEO volumes are per-location: the same service in a different
+    Region is in here because DataForTopicClusttering volumes are per-location: the same service in a different
     market is a different keyword set, and reusing one for the other would be invisible.
     """
     base = K.config_from_profile(PROFILE, "phase1").fingerprint()
@@ -238,16 +238,16 @@ def test_validation_never_invents_metrics_for_an_ungrounded_keyword() -> None:
 @pytest.mark.parametrize("value", ["stub", "STUB", " stub "])
 def test_provider_can_be_forced_to_stub(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     monkeypatch.setenv("KEYWORDS_PROVIDER", value)
-    monkeypatch.setenv("DATAFORSEO_LOGIN", "x")
-    monkeypatch.setenv("DATAFORSEO_PASSWORD", "y")
+    monkeypatch.setenv("DataForTopicClusttering_LOGIN", "x")
+    monkeypatch.setenv("DataForTopicClusttering_PASSWORD", "y")
     assert K.provider_name() == "stub"
 
 
 def test_provider_falls_back_to_stub_without_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A developer with no DataForSEO key gets a working pipeline, not a 500."""
+    """A developer with no DataForTopicClusttering key gets a working pipeline, not a 500."""
     monkeypatch.delenv("KEYWORDS_PROVIDER", raising=False)
-    monkeypatch.delenv("DATAFORSEO_LOGIN", raising=False)
-    monkeypatch.delenv("DATAFORSEO_PASSWORD", raising=False)
+    monkeypatch.delenv("DataForTopicClusttering_LOGIN", raising=False)
+    monkeypatch.delenv("DataForTopicClusttering_PASSWORD", raising=False)
     assert K.provider_name() == "stub"
 
 
@@ -271,7 +271,7 @@ def test_a_seed_only_result_is_rejected_rather_than_clustered() -> None:
     """
     config = K.config_from_profile(PROFILE, "phase1")
     seeds_only = [
-        K.RawKeyword(seed, 320, 24, "exact", seed, "Social Media Marketing", "dataforseo")
+        K.RawKeyword(seed, 320, 24, "exact", seed, "Social Media Marketing", "DataForTopicClusttering")
         for seed in config.services["Social Media Marketing"]
     ]
 
@@ -296,13 +296,13 @@ def test_a_seed_only_result_is_rejected_rather_than_clustered() -> None:
 def test_the_providers_own_error_leads_the_message() -> None:
     """When every call failed for the same stated reason, that sentence IS the diagnosis.
 
-    A `location_name` DataForSEO does not recognise is the common case — the value comes straight
+    A `location_name` DataForTopicClusttering does not recognise is the common case — the value comes straight
     from a free-text "region" answer in the ICP intake — and burying "Invalid Field: 'location_name'"
     in the log while telling the operator to "check the credentials" sends them the wrong way.
     """
     config = K.config_from_profile(PROFILE, "phase1")
     seeds_only = [
-        K.RawKeyword(seed, None, None, "exact", seed, "Social Media Marketing", "dataforseo")
+        K.RawKeyword(seed, None, None, "exact", seed, "Social Media Marketing", "DataForTopicClusttering")
         for seed in config.services["Social Media Marketing"]
     ]
 
@@ -335,7 +335,7 @@ def test_a_normal_result_passes_the_seed_only_guard() -> None:
 # Location resolution
 #
 # `location_name` is filled from the ICP intake's free-text "region" answer. Verified against the
-# live API: DataForSEO Labs supports 94 locations and **every one is a country** — there is no
+# live API: DataForTopicClusttering Labs supports 94 locations and **every one is a country** — there is no
 # Melbourne, no Victoria, no California, at any spelling.
 #
 # That is why this is a lookup and not string surgery. The first version here split on commas and

@@ -3,7 +3,7 @@
 
 Runs the prompt at `application/backend/assets/word_fetching_prompt/key_word_clusttering.txt`
 end to end: asks for the business context in the terminal, expands each seed into real keywords
-through DataForSEO (optionally enriched by Ahrefs), runs the prompt's Step 2 cleaning pipeline in
+through DataForTopicClusttering (optionally enriched by Ahrefs), runs the prompt's Step 2 cleaning pipeline in
 Python, hands the *cleaned* set to Claude for clustering, then enforces the prompt's Step 3
 validation on what comes back.
 
@@ -52,13 +52,13 @@ DEFAULT_PROMPT = (
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 # The prompt's Step 4 preserves each seed's exact / phrase / related / broad keywords. Those are
-# Google-Ads match classes, and DataForSEO Labs has one endpoint per class — this is the mapping.
+# Google-Ads match classes, and DataForTopicClusttering Labs has one endpoint per class — this is the mapping.
 MATCH_CLASS_ENDPOINTS = {
-    "phrase": "dataforseo_labs/google/keyword_suggestions/live",
-    "related": "dataforseo_labs/google/related_keywords/live",
-    "broad": "dataforseo_labs/google/keyword_ideas/live",
+    "phrase": "DataForTopicClusttering_labs/google/keyword_suggestions/live",
+    "related": "DataForTopicClusttering_labs/google/related_keywords/live",
+    "broad": "DataForTopicClusttering_labs/google/keyword_ideas/live",
 }
-DATAFORSEO_BASE = "https://api.dataforseo.com/v3/"
+DataForTopicClusttering_BASE = "https://api.DataForTopicClusttering.com/v3/"
 AHREFS_BASE = "https://api.ahrefs.com/v3/"
 
 MODEL = "claude-opus-5"
@@ -121,7 +121,7 @@ class RunConfig:
         business_name = ask("Business / brand name", required=True)
         website = ask("Website URL (optional)")
         location_name = ask(
-            "Location (DataForSEO location_name, e.g. 'Australia' or 'Melbourne,Victoria,Australia')",
+            "Location (DataForTopicClusttering location_name, e.g. 'Australia' or 'Melbourne,Victoria,Australia')",
             default="Australia",
         )
         language_name = ask("Language", default="English")
@@ -176,7 +176,7 @@ class RawKeyword:
 def _dig(item: dict, *paths: tuple[str, ...]) -> Any:
     """First non-None value among several nested paths.
 
-    DataForSEO nests differently per endpoint — `keyword_suggestions` wraps everything under
+    DataForTopicClusttering nests differently per endpoint — `keyword_suggestions` wraps everything under
     `keyword_data`, `keyword_ideas` sometimes returns it flat. Rather than branch per endpoint
     (and break the moment one of them changes shape), try both and take whichever answers.
     """
@@ -192,15 +192,15 @@ def _dig(item: dict, *paths: tuple[str, ...]) -> Any:
     return None
 
 
-class DataForSEOClient:
-    """Minimal DataForSEO Labs client — just the four calls the match classes need."""
+class DataForTopicClustteringClient:
+    """Minimal DataForTopicClusttering Labs client — just the four calls the match classes need."""
 
     def __init__(self, login: str, password: str, timeout: float = 90.0) -> None:
         import httpx
 
         token = base64.b64encode(f"{login}:{password}".encode()).decode()
         self._client = httpx.Client(
-            base_url=DATAFORSEO_BASE,
+            base_url=DataForTopicClusttering_BASE,
             headers={"Authorization": f"Basic {token}", "Content-Type": "application/json"},
             timeout=timeout,
         )
@@ -217,7 +217,7 @@ class DataForSEOClient:
         if not tasks:
             raise RuntimeError(f"{endpoint}: no tasks in response ({body.get('status_message')})")
         task = tasks[0]
-        # DataForSEO reports per-task failures inside a 200 response — an unknown location_name
+        # DataForTopicClusttering reports per-task failures inside a 200 response — an unknown location_name
         # arrives here, not as an HTTP error.
         if task.get("status_code") != 20000:
             raise RuntimeError(
@@ -267,7 +267,7 @@ class DataForSEOClient:
     def overview(self, keywords: list[str], config: RunConfig) -> dict[str, tuple[int | None, int | None]]:
         """Volume/difficulty for the seeds themselves — the `exact` match class."""
         items = self._post(
-            "dataforseo_labs/google/keyword_overview/live",
+            "DataForTopicClusttering_labs/google/keyword_overview/live",
             {
                 "keywords": keywords,
                 "location_name": config.location_name,
@@ -294,7 +294,7 @@ class AhrefsClient:
     """Optional difficulty enrichment.
 
     Ahrefs' v3 keyword endpoints are plan-gated, so every failure here is treated as "not
-    available on this key" and reported once rather than aborting the run — the DataForSEO
+    available on this key" and reported once rather than aborting the run — the DataForTopicClusttering
     numbers are already enough to cluster on.
     """
 
@@ -330,7 +330,7 @@ class AhrefsClient:
         return out
 
 
-def fetch_keywords(config: RunConfig, dfs: DataForSEOClient | None) -> list[RawKeyword]:
+def fetch_keywords(config: RunConfig, dfs: DataForTopicClustteringClient | None) -> list[RawKeyword]:
     """Service -> seed -> {exact, phrase, related, broad}. Every seed is kept even when empty,
     per the prompt's "Keep every seed in the service hierarchy even if its extracted keyword
     lists are empty"."""
@@ -364,7 +364,7 @@ def fetch_keywords(config: RunConfig, dfs: DataForSEOClient | None) -> list[RawK
     for service, seeds in config.services.items():
         for seed in seeds:
             volume, difficulty = exact_metrics.get(seed.lower(), (None, None))
-            raw.append(RawKeyword(seed, volume, difficulty, "exact", seed, service, "dataforseo"))
+            raw.append(RawKeyword(seed, volume, difficulty, "exact", seed, service, "DataForTopicClusttering"))
 
             for match_class in ("phrase", "related", "broad"):
                 try:
@@ -375,7 +375,7 @@ def fetch_keywords(config: RunConfig, dfs: DataForSEOClient | None) -> list[RawK
                 print(f"  {service} / {seed} / {match_class}: {len(rows)} keywords")
                 for keyword, vol, diff in rows:
                     raw.append(
-                        RawKeyword(keyword, vol, diff, match_class, seed, service, "dataforseo")
+                        RawKeyword(keyword, vol, diff, match_class, seed, service, "DataForTopicClusttering")
                     )
     return raw
 
@@ -717,7 +717,7 @@ def cluster_with_claude(
         carries its parent topic. Treat this as the Final Clean Keyword Set — do not re-clean it,
         and do not introduce keywords that are not in it.
 
-        Every volume and difficulty below came from DataForSEO. Use those numbers only; where a
+        Every volume and difficulty below came from DataForTopicClusttering. Use those numbers only; where a
         value is null, leave it null rather than estimating it.
 
         Return ONE JSON object in the "Structured JSON" shape defined in your instructions —
@@ -948,14 +948,14 @@ def main() -> int:
         print(f"Saved answers to {args.save_config}")
 
     # --- fetch -----------------------------------------------------------------------
-    dfs: DataForSEOClient | None = None
+    dfs: DataForTopicClustteringClient | None = None
     if not args.dry_run:
-        login = os.environ.get("DATAFORSEO_LOGIN")
-        password = os.environ.get("DATAFORSEO_PASSWORD")
+        login = os.environ.get("DataForTopicClusttering_LOGIN")
+        password = os.environ.get("DataForTopicClusttering_PASSWORD")
         if not login or not password:
-            print("DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD missing — use --dry-run to test the pipeline.")
+            print("DataForTopicClusttering_LOGIN / DataForTopicClusttering_PASSWORD missing — use --dry-run to test the pipeline.")
             return 1
-        dfs = DataForSEOClient(login, password)
+        dfs = DataForTopicClustteringClient(login, password)
 
     print("\nExpanding seeds…")
     try:

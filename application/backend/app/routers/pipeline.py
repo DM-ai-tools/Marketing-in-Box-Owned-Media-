@@ -758,7 +758,7 @@ async def get_run_context(run_id: str, context_key: str) -> RunContextResponse:
 # every later headline suggestion is grounded in, so it behaves like `_run_competitor_prepass` —
 # it runs, it reports a status, and its output is filed to the Context Store.
 #
-# Deliberately per-run rather than per-stage. One clustering pass costs real money at DataForSEO
+# Deliberately per-run rather than per-stage. One clustering pass costs real money at DataForTopicClusttering
 # (three calls per seed) and, more importantly, running it per stage would give the blog and the
 # pillar page *different* keyword universes for the same service — so the topics chosen at one
 # stage would stop lining up with the topics chosen at the next.

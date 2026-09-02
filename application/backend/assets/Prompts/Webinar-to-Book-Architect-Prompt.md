@@ -86,6 +86,15 @@ F) Attribution and Compliance
 If the Source Transcript is missing entirely, ask up to 3 questions before proceeding — this prompt
 cannot function without real source material. Otherwise proceed immediately.
 
+If the Source Transcript carries **more than one webinar package** — the Webinar stage is multi-select
+and its output is a programme, one block per webinar headed `## Webinar N — [Title]` — this book is
+built from exactly one of them, not from all of them merged. Use the one named in Additional Notes; if
+none is named, use Webinar 1, which the webinar set plan orders as the package closest to the
+conversion goal. State at the top of the output which webinar the book was built from, so an operator
+who wanted a different one knows to re-run this stage rather than discovering it in chapter four.
+Merging several webinars into one book is the one thing not to do: they were deliberately written for
+different transformations at different awareness levels, and a book that averages them has no reader.
+
 # STEP 1 — SOURCE CONTENT EXTRACTION
 
 Before designing the book, produce a structured extraction of the source transcript:

@@ -190,6 +190,10 @@ export interface HeadlineChoiceState {
   rejectedCount?: number;
   /** Every headline offered so far in this gate, so a re-roll can exclude all of them. */
   rejected?: string[];
+  /** How many rows the last re-roll actually added, after duplicates of what is already on screen
+   * were dropped. Zero is the one value worth rendering: the operator clicked, waited, and the list
+   * did not change, and a card that says nothing there looks broken rather than exhausted. */
+  lastAdded?: number;
   chosenIds?: string[];
   /** Set when the operator wrote their own instead of picking one. */
   ownHeadline?: string;
@@ -1385,6 +1389,44 @@ function stringAnswers(answers: Record<string, unknown> | undefined): Record<str
  */
 const headlineRequests = new Map<string, AbortController>();
 
+/** The rows a new batch adds to the ones already on screen: new topics only, re-keyed so no two
+ * rows in the merged list share an id.
+ *
+ * Both halves are load-bearing. The backend numbers each batch `c1..cN` from scratch, so appending
+ * one verbatim would put two `c3`s in the list — and every id here is a selection handle
+ * (`picked`, `chosenIds`) and a React key, so a collision means clicking one row highlights two and
+ * "Use this one" can build the wrong topic.
+ *
+ * The duplicate filter is a second line rather than the first: `ground_candidates` on the backend
+ * already drops anything matching the `exclude` list it was handed. This catches what that cannot —
+ * a batch that repeats itself, and the window where a re-roll was requested before the previous
+ * one landed, so the exclude list it went out with was a round behind. Comparison is on the same
+ * key the backend uses: letters and digits only, so a repeat wearing different punctuation is
+ * still a repeat.
+ */
+function headlineKey(headline: string): string {
+  return headline.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function mergeCandidates(kept: HeadlineCandidate[], incoming: HeadlineCandidate[]): HeadlineCandidate[] {
+  const seen = new Set(kept.map((c) => headlineKey(c.headline)));
+  const usedIds = new Set(kept.map((c) => c.id));
+  const added: HeadlineCandidate[] = [];
+
+  for (const candidate of incoming) {
+    const key = headlineKey(candidate.headline);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+
+    let id = candidate.id;
+    let n = kept.length + added.length + 1;
+    while (!id || usedIds.has(id)) id = `c${n++}`;
+    usedIds.add(id);
+    added.push({ ...candidate, id });
+  }
+  return added;
+}
+
 /** How long a suggestion call may run before the card gives up on it.
  *
  * Generous, because the honest ceiling is high: a web search plus ten candidates against a 45KB
@@ -1440,6 +1482,15 @@ async function loadHeadlineSuggestions(
     });
 
     const current = liveMessage(get(), messageId)?.headlines ?? state;
+    // "Show me 10 more" means *more*, so a re-roll appends its batch below the batch already on
+    // screen instead of replacing it. Replacing was the old behaviour and it threw away topics the
+    // operator had just been reading — including, often, the one they were about to pick, with no
+    // way back to it short of re-rolling until it happened to reappear.
+    //
+    // A first load (and a retry after a failure) still starts from empty: there is nothing to keep,
+    // and a retry appending to a batch that errored would double it.
+    const kept = opts.reroll ? (current.candidates ?? []) : [];
+    const added = mergeCandidates(kept, result.candidates);
     patchMessage(get, set, messageId, {
       headlines: {
         ...current,
@@ -1453,11 +1504,17 @@ async function loadHeadlineSuggestions(
         charBudget: result.char_budget,
         multi: result.multi,
         suggestedSelection: result.suggested_selection,
-        candidates: result.candidates,
+        candidates: [...kept, ...added],
         groundedInKeywords: result.grounded_in_keywords,
         webSearchUsed: result.web_search_used,
-        rejectedCount: result.rejected_count,
+        // Accumulated across rounds for the same reason the list is: the line under the list counts
+        // everything this gate dropped for being off-anchor, not just whatever the last call did.
+        rejectedCount: (opts.reroll ? (current.rejectedCount ?? 0) : 0) + result.rejected_count,
+        // Everything *offered*, including any row the merge just dropped as a near-duplicate — the
+        // point of the list is that the next call never proposes it again, and a headline the
+        // backend returned twice is exactly one it needs telling about.
         rejected: [...alreadyOffered, ...result.candidates.map((c) => c.headline)],
+        lastAdded: opts.reroll ? added.length : undefined,
         chosenIds: undefined,
         error: undefined,
       },

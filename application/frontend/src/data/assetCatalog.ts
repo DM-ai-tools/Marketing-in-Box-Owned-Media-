@@ -989,13 +989,14 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     asset_id: "webinar",
     label: "Webinar",
     category: "Long-form",
-    description: "Full webinar package synthesised from competitor webinars plus established brand voice — slides, script, and follow-up emails.",
+    description: "Full webinar packages — one per topic chosen — synthesised from competitor webinars plus established brand voice, each with slides, script, and follow-up emails.",
     live: false,
     writesContextKeys: ["webinar_script"],
     pairedCompetitorAssetId: "competitor_analysis_webinars",
     fields: [
-      topic("webinar_topic_working_title", "Webinar Topic / Working Title", "webinar_topic", {
-        helpText: "The promise, not the final title — what makes someone give up an hour.",
+      topic("webinar_topic_working_title", "Webinar Topics / Working Titles", "webinar_topic", {
+        helpText:
+          "The promise, not the final title — what makes someone give up an hour. Pick every webinar you want built; each one becomes its own package with a script, slide brief, registration page and email sequence. Around three is a quarter's programme.",
         placeholder: "e.g. What agencies don't tell you about pricing, lock-in contracts, and reporting",
       }),
       file("competitor_webinar_sources", "Competitor Webinar Sources", {
