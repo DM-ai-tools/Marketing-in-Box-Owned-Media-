@@ -142,8 +142,10 @@ def test_the_slot_table_is_readable_without_a_model_call() -> None:
     # suggested figure has to travel, because it is three where the blog's is five.
     assert by_slot["webinar_topic"]["multi"] is True
     assert by_slot["webinar_topic"]["suggested_selection"] == 3
+    # The book stage went plural with the webinar programme that feeds it.
+    assert by_slot["book_topic"]["multi"] is True
     # The single-select slots must not be swept along with them.
-    assert by_slot["book_topic"]["multi"] is False
+    assert by_slot["pillar_head_term"]["multi"] is False
 
 
 def test_unknown_slot_raises() -> None:
@@ -390,9 +392,9 @@ def test_framework_is_loaded_and_carries_its_real_character_limits() -> None:
 
 
 def test_single_select_renders_as_a_bare_line() -> None:
-    """`book_topic_working_title` is one line of text and the master prompt reads it as one — a
+    """`primary_keyword_head_term` is one line of text and the master prompt reads it as one — a
     numbered list would change what the prompt receives."""
-    rendered = H.render_selection(H.slot_config("book_topic"), [{"headline": "A Real Title"}])
+    rendered = H.render_selection(H.slot_config("pillar_head_term"), [{"headline": "A Real Title"}])
     assert rendered == "A Real Title"
 
 

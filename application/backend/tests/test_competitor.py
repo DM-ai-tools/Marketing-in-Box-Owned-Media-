@@ -19,10 +19,13 @@ from app.services.competitor import (
     COMPETITOR_CONFIGS,
     GATED_COMPETITOR_MAIN_ASSET_IDS,
     PREPASS_BY_MAIN_ASSET,
+    SONNET,
     CompetitorParseError,
+    _effort,
     config_for,
     parse_analysis,
     resolve_inputs,
+    resolve_model,
     to_prompt_text,
 )
 
@@ -231,3 +234,55 @@ def test_an_empty_topic_still_falls_back_to_the_run_profile():
         {"website_url": "https://acme.com.au", "industry": "Digital marketing"},
     )
     assert resolved["niche"] == "Digital marketing"
+
+
+# --------------------------------------------------------------------------------------
+# Model and effort resolution
+#
+# These are the two knobs an operator turns to measure this stage's cost against `api_usage`, and
+# both are read from the environment at call time. What is worth pinning is not that they read an
+# env var but that the *combination* is safe: `output_config.effort` is a 400 on Haiku 4.5 rather
+# than a no-op, so a `COMPETITOR_MODEL` experiment must not carry the default effort along with it.
+# --------------------------------------------------------------------------------------
+
+
+def test_the_default_is_sonnet_at_medium_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset means Sonnet 5 with effort sent — the call used to send no `output_config` at all,
+    which meant the API default of `high` by omission."""
+    monkeypatch.delenv("COMPETITOR_MODEL", raising=False)
+    monkeypatch.delenv("COMPETITOR_EFFORT", raising=False)
+    assert resolve_model() == SONNET
+    assert _effort(resolve_model()) == "medium"
+
+
+def test_the_model_override_is_read_at_call_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COMPETITOR_MODEL", "claude-opus-5")
+    assert resolve_model() == "claude-opus-5"
+    # Still effort-capable, so the saving is not silently dropped when the arm changes.
+    assert _effort(resolve_model()) == "medium"
+
+
+def test_effort_is_withheld_from_a_model_that_rejects_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The whole point of the gate. Haiku 4.5 answers `output_config.effort` with a 400, so sending
+    the default alongside a Haiku override would fail all ten stages and read as a verdict on the
+    model rather than on the request."""
+    monkeypatch.setenv("COMPETITOR_MODEL", "claude-haiku-4-5")
+    monkeypatch.setenv("COMPETITOR_EFFORT", "medium")
+    assert _effort(resolve_model()) is None
+
+
+def test_effort_can_be_switched_off_for_a_control_arm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`none` has to mean "send no `output_config`", because that is the arm every effort
+    measurement is compared against."""
+    monkeypatch.delenv("COMPETITOR_MODEL", raising=False)
+    monkeypatch.setenv("COMPETITOR_EFFORT", "none")
+    assert _effort(resolve_model()) is None
+
+
+def test_an_unrecognised_effort_level_falls_back_rather_than_reaching_the_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A typo should cost a log line, not a 400 on ten stages."""
+    monkeypatch.delenv("COMPETITOR_MODEL", raising=False)
+    monkeypatch.setenv("COMPETITOR_EFFORT", "meduim")
+    assert _effort(resolve_model()) == "medium"

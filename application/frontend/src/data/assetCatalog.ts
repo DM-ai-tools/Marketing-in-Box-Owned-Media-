@@ -1036,7 +1036,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     asset_id: "book",
     label: "Book (from Webinar)",
     category: "Long-form",
-    description: "Converts a delivered webinar transcript into a lead-magnet ebook, full-length book, or workbook.",
+    description: "Converts delivered webinar transcripts into lead-magnet ebooks, full-length books, or workbooks — one manuscript per topic chosen.",
     live: false,
     writesContextKeys: ["book"],
     pairedCompetitorAssetId: "competitor_analysis_book",
@@ -1046,11 +1046,13 @@ export const ASSET_CATALOG: AssetDefinition[] = [
       txt("industry_niche", "Industry / Niche"),
       txt("region_country", "Region / Country"),
       ctx("source_transcript_recording", "Source Transcript / Recording", "webinar_script", {
-        helpText: 'Mandatory — or say "no transcript — build from outline/bullet points" and supply those in Additional Notes.',
+        helpText:
+          'Mandatory — or say "no transcript — build from outline/bullet points" and supply those in Additional Notes. Where the webinar stage built a programme, each book draws on one webinar from it.',
       }),
-      topic("book_topic_working_title", "Book Topic / Working Title", "book_topic", {
+      topic("book_topic_working_title", "Book Topics / Working Titles", "book_topic", {
         required: false,
-        helpText: "Leave blank to derive one from the transcript.",
+        helpText:
+          "Pick every book you want written — each becomes its own manuscript, paired with one webinar from the transcript. Two is realistic; a full-length format is often one. Leave blank to derive a single title from the transcript.",
         placeholder: "e.g. The Honest Guide to Social Media Marketing",
       }),
       txt("book_format", "Book Format", {

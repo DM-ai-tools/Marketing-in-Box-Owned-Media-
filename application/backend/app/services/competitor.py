@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.services.claude_client import get_client
+from app.services.generation import EFFORT_CAPABLE_MODELS
 from app.services.usage import CallUsage
 
 logger = logging.getLogger(__name__)
@@ -53,10 +54,57 @@ SONNET = "claude-sonnet-5"
 # real verification reasoning (confirming a competitor is a genuine service provider, not a
 # directory or aggregator) rather than cheap pattern-matching.
 #
+# `COMPETITOR_MODEL` overrides it, for measuring that claim rather than restating it — the argument
+# for Sonnet here is a judgement about a task, and a judgement about a task is testable.
+#
+# It is also, on this stage specifically, the biggest cost lever there is. Priced from the 22
+# measured prepasses recorded at `_DEFAULT_SEARCH_BUDGET` below (276,465 input, 8,141 output, 10.5
+# searches, $0.739/call — which reproduces exactly at Sonnet 5's $2/$10):
+#
+#   Sonnet 5     input $0.553 (75%)   output $0.081 (11%)   search $0.105 (14%)   = $0.739
+#   Haiku 4.5    input $0.276 (65%)   output $0.041 (10%)   search $0.105 (25%)   = $0.422
+#
+# A 43% cut, because this call is *input*-dominated — the server-side tool loop re-reads the prompt
+# and every result gathered so far on each iteration — and Haiku 4.5 halves the input rate. That is
+# a much larger effect than `effort` can reach here (see `_effort`), which is the reverse of the
+# ordering that holds on the headline gate, where output dominates. Cost profile, not model tier,
+# is what decides which lever pays.
+#
+# So why is Sonnet still the default? Because the risk is not symmetrical either. This stage decides
+# whether a domain is a genuine service provider or a directory dressed as one, and a wrong verdict
+# does not raise — it writes a plausible-looking competitor into the context key that ten
+# downstream assets read. $0.32 a call is worth paying until an A/B on real runs says it is not,
+# which is what this switch exists to make possible.
+#
+# Whatever it is set to is what gets *billed*, so it is also what gets recorded: the usage row is
+# stamped with the resolved model, not with `SONNET`.
+_MODEL_ENV = "COMPETITOR_MODEL"
+
 # Sonnet 5's ceiling is 128k output tokens; 16k is generous headroom for a 10-row JSON array plus
 # the notes section each prompt asks for, without risking the mid-array truncation that would make
 # the output unparseable.
 _MAX_TOKENS = 16000
+
+# `output_config.effort`, which this call previously did not send at all — so it ran at the API
+# default of `high`, the most expensive setting, by omission rather than by decision. Worth fixing,
+# but worth being honest about the size of: on the measured split above, output is 11% of this
+# call, so even the 70% output cut `headlines.py` measured at `low` (4,464 tokens against 14,727 at
+# the default) is about 8% of the bill here. Effort is a real saving on a small share; the input
+# side is where this stage's money is, and `_DEFAULT_SEARCH_BUDGET` owns that.
+#
+# There is a second, unmeasured path by which it may reach the big number: lower effort means fewer
+# and more consolidated tool calls, and iterations are exactly what drive the input total. If that
+# holds here it would matter more than the output saving — which is a reason to compare `medium`
+# against `none` on `api_usage` rather than to assume either way.
+#
+# `medium` rather than `low`, deliberately. The stage's job is discrimination and its failures are
+# silent, so this is not a place to buy the last 3% by thinking less. `low` is for stages whose
+# deliverable is short and templated. `COMPETITOR_EFFORT` moves it; `none` sends no `output_config`
+# at all, which is the setting to measure against.
+_EFFORT_ENV = "COMPETITOR_EFFORT"
+_DEFAULT_EFFORT = "medium"
+_EFFORT_OFF = frozenset({"", "none", "off", "default"})
+_EFFORT_LEVELS = frozenset({"low", "medium", "high", "xhigh", "max"})
 
 # Deliberately the basic `web_search_20250305`, not the newer `web_search_20260209` that Sonnet 5
 # also supports. `_20260209` adds dynamic filtering (it runs code execution internally to filter
@@ -89,6 +137,49 @@ _MAX_TOKENS = 16000
 # is no second request whose prefix could hit a cache — the only lever on this cost is how many
 # times the loop goes round.
 _DEFAULT_SEARCH_BUDGET = 8
+
+
+def resolve_model() -> str:
+    """The model one competitor prepass runs on. `COMPETITOR_MODEL` overrides `SONNET`.
+
+    Read at call time rather than at import, the same late binding `_web_search_enabled` and
+    `_search_budget` use: a deploy or a test can set it without re-importing the module, and an
+    A/B that needed a restart to switch arms is an A/B nobody runs.
+    """
+    return (os.environ.get(_MODEL_ENV) or "").strip() or SONNET
+
+
+def _effort(model: str) -> str | None:
+    """`output_config.effort` for one prepass, or `None` to send no `output_config` at all.
+
+    Two ways to get `None`, and they are different things. `COMPETITOR_EFFORT=none` is the operator
+    asking for the API default, which is the control arm when measuring what effort is worth. A
+    model outside `EFFORT_CAPABLE_MODELS` is not a preference — Haiku 4.5 *rejects* the parameter
+    with a 400 rather than ignoring it, so sending it would convert a `COMPETITOR_MODEL` experiment
+    into a stage that fails outright, and the experiment would read as "Haiku cannot do this".
+
+    An unrecognised level falls back to the default and says so, rather than passing a typo to the
+    API: `COMPETITOR_EFFORT=meduim` should cost someone a log line, not a 400 on ten stages.
+    """
+    raw = os.environ.get(_EFFORT_ENV)
+    level = (_DEFAULT_EFFORT if raw is None else raw).strip().lower()
+
+    if level not in _EFFORT_OFF and level not in _EFFORT_LEVELS:
+        logger.warning(
+            "%s=%r is not one of %s — falling back to %r",
+            _EFFORT_ENV,
+            raw,
+            sorted(_EFFORT_LEVELS),
+            _DEFAULT_EFFORT,
+        )
+        level = _DEFAULT_EFFORT
+
+    if level in _EFFORT_OFF:
+        return None
+    if model not in EFFORT_CAPABLE_MODELS:
+        logger.info("Effort %r not sent: %s does not accept output_config.effort", level, model)
+        return None
+    return level
 
 
 def _search_budget() -> int:
@@ -766,18 +857,26 @@ async def generate_competitor_analysis(
     client = get_client()
     prompt = build_competitor_prompt(asset_id, inputs, excluded_competitors, phase)
 
+    model = resolve_model()
+    effort = _effort(model)
+
     kwargs = {
-        "model": SONNET,
+        "model": model,
         "max_tokens": _MAX_TOKENS,
         "messages": [{"role": "user", "content": prompt}],
     }
+    if effort:
+        kwargs["output_config"] = {"effort": effort}
     if _web_search_enabled():
         kwargs["tools"] = [_web_search_tool()]
 
     logger.info(
-        "Running competitor stage=%s phase=%s target_url=%r service=%r web_search=%s budget=%s",
+        "Running competitor stage=%s phase=%s model=%s effort=%s target_url=%r service=%r "
+        "web_search=%s budget=%s",
         asset_id,
         phase,
+        model,
+        effort or "default",
         inputs.get("target_url", ""),
         inputs.get("service", ""),
         _web_search_enabled(),
@@ -808,7 +907,7 @@ async def generate_competitor_analysis(
         # actually performed rather than on the `max_uses` budget.
         await on_usage(
             CallUsage.from_response(
-                response, requested_model=SONNET, duration_ms=int((time.monotonic() - started) * 1000)
+                response, requested_model=model, duration_ms=int((time.monotonic() - started) * 1000)
             )
         )
     return text

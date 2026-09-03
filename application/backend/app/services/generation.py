@@ -40,11 +40,19 @@ HAIKU = "claude-haiku-4-5-20251001"
 DEFAULT_EFFORT = "medium"
 SHORT_FORM_EFFORT = "low"
 
-# `output_config.effort` is not universal: it is accepted on Sonnet 5 and rejected outright on
-# Haiku 4.5, where sending it returns a 400 rather than being ignored. So the request builder gates
-# on the model as well as on the config — a stage retiered to Haiku later cannot silently start
-# sending an unsupported parameter, which would fail the stage rather than cost a little more.
-EFFORT_CAPABLE_MODELS: frozenset[str] = frozenset({SONNET})
+# `output_config.effort` is not universal: it is accepted on Sonnet 5 and the Opus/Fable tier, and
+# rejected outright on Haiku 4.5, where sending it returns a 400 rather than being ignored. So every
+# request builder gates on the model as well as on the config — a stage retiered to Haiku later
+# cannot silently start sending an unsupported parameter, which would fail the stage rather than
+# cost a little more.
+#
+# An allow-list rather than a Haiku deny-list, because the two failure directions are not
+# symmetrical: a model missing from this set loses the effort saving (costs more, still works),
+# while a model wrongly assumed to accept it 400s the stage. So a new model has to be added here
+# deliberately — which is also why the competitor prepass reads this set rather than keeping its
+# own copy (`app/services/competitor.py`, `_effort`), since its `COMPETITOR_MODEL` override is
+# exactly the path that points a call at a model this table has never seen.
+EFFORT_CAPABLE_MODELS: frozenset[str] = frozenset({SONNET, "claude-opus-5", "claude-fable-5"})
 
 # Prompt-cache duration for the reference-library block. Deliberately an hour, not the 5-minute
 # default: every stage here sits behind an operator approval gate, and the measured start-to-start
@@ -170,7 +178,15 @@ STAGE_CONFIGS: dict[str, StageConfig] = {
     "webinar": StageConfig("webinar", "universal-webinar-prompt.md", "webinar.json", SONNET, 128000),
     # effort=None on the three Haiku stages: `output_config.effort` is rejected on Haiku 4.5, so
     # sending it would turn a working stage into a 400. See `EFFORT_CAPABLE_MODELS`.
-    "book": StageConfig("book", "Webinar-to-Book-Architect-Prompt.md", "book.json", HAIKU, 20000, effort=None),
+    # 64,000 — Haiku 4.5's hard ceiling, read from the Models API (`client.models.retrieve`) rather
+    # than assumed, where the Sonnet stages above can go to 128k. Raised because this stage's
+    # deliverable went plural (`book_topic` in `app/services/headlines.py`), but the ceiling is the
+    # binding constraint here in a way it is nowhere else in this table: the stage's own Book Format
+    # input offers "full-length business book (25,000-50,000+ words)", and 50,000 words is roughly
+    # 67k tokens — more than one response can emit even for a single book. So the cap is not what
+    # makes a long book possible; it is what stops a *short*-format set truncating. The prompt owns
+    # the honest failure: it writes what it can to full depth and names the topics it did not reach.
+    "book": StageConfig("book", "Webinar-to-Book-Architect-Prompt.md", "book.json", HAIKU, 64000, effort=None),
     "podcast": StageConfig("podcast", "universal-podcast-prompt.md", "podcast.json", HAIKU, 20000, effort=None),
     "sms_sequence": StageConfig(
         "sms_sequence", "universal-sms-sequence-prompt.md", "sms_sequence.json", HAIKU, 10000, effort=None

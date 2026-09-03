@@ -21,6 +21,7 @@ import type { AssetDefinition, FieldDef } from "./types";
  *   - `relabel` — inputs it words differently, because it is asking about a sub-service.
  *   - `fromSubService` — inputs the sub-service itself answers, so they are not asked at all.
  *   - `gatherContext` — inputs that ask for a set of documents, not one.
+ *   - `askOutright` — inputs Phase 2 must collect from the operator, never inherit.
  *   - which carried-over inputs stop to ask before being reused — see `askBeforeReusing` below.
  */
 
@@ -55,6 +56,16 @@ interface Phase2Delta {
    * are plain questions, because nothing upstream of them has been built when they are asked; in
    * Phase 2 they sit at stages 06 and 07, after the documents they are asking about exist. */
   gatherContext?: Readonly<Record<string, readonly string[]>>;
+  /** field_id -> the Phase 2 wording for an input that must be *asked*, never resolved from
+   * context — with the Phase 2 helpText, since the reason it is asked is Phase 2's alone.
+   *
+   * Stronger than `askBeforeReusing`, which offers the inherited document with an override. This
+   * says the inherited document is the wrong document and must not be offered at all: it is for the
+   * headline service the parent Phase 1 run covered, not for this run's sub-service, and the two
+   * are not interchangeable. `askBeforeReusing` would still put "use it" one click away as the
+   * default, which is the wrong default when the answer is always no.
+   */
+  askOutright?: Readonly<Record<string, { helpText: string; placeholder?: string }>>;
   description?: string;
 }
 
@@ -71,6 +82,27 @@ const DELTAS: Record<string, Phase2Delta> = {
       "competitor_analysis_pillar_page",
       "cro_locked_sections",
     ],
+    // The one input that decides what this page is *about*, and the reason a Phase 2 run for
+    // "Meta Ads" was producing a Social Media Marketing page. Nothing else on this stage names a
+    // service: the sub-service reaches four of Phase 2's seven stages through `fromSubService`, and
+    // this is not one of them — the design prompt has no service input at all, by design ("design
+    // replicator, not design inventor"; all vocabulary comes from the content file). So the copy
+    // handed to it *is* the subject. Inherited, that copy is the parent Phase 1 run's CRO rewrite of
+    // the client's headline service, and the page comes back about the headline service however
+    // carefully the sub-service was chosen.
+    //
+    // Phase 2 has no CRO stage of its own, so there is nowhere in-run for sub-service copy to come
+    // from and the operator has to supply it. Asked rather than offered: an inherited document that
+    // is always wrong should not be sitting under a "use it" button.
+    askOutright: {
+      improved_page_content: {
+        helpText:
+          "The finished page copy for this sub-service — paste it in full. This stage designs " +
+          "whatever copy it is given and nothing else, so this is what decides what the page is " +
+          "about. The parent Phase 1 run's copy is for the headline service and won't do.",
+        placeholder: "Paste the full rewritten page copy for this sub-service",
+      },
+    },
     description:
       "Full page design brief/build for one sub-service, replicating a reference visual style around the sub-service's approved copy, and delivered with a reusable design-token set.",
   },
@@ -138,17 +170,29 @@ function applyDelta(asset: AssetDefinition, delta: Phase2Delta): AssetDefinition
   const relabel = delta.relabel ?? {};
 
   const gather = delta.gatherContext ?? {};
+  const askOutright = delta.askOutright ?? {};
 
   for (const fieldId of [
     ...dropped,
     ...Object.keys(relabel),
     ...(delta.fromSubService ?? []),
     ...Object.keys(gather),
+    ...Object.keys(askOutright),
   ]) {
     // A delta naming a field the asset does not have is a no-op that reads as deliberate — it would
     // sit there looking like Phase 2 handles a field it silently does not.
     if (!asset.fields.some((f) => f.field_id === fieldId)) {
       throw new Error(`Phase 2 delta for "${asset.asset_id}" names unknown field "${fieldId}"`);
+    }
+  }
+
+  for (const fieldId of Object.keys(askOutright)) {
+    // Both would resolve as "dropped wins", silently — an input the operator was promised they'd be
+    // asked for, that the prompt then never receives.
+    if (dropped.has(fieldId) || gather[fieldId]) {
+      throw new Error(
+        `Phase 2 delta for "${asset.asset_id}" both asks for and auto-fills field "${fieldId}"`,
+      );
     }
   }
 
@@ -162,6 +206,28 @@ function applyDelta(asset: AssetDefinition, delta: Phase2Delta): AssetDefinition
       .filter((f) => !dropped.has(f.field_id))
       .map((f) => {
         const label = relabel[f.field_id] ?? f.label;
+
+        // Rebuilt as a plain operator input rather than patched, because `planField` routes on
+        // `kind` and `source` before it looks at anything else: leaving either one pointing at the
+        // context store would put the inherited document back on the card, whatever `overridable`
+        // said. Constructing the field fresh is what guarantees every route to it is gone —
+        // `context_key`, `sub_key`, `fallback` and all. Nothing conditional is carried across
+        // because `ctx()` cannot produce it, so a context_reference never has any.
+        const asked = askOutright[f.field_id];
+        if (asked) {
+          return {
+            field_id: f.field_id,
+            label,
+            // The same kind `reference_design_source` uses on this stage: pasted document, answered
+            // through the ordinary answer bar.
+            kind: "file_attach",
+            required: true,
+            source: "user_input",
+            helpText: asked.helpText,
+            placeholder: asked.placeholder,
+          } satisfies FieldDef;
+        }
+
         const keys = gather[f.field_id];
         // A gathered input is always offered rather than filled silently: it is several documents at
         // once, and the operator is the one who knows whether that set is what the prompt should be

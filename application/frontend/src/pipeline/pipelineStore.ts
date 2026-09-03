@@ -928,6 +928,33 @@ function invalidateDependents(
   return cleared;
 }
 
+/** Clear the answers this stage took from the run's sub-service, so a re-walk fills them from the
+ * corrected one. Returns the fields cleared, for the announcement.
+ *
+ * `invalidateDependents`' counterpart for the one input that is a run-level fact rather than a
+ * stage answer. The fields in `FIELD_TO_FACT_BY_PHASE` are never asked — the walk fills them from
+ * the profile as it passes (`auto-known` in `lib/fieldResolution.ts`) — and `planField` treats any
+ * answer that already exists as final. So an edit that left them standing would be silently
+ * ignored: the operator would see the sub-service change and the stage would still generate for the
+ * old one.
+ */
+function clearFactFilledAnswers(
+  phase: PipelinePhase,
+  asset: AssetDefinition,
+  answers: Record<string, unknown>,
+  fact: string,
+): FieldDef[] {
+  const fieldToFact = FIELD_TO_FACT_BY_PHASE[phase];
+  const cleared: FieldDef[] = [];
+  for (const field of asset.fields) {
+    if (fieldToFact[field.field_id] !== fact) continue;
+    if (answers[field.field_id] === undefined) continue;
+    delete answers[field.field_id];
+    cleared.push(field);
+  }
+  return cleared;
+}
+
 /** The generation card an edit would replace: the newest draft for the current stage that hasn't
  * been approved yet. Nothing is editable once a stage is saved — its output is in the Context Store
  * and later stages have been built on it, so the way back is a new run, not a quiet re-answer. */
@@ -2281,13 +2308,39 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     if (intake.awaitingFieldId === SUB_SERVICE_FIELD.field_id) {
       const subService = String(value).trim();
       if (!subService) return;
+      // Set on the first pass through this branch and never cleared, so its presence is what tells
+      // a correction apart from the opening answer — the two have to end differently.
+      const previous = get().clientProfile[SUB_SERVICE_FACT];
       markQuestionAnswered(get, set, SUB_SERVICE_FIELD.field_id);
       push(get, set, { role: "user", kind: "text", text: subService });
       set({
         clientProfile: { ...get().clientProfile, [SUB_SERVICE_FACT]: subService },
-        intake: null,
         editSeed: null,
       });
+
+      if (previous) {
+        // A correction from `editField`. The walk it interrupted is still standing, so it resumes
+        // where it was rather than restarting the run at stage 01 — which would throw away every
+        // stage already approved. What cannot stand is the answers the old sub-service filled in.
+        const cleared = clearFactFilledAnswers(get().phase, intake.asset, intake.answers, SUB_SERVICE_FACT);
+        set({ intake: { ...intake, awaitingFieldId: null } });
+        if (cleared.length) {
+          push(get, set, {
+            role: "assistant",
+            kind: "text",
+            text: `Sub-service changed to ${subService}, so ${cleared
+              .map((f) => f.label)
+              .join(" and ")} ${cleared.length === 1 ? "is" : "are"} being filled in again from it.`,
+          });
+        }
+        // Re-anchored on the new sub-service: the clusters behind every later topic suggestion were
+        // built from the old one.
+        void runKeywordPrepass(get, set);
+        advanceIntake(get, set, get().currentIndex, intake.asset, intake.answers, 0);
+        return;
+      }
+
+      set({ intake: null });
       // Phase 2's keyword prepass, and the only moment it can run: the sub-service is the fact the
       // whole leg's clustering is anchored on, and Phase 2's first stage carries a headline gate,
       // so anything triggered off a stage save would arrive after the gate that needed it. Not
@@ -2678,7 +2731,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       patchMessage(get, set, draft.id, { superseded: true, refining: false });
     }
 
-    const field = intake.asset.fields.find((f) => f.field_id === fieldId);
+    // The sub-service is a run-level fact, so unlike every other editable answer it sits on no
+    // asset's field list (see `SUB_SERVICE_FIELD`). Without this case the lookup below misses and
+    // the click does nothing at all — a dead "Edit" on the one answer a whole Phase 2 run is
+    // anchored on, and the answer with the least other ways to correct it.
+    const isSubService = fieldId === SUB_SERVICE_FIELD.field_id;
+    const field = isSubService ? SUB_SERVICE_FIELD : intake.asset.fields.find((f) => f.field_id === fieldId);
     if (!field) return;
 
     // The question that was open is not the question any more. Left as-is it would render as
@@ -2703,7 +2761,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     // replaced, and two cards both reading "answered" would be ambiguous.
     // Seed the box with what they said before, unless it is long enough that a textarea full of it
     // would be worse than an empty one (a pasted page, an ICP document).
-    const previous = intake.answers[fieldId];
+    // The sub-service's answer lives on the run's client profile rather than in this stage's
+    // answers — it was filed there by `submitAnswer` so that every stage reads it from one place.
+    const previous = isSubService ? state.clientProfile[SUB_SERVICE_FACT] : intake.answers[fieldId];
     const seedable =
       (typeof previous === "string" || typeof previous === "number") &&
       String(previous).length <= 2000 &&
@@ -2723,9 +2783,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     push(get, set, {
       role: "assistant",
       kind: "text",
-      text: regenerating
-        ? `Changing ${field.label}. Once it's updated I'll regenerate this stage from the corrected answers.`
-        : `Changing ${field.label}. Everything else you've answered is kept.`,
+      text: isSubService
+        ? // Not "everything else is kept": the sub-service is what silently answers the target-service
+          // field on four of Phase 2's seven stages, so those answers go with it (see
+          // `clearFactFilledAnswers`). Stages already approved into the Context Store keep the old
+          // one — the way back to those is a new run, not this edit.
+          `Changing the sub-service. Anything this run answered from it will be filled in again from the new one; stages already saved keep the old one.`
+        : regenerating
+          ? `Changing ${field.label}. Once it's updated I'll regenerate this stage from the corrected answers.`
+          : `Changing ${field.label}. Everything else you've answered is kept.`,
     });
     // For a field the pipeline offers to research, "change this" means "offer me the choice again" —
     // not "now paste it yourself", which would take away the option the operator had the first time.
@@ -2739,7 +2805,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     push(get, set, {
       role: "assistant",
       kind: "question",
-      assetId: intake.asset.asset_id,
+      // The sub-service card carries no `assetId`, matching how `askSubService` first asked it:
+      // it belongs to the run, not to whichever stage happens to be open when it is corrected.
+      ...(isSubService ? {} : { assetId: intake.asset.asset_id }),
       field,
       editing: true,
     });
@@ -2752,14 +2820,26 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     if (!intake?.awaitingFieldId) return;
     const fieldId = intake.awaitingFieldId;
 
+    // `editField` superseded every card for this field on the way in, on the promise that a new
+    // answer was coming. It isn't, so the newest answered one is put back — otherwise the answer
+    // that still stands is left reading "replaced", and its Edit goes with it, stranding the
+    // operator on an answer they can no longer reach.
+    const messages = get().messages;
+    const restoreIndex = messages.reduce(
+      (last, m, i) =>
+        m.kind === "question" && m.answered && !m.editing && m.field?.field_id === fieldId ? i : last,
+      -1,
+    );
+
     // The old answer was never cleared, so the walk simply skips this field again and lands back on
     // whatever was actually outstanding — no need to remember where the operator was.
     set({
-      messages: get().messages.map((m) =>
-        m.kind === "question" && m.editing && !m.answered && m.field?.field_id === fieldId
+      messages: messages.map((m, i) => {
+        if (i === restoreIndex) return { ...m, superseded: false };
+        return m.kind === "question" && m.editing && !m.answered && m.field?.field_id === fieldId
           ? { ...m, superseded: true }
-          : m,
-      ),
+          : m;
+      }),
     });
     push(get, set, { role: "assistant", kind: "text", text: "Left that answer as it was." });
     set({ editSeed: null });

@@ -258,10 +258,24 @@ SLOTS: dict[str, SlotConfig] = {
         subject="book",
         channel="Landing page headline",
         char_budget="60-80 characters",
+        # Plural, because the webinar stage upstream is now a programme rather than one hour: a run
+        # with three webinar packages has three bodies of delivered material, and each can carry its
+        # own book. Every pick is built (`Webinar-to-Book-Architect-Prompt.md`, Step 0B).
+        multi=True,
+        # Two. This is the largest deliverable in the pipeline — a pick here is a whole manuscript,
+        # not a title — and the stage's own Book Format input reaches "25,000-50,000+ words", which
+        # one response cannot hold even once. Two short-format books fit; two long ones do not, and
+        # the prompt is written to build what it can to full depth and name what it did not reach
+        # rather than thinning every manuscript to fit. Guidance, not a cap.
+        suggested_selection=2,
         guidance=(
             "A book title carries a whole positioning, so lead with the big promise and let the "
             "subtitle carry the specificity. Give both: `headline` is the title, and open "
-            "`why_it_works` with the subtitle you would pair with it."
+            "`why_it_works` with the subtitle you would pair with it. "
+            "The operator picks several and every pick is written as its own manuscript, so no two "
+            "candidates may argue the same thesis: a book is a position, and two books positioned "
+            "the same way compete for one shelf. Where the run has several webinars behind it, "
+            "prefer candidates that draw on different ones."
         ),
     ),
     "offer_ladder_theme": SlotConfig(

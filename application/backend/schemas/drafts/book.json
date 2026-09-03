@@ -48,7 +48,7 @@
     },
     {
       "field_id": "book_topic_working_title",
-      "label": "Book Topic / Working Title",
+      "label": "Book Topics / Working Titles",
       "kind": "headline_choice", "headline_slot": "book_topic",
       "required": false,
       "source": "user_input",
@@ -56,7 +56,7 @@
         "file",
         "text"
       ],
-      "raw_explanation": "YOUR ANSWER — or leave blank to have one derived from the source transcript's own framing"
+      "raw_explanation": "The topics the operator picked at the suggestion gate — a numbered list, or blank. The prompt writes one complete manuscript per topic (Step 0B plans the set and pairs each book with one webinar package, Steps 1-7 run per book), so this field is a set rather than one title. Blank still means one book, titled from the source transcript's own framing."
     },
     {
       "field_id": "book_format",
