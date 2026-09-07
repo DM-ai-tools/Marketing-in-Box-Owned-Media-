@@ -41,7 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.logging_config import configure_logging
-from app.routers import anthropic, auth, chat_sessions, pipeline, usage
+from app.routers import anthropic, auth, chat_sessions, intel, pipeline, usage
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -176,6 +176,9 @@ app.include_router(anthropic.router, prefix="/test/anthropic", tags=["anthropic-
 app.include_router(pipeline.router, prefix="/pipeline", tags=["pipeline"])
 app.include_router(chat_sessions.router, prefix="/chat-sessions", tags=["chat-sessions"])
 app.include_router(usage.router, prefix="/usage", tags=["usage"])
+# Market intelligence over Context.dev (brand records, web search). Every call in there goes
+# through app/services/context_dev.py, the one module holding the API key.
+app.include_router(intel.router, prefix="/intel", tags=["intel"])
 
 # Feature routers are mounted here as they land, e.g.:
 #   from app.routers import runs

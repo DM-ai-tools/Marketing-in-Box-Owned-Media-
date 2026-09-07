@@ -318,11 +318,14 @@ def test_tokens_precede_the_inputs_and_the_build_order() -> None:
     leading with them put a volatile block in front of the 12k-token static library and made the
     largest cacheable block in the pipeline uncacheable. See `generation._prompt_parts`.
     """
-    from app.services.generation import build_prompt
+    from app.services.generation import PageDesignInput, build_prompt
 
     tokens = _tokens_from(SAMPLE_CSS)
     prompt = build_prompt(
-        "lead_magnet", {"client_name": "Acme"}, "phase1", D.tokens_to_markdown(tokens)
+        "lead_magnet",
+        {"client_name": "Acme"},
+        "phase1",
+        PageDesignInput(theme_brief=D.tokens_to_markdown(tokens)),
     )
     brand = prompt.index("===== BEGIN BRAND_DESIGN_TOKENS")
     inputs = prompt.index("INPUTS (fill in before submitting)")
@@ -338,11 +341,11 @@ def test_the_cacheable_prefix_holds_no_brand_tokens() -> None:
     """The system half is what carries the cache breakpoint, so a per-client value leaking into it
     would pin the cache to one client and show up only as a permanent `cache_read_input_tokens=0`.
     """
-    from app.services.generation import build_stage_request
+    from app.services.generation import PageDesignInput, build_stage_request
 
     tokens = D.tokens_to_markdown(_tokens_from(SAMPLE_CSS))
     system_blocks, user_content = build_stage_request(
-        "lead_magnet", {"client_name": "Acme"}, "phase1", tokens
+        "lead_magnet", {"client_name": "Acme"}, "phase1", PageDesignInput(theme_brief=tokens)
     )
     assert system_blocks is not None
     prefix = system_blocks[0]["text"]
@@ -387,12 +390,14 @@ def test_a_stage_with_no_tokens_gets_no_block() -> None:
 
 def test_an_unavailable_sheet_still_binds_against_invention() -> None:
     """The absence has to travel with an instruction, or the model fills the gap itself."""
-    from app.services.generation import build_prompt
+    from app.services.generation import PageDesignInput, build_prompt
 
     unavailable = D.tokens_to_markdown(
         D.DesignTokens(source_url="https://blocked.test/", available=False, reason="bot wall")
     )
-    prompt = build_prompt("lead_magnet", {"client_name": "Acme"}, "phase1", unavailable)
+    prompt = build_prompt(
+        "lead_magnet", {"client_name": "Acme"}, "phase1", PageDesignInput(theme_brief=unavailable)
+    )
     assert "NOT AVAILABLE" in prompt
     assert "do not guess a palette" in prompt
 
@@ -517,11 +522,16 @@ def test_an_oversized_logo_is_referenced_rather_than_embedded() -> None:
 
 
 def test_the_directive_forbids_recreating_the_logo() -> None:
-    from app.services.generation import build_prompt
+    from app.services.generation import PageDesignInput, build_prompt
 
     tokens = _tokens_from(SAMPLE_CSS)
     tokens.logo = D.Logo(url="https://acme.test/l.svg", source="header logo", mime_type="image/svg+xml")
-    prompt = build_prompt("lead_magnet", {"client_name": "Acme"}, "phase1", D.tokens_to_markdown(tokens))
+    prompt = build_prompt(
+        "lead_magnet",
+        {"client_name": "Acme"},
+        "phase1",
+        PageDesignInput(theme_brief=D.tokens_to_markdown(tokens)),
+    )
     assert "Do NOT recreate the logo as styled text" in prompt
     assert "do NOT substitute an icon or a generic mark" in prompt
 

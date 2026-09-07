@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.services.claude_client import get_client
+from app.services.page_structure import STRUCTURE_HEADING
 from app.services.usage import CallUsage
 
 logger = logging.getLogger(__name__)
@@ -488,6 +489,21 @@ BRAND_TOKEN_STAGES: frozenset[str] = frozenset(
     {"cro", "pillar_page", "lead_magnet", "funnel_hub_media", "webinar"}
 )
 
+# Of those, the stages rebuilding a page that already exists. They get the whole DESIGN.md —
+# spacing scale, component styles, elevation — because their output stands next to the original and
+# a visitor must not be able to tell them apart.
+PAGE_REPLICA_STAGES: frozenset[str] = frozenset({"cro", "pillar_page"})
+
+# The rest get the theme brief: colours, type, shapes and the logo, with layout and components
+# stripped. A lead magnet is a different artifact from the client's landing page — it has its own
+# structure — and handing it the source page's section spacing and button geometry invites it to
+# reproduce a layout it was never meant to copy. It still has to look like the same brand.
+BRAND_THEME_STAGES: frozenset[str] = BRAND_TOKEN_STAGES - PAGE_REPLICA_STAGES
+
+# Only the CRO rewrite is shown the page. It is the one stage whose job is "this page, rewritten",
+# where section order and hero composition are part of the brief rather than context.
+SCREENSHOT_STAGES: frozenset[str] = frozenset({"cro"})
+
 _BRAND_TOKEN_DIRECTIVE = (
     "These are the client's REAL design tokens, read from their own live page's CSS — not a "
     "suggestion, and not a starting point to improve on. Any HTML you produce anywhere in this "
@@ -519,21 +535,103 @@ _BRAND_TOKEN_DIRECTIVE = (
 )
 
 
-def _brand_token_block(design_tokens_markdown: str | None) -> str:
-    """The extracted token sheet, fenced and bound, or "" when the stage has none.
+# Appended for the replica stages. The token sheet says what the colours are; the screenshots say
+# what the page looks like, and the two answer different questions.
+_SCREENSHOT_DIRECTIVE = (
+    "\n  - **Reference screenshots of the live page are attached to this message as images.** They "
+    "are the layout brief: section order, how the hero is composed, how much air sits between "
+    "bands, which elements sit side by side. Reproduce that structure. Read the tokens above for "
+    "every colour, font and component value \u2014 do not eyedrop them off the image, which is "
+    "compressed and downscaled. And do not copy any words out of the screenshots: the copy for this "
+    "page is the generated content, and the old page's wording is exactly what is being replaced."
+)
+
+# Appended for the replica stages whose sheet carries a structure walk. The tokens say what the
+# page is made of and the screenshots show the top of it; this is the only input that states the
+# whole sequence, so it is the one the layout has to be built from.
+_PAGE_STRUCTURE_DIRECTIVE = (
+    "\n  - **The Page structure section is the layout brief, and it is measured off the live DOM "
+    "rather than suggested.** Build the same bands in the same order, with the same grid counts "
+    "(three cards means three, not four) and the same heading levels. Reproduce the nav labels, the "
+    "contact details and the client logo URLs it lists **verbatim** — those are real and a "
+    "plausible substitute is simply wrong. What you replace is the wording of the headings and body "
+    "copy, which comes from the generated content. If the generated content has nothing to say in a "
+    "band the page has, keep the band and write real copy for it; do not delete it, and do not "
+    "invent an extra band to use up material."
+)
+
+# Appended for the theme stages. Without it a lead magnet handed a landing page's design system
+# builds a landing page.
+_THEME_ONLY_DIRECTIVE = (
+    "\n  - **This is a theme, not a template.** Match the colours, typefaces, radii and the logo so "
+    "the asset is unmistakably the same brand. Do NOT reproduce the source page's layout, section "
+    "order, or page furniture \u2014 this asset has its own structure, defined by the master prompt "
+    "below."
+)
+
+
+def _brand_token_block(design_markdown: str | None, *, theme_only: bool = False, has_screenshots: bool = False) -> str:
+    """The extracted design sheet, fenced and bound, or "" when the stage has none.
 
     Deliberately shares the reference-library framing rather than arriving as another INPUTS line.
     An INPUTS field is something the operator filled in and the prompt may weigh against other
     inputs; this is a measurement that overrides the model's taste, and it needs to read that way.
+
+    The directive is assembled per stage rather than being one constant, because the two views of
+    the same document carry opposite instructions about layout: the replica stages must copy it and
+    the theme stages must not.
     """
-    if not design_tokens_markdown or not design_tokens_markdown.strip():
+    if not design_markdown or not design_markdown.strip():
         return ""
+    directive = _BRAND_TOKEN_DIRECTIVE
+    if theme_only:
+        directive += _THEME_ONLY_DIRECTIVE
+    # Read off the sheet rather than passed in. The rule this pipeline keeps breaking is a directive
+    # that points at a section which is not in the document, and the model fills that gap itself;
+    # deriving the flag from the text about to be sent makes the two incapable of drifting. It also
+    # means an older stored sheet, captured before the structure walk existed, simply does not get
+    # the clause — which is correct, because it does not have the section either.
+    if not theme_only and STRUCTURE_HEADING in design_markdown:
+        directive += _PAGE_STRUCTURE_DIRECTIVE
+    if has_screenshots:
+        directive += _SCREENSHOT_DIRECTIVE
     return (
         f"===== BEGIN {BRAND_DESIGN_TOKENS} =====\n"
-        f"HOW THIS DOCUMENT BINDS YOUR RESPONSE:\n{_BRAND_TOKEN_DIRECTIVE}\n\n"
-        f"{design_tokens_markdown.strip()}\n"
+        f"HOW THIS DOCUMENT BINDS YOUR RESPONSE:\n{directive}\n\n"
+        f"{design_markdown.strip()}\n"
         f"===== END {BRAND_DESIGN_TOKENS} =====\n\n"
     )
+
+
+@dataclass(frozen=True)
+class PageDesignInput:
+    """The client's page design, in the two views the stages need, plus the shots.
+
+    A dataclass rather than three parameters threaded through six functions: `build_prompt`,
+    `build_stage_request`, both stream entry points and the router all pass it along unchanged, and
+    every one of them would otherwise grow the same three arguments.
+
+    Built by `app/services/design_md.py`. Passing `None` anywhere is a supported state and means
+    "this run has no readable page" \u2014 the block is omitted and each stage's own prompt falls back
+    to asking for brand values.
+    """
+
+    #: The full DESIGN.md. For the stages rebuilding a page.
+    design_md: str = ""
+    #: Colours, type, shapes, logo. For the stages that must match the brand, not the layout.
+    theme_brief: str = ""
+    #: Public image URLs, already filtered to what the model API will accept.
+    screenshot_urls: tuple[str, ...] = ()
+
+    def sheet_for(self, asset_id: str) -> str:
+        """Which view this stage reads. Falls back to whichever one was built, so a caller that
+        only has one (an older stored entry, a theme-only capture) still gets a sheet."""
+        if asset_id in PAGE_REPLICA_STAGES:
+            return self.design_md or self.theme_brief
+        return self.theme_brief or self.design_md
+
+    def screenshots_for(self, asset_id: str) -> tuple[str, ...]:
+        return self.screenshot_urls if asset_id in SCREENSHOT_STAGES else ()
 
 
 class UnknownStageError(KeyError):
@@ -627,7 +725,7 @@ def _prompt_parts(
     asset_id: str,
     answers: dict[str, str],
     phase: str = DEFAULT_PHASE,
-    design_tokens_markdown: str | None = None,
+    page_design: PageDesignInput | None = None,
 ) -> tuple[str, str]:
     """This stage's prompt, split at its cache boundary: (reference library, everything else).
 
@@ -645,7 +743,13 @@ def _prompt_parts(
     cfg = _config(asset_id, phase)
     answers = _apply_reference_injections(asset_id, answers)
     lines = [_render_field(label, (answers.get(field_id) or "").strip()) for field_id, label in _load_schema_fields(cfg)]
-    brand = _brand_token_block(design_tokens_markdown) if asset_id in BRAND_TOKEN_STAGES else ""
+    brand = ""
+    if page_design is not None and asset_id in BRAND_TOKEN_STAGES:
+        brand = _brand_token_block(
+            page_design.sheet_for(asset_id),
+            theme_only=asset_id in BRAND_THEME_STAGES,
+            has_screenshots=bool(page_design.screenshots_for(asset_id)),
+        )
 
     return (
         _load_reference_library(asset_id),
@@ -661,7 +765,7 @@ def build_prompt(
     asset_id: str,
     answers: dict[str, str],
     phase: str = DEFAULT_PHASE,
-    design_tokens_markdown: str | None = None,
+    page_design: PageDesignInput | None = None,
 ) -> str:
     """The whole prompt as one string: any reference library this stage cites, then its own "fill in
     before submitting" INPUTS block reproduced from the caller's intake, then the file's real master
@@ -677,7 +781,7 @@ def build_prompt(
     concatenation, so the first half can carry a cache breakpoint — see `build_stage_request`. The
     text the model sees is identical either way, which is what this function pins.
     """
-    library, tail = _prompt_parts(asset_id, answers, phase, design_tokens_markdown)
+    library, tail = _prompt_parts(asset_id, answers, phase, page_design)
     return library + tail
 
 
@@ -685,8 +789,8 @@ def build_stage_request(
     asset_id: str,
     answers: dict[str, str],
     phase: str = DEFAULT_PHASE,
-    design_tokens_markdown: str | None = None,
-) -> tuple[list[dict[str, object]] | None, str]:
+    page_design: PageDesignInput | None = None,
+) -> tuple[list[dict[str, object]] | None, str | list[dict[str, object]]]:
     """The same prompt as `build_prompt`, as `(system_blocks, user_content)` ready for the API.
 
     The reference library becomes a cached `system` block and everything volatile stays in the user
@@ -706,15 +810,36 @@ def build_stage_request(
     Returns `None` for the system half on the four stages that have no library (icp, funnel,
     sms_sequence, plan_of_action) rather than an empty block: a sub-minimum prefix does not cache,
     and an empty `system` list is noise on the wire.
+
+    The user half is a plain string unless the stage gets screenshots, in which case it becomes a
+    content-block list with the images first. Images lead because the text ends with the master
+    prompt's instruction to proceed, and an image appended after that sits between the instruction
+    and the response.
     """
-    library, tail = _prompt_parts(asset_id, answers, phase, design_tokens_markdown)
+    library, tail = _prompt_parts(asset_id, answers, phase, page_design)
+
+    user_content: str | list[dict[str, object]] = tail
+    shots = page_design.screenshots_for(asset_id) if page_design is not None else ()
+    if shots:
+        user_content = [
+            # A URL source, not base64: Context.dev hosts the image, so it never passes through this
+            # backend and costs nothing to store on the run.
+            {"type": "image", "source": {"type": "url", "url": url}}
+            for url in shots
+        ] + [{"type": "text", "text": tail}]
+
     if not library:
-        return None, tail
-    return [{"type": "text", "text": library, "cache_control": {"type": "ephemeral", "ttl": _CACHE_TTL}}], tail
+        return None, user_content
+    return (
+        [{"type": "text", "text": library, "cache_control": {"type": "ephemeral", "ttl": _CACHE_TTL}}],
+        user_content,
+    )
 
 
 def _stream_kwargs(
-    cfg: StageConfig, system_blocks: list[dict[str, object]] | None, user_content: str
+    cfg: StageConfig,
+    system_blocks: list[dict[str, object]] | None,
+    user_content: str | list[dict[str, object]],
 ) -> dict[str, object]:
     """The request body shared by the generation and revision streams.
 
@@ -761,12 +886,12 @@ async def generate_stage_stream(
     answers: dict[str, str],
     phase: str = DEFAULT_PHASE,
     on_usage: OnUsage | None = None,
-    design_tokens_markdown: str | None = None,
+    page_design: PageDesignInput | None = None,
 ) -> AsyncIterator[str]:
     """Stream this stage's real generation as Markdown text deltas."""
     cfg = _config(asset_id, phase)
     client = get_client()
-    system_blocks, user_content = build_stage_request(asset_id, answers, phase, design_tokens_markdown)
+    system_blocks, user_content = build_stage_request(asset_id, answers, phase, page_design)
 
     logger.info(
         "Streaming stage=%s phase=%s model=%s effort=%s cached_prefix=%s prompt=%s",
@@ -777,6 +902,14 @@ async def generate_stage_stream(
         system_blocks is not None,
         cfg.prompt_file,
     )
+    if page_design is not None and asset_id in BRAND_TOKEN_STAGES:
+        logger.info(
+            "Stage %s design sheet: view=%s chars=%s screenshots=%s",
+            asset_id,
+            "theme" if asset_id in BRAND_THEME_STAGES else "full",
+            len(page_design.sheet_for(asset_id)),
+            len(page_design.screenshots_for(asset_id)),
+        )
     started = time.monotonic()
 
     async with client.messages.stream(**_stream_kwargs(cfg, system_blocks, user_content)) as stream:
@@ -851,3 +984,135 @@ async def generate_revision_stream(
                     duration_ms=int((time.monotonic() - started) * 1000),
                 )
             )
+
+
+# ----------------------------------------------------------------------------------------------
+# The replica assembly pass
+#
+# A second, small call that runs *after* a replica stage's own generation, and only for the stages
+# in `PAGE_REPLICA_STAGES` when a page template was captured.
+#
+# It is a separate call rather than a change to those stages, and that is the whole reason this
+# fits: the canonical prompt files in `assets/Prompts/` run unmodified — that is the contract this
+# module opens by stating — and they emit a whole document (a mode table, seven audits, a built
+# page, an implementation pack). Nothing about that changes. This pass reads the document that call
+# produced, and maps the copy inside it onto the real page's slots.
+#
+# So a replica stage now has two deliverables: the stage's own document, exactly as before, plus
+# the client's real page with the new wording written into it.
+#
+# It is cheap in the way that matters. The model is handed a copy deck (3-6KB) and the draft it
+# just wrote, and returns a JSON object of a few thousand tokens. It never emits HTML, so the
+# truncation failure the `max_tokens` note above describes at length — a document cut off two
+# thirds through, after the whole response has been paid for — has no way to occur here.
+# ----------------------------------------------------------------------------------------------
+
+#: Sonnet, not Haiku. The task looks mechanical and is not: it has to read a long strategy document
+#: and decide which of its headlines belongs in slot 12 of band 4, which is a comprehension
+#: problem. Haiku was not measured on it, so the cheaper tier is a change to make deliberately and
+#: with a comparison in hand, not an assumption to start from.
+ASSEMBLY_MODEL = SONNET
+
+#: The output is a JSON object of short strings — a 200-slot page is comfortably inside 16k. Not
+#: raised "just in case": unlike the document stages, a response that wants more than this is
+#: a response that has misunderstood the format, and truncating it is the correct outcome.
+ASSEMBLY_MAX_TOKENS = 16000
+
+#: `low`, where the stages sit at `medium`. See the effort note above: thinking bills as output,
+#: and this call is a mapping decision per line rather than a document to compose.
+ASSEMBLY_EFFORT = SHORT_FORM_EFFORT
+
+_ASSEMBLY_INSTRUCTION = (
+    "The document above is the deliverable you just produced for this client. Its new copy now has "
+    "to be placed onto the client's real page.\n\n"
+    "The page is reproduced exactly by this system — its markup, layout, styling, images, inline "
+    "icons, logo, and links are the client's own and are carried over untouched. You are not "
+    "rebuilding it and you are not being shown it. Your only job is to say what each numbered slot "
+    "should now read.\n\n"
+    "Take the wording from the document above wherever it supplies it: its rewritten headlines, "
+    "subheads, body copy and button labels go into the matching slots. Where the document has "
+    "nothing for a slot, write copy for it that is consistent with the document's positioning, "
+    "audience and offer — or omit the slot to keep the client's existing wording, which is the "
+    "right answer for a line that is already correct.\n\n"
+    "Respond with the JSON object and nothing else — no preamble, no explanation, no code fence "
+    "commentary."
+)
+
+
+def build_assembly_request(copy_deck: str, stage_draft: str) -> str:
+    """The assembly prompt: the finished stage document, then the deck, then the instruction.
+
+    The deck goes *after* the draft and immediately before the instruction, which is the same
+    ordering argument `build_prompt` makes about the master prompt going last: the deck is what the
+    model has to act on line by line, and putting a long strategy document between it and the
+    instruction to answer costs accuracy on the slots at the end of the list.
+    """
+    return (
+        "===== BEGIN GENERATED DELIVERABLE =====\n"
+        f"{stage_draft.strip()}\n"
+        "===== END GENERATED DELIVERABLE =====\n\n"
+        f"{copy_deck.strip()}\n\n"
+        f"{_ASSEMBLY_INSTRUCTION}"
+    )
+
+
+async def generate_replica_copy(
+    copy_deck: str,
+    stage_draft: str,
+    on_usage: OnUsage | None = None,
+) -> str:
+    """Run the assembly pass and return the model's raw reply.
+
+    Returns the text rather than a parsed mapping: `page_replica.parse_copy_map` owns the parsing,
+    including what to do with a reply it cannot read, and splitting that across two modules would
+    put half the tolerance here and half there.
+
+    Not a stream. Every other call in this module streams because an operator is watching a
+    document appear; nothing here is worth showing incrementally — a half-received JSON object is
+    not a partial answer, it is an unparseable one.
+    """
+    client = get_client()
+    prompt = build_assembly_request(copy_deck, stage_draft)
+
+    kwargs: dict[str, object] = {
+        "model": ASSEMBLY_MODEL,
+        "max_tokens": ASSEMBLY_MAX_TOKENS,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if ASSEMBLY_MODEL in EFFORT_CAPABLE_MODELS:
+        kwargs["output_config"] = {"effort": ASSEMBLY_EFFORT}
+
+    logger.info(
+        "Replica assembly: model=%s deck_chars=%d draft_chars=%d",
+        ASSEMBLY_MODEL,
+        len(copy_deck),
+        len(stage_draft),
+    )
+    started = time.monotonic()
+    response = await client.messages.create(**kwargs)
+
+    text = "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
+    logger.info(
+        "Replica assembly done stop_reason=%s input_tokens=%s output_tokens=%s reply_chars=%d",
+        response.stop_reason,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        len(text),
+    )
+    if response.stop_reason == "max_tokens":
+        # Named loudly. A truncated JSON object parses as nothing, so this is the difference between
+        # a page with new copy and a page with the client's original copy throughout.
+        logger.warning(
+            "Replica assembly hit the %s-token cap; the copy map is likely unparseable and the "
+            "page will assemble with the client's original wording",
+            ASSEMBLY_MAX_TOKENS,
+        )
+    if on_usage is not None:
+        await on_usage(
+            CallUsage.from_response(
+                response,
+                requested_model=ASSEMBLY_MODEL,
+                duration_ms=int((time.monotonic() - started) * 1000),
+            )
+        )
+    return text

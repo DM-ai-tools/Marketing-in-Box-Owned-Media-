@@ -15,6 +15,8 @@ Persistence (Postgres):
                                                   APPROVED, and record the approval in the audit log
 
 Intake helper:
+  - POST /pipeline/design                        capture a page's DESIGN.md + screenshots (17 credits)
+  - GET  /pipeline/runs/{run_id}/design          the DESIGN.md already captured for a run (free)
   - POST /pipeline/scrape                        read a live page and return its copy as text, so
                                                   the operator does not paste a whole page by hand
 
@@ -37,6 +39,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -69,15 +72,20 @@ from app.services.competitor import (
     to_prompt_text,
 )
 from app.services import (
+    design_md as design_md_service,
     design_tokens as design_tokens_service,
     headlines as headlines_service,
     insights,
     keywords as keywords_service,
+    page_replica as page_replica_service,
     usage as usage_service,
 )
 from app.services.api_errors import classify as classify_api_error
 from app.services.generation import (
     DEFAULT_PHASE,
+    PAGE_REPLICA_STAGES,
+    PageDesignInput,
+    generate_replica_copy,
     generate_revision_stream,
     generate_stage_stream,
     has_stage,
@@ -596,8 +604,9 @@ class ScrapePageResponse(BaseModel):
     # True when so little text came back that the page is probably client-rendered. Not an error —
     # the UI decides whether to use it or ask the operator to paste instead.
     low_content: bool
-    # "direct" (this backend's own fetch) or "claude" (Anthropic's server-side fetcher, used when the
-    # direct read is refused or empty). Shown in the UI so a fallback read is never invisible.
+    # "direct" (this backend's own fetch), "context.dev" (Context.dev's rendered Markdown scrape),
+    # or "claude" (Anthropic's server-side fetcher). The last two are used only when the direct read
+    # is refused or empty. Shown in the UI so a fallback read is never invisible.
     source: str = "direct"
     warnings: list[str] = []
 
@@ -1387,18 +1396,41 @@ async def _stored_design_tokens(session: AsyncSession, run_uuid: uuid.UUID) -> t
     return (entry.value if isinstance(entry.value, dict) else {}), on_run
 
 
-async def resolve_design_tokens(
+def _page_design_input(value: dict) -> PageDesignInput | None:
+    """Rebuild the generation input from a stored context entry.
+
+    Entries written before DESIGN.md existed hold only `content` (the old token sheet). They are
+    read as a theme brief rather than discarded: the sheet is still real measurements of the right
+    page, and re-capturing every historical run to gain a front-matter block would spend 17 credits
+    per run to restate what is already there.
+    """
+    design_md = (value.get("design_md") or "").strip()
+    theme_brief = (value.get("theme_brief") or "").strip()
+    legacy = (value.get("content") or "").strip()
+    if not (design_md or theme_brief or legacy):
+        return None
+    return PageDesignInput(
+        design_md=design_md or legacy,
+        theme_brief=theme_brief or legacy,
+        screenshot_urls=tuple(value.get("model_screenshot_urls") or ()),
+    )
+
+
+async def resolve_page_design(
     run_id: str | None,
     answers: dict[str, str],
     profile: dict[str, str],
-) -> str | None:
-    """This run's brand token sheet as Markdown, extracting it first if it has none.
+) -> PageDesignInput | None:
+    """This run's DESIGN.md and reference screenshots, capturing them first if it has none.
 
-    Returns None when there is no page to read or the read failed. That is deliberately not an
+    Returns None when there is no page to read or every reader failed. That is deliberately not an
     error: `build_prompt` simply omits the block, and the stage's own prompt falls back to asking
     for brand values. Never returns a partial or invented sheet — a generated page in a plausible
     but wrong palette is indistinguishable from a correct one until someone who knows the brand
     looks at it, which is the whole failure mode this exists to prevent.
+
+    Capture costs 17 Context.dev credits, so it happens once per run and is read from the run's
+    context on every stage after the first.
     """
     url = _design_source_url(answers, profile)
     session_factory = get_sessionmaker()
@@ -1415,16 +1447,16 @@ async def resolve_design_tokens(
             stored = await _stored_design_tokens(session, run_uuid)
         if stored is not None:
             value, _on_run = stored
-            # Re-extract when the operator has since pointed the run at a different page; reuse
-            # otherwise. A brand does not change between stages, and the fetch is not free.
+            # Re-capture when the operator has since pointed the run at a different page; reuse
+            # otherwise. A brand does not change between stages, and 17 credits per stage would be
+            # the single largest line on a run.
             if not url or value.get("source_url") == url:
-                return value.get("content") or None
+                return _page_design_input(value)
 
     if not url:
         return None
 
-    tokens = await design_tokens_service.extract_design_tokens(url)
-    markdown = design_tokens_service.tokens_to_markdown(tokens)
+    design = await design_md_service.capture_page_design(url)
 
     if run_uuid is not None:
         # Stored either way. An unavailable sheet is a real finding worth keeping: it stops every
@@ -1439,28 +1471,160 @@ async def resolve_design_tokens(
                         context_key=DESIGN_TOKENS_CONTEXT_KEY,
                         version=version,
                         value={
-                            "content": markdown,
+                            # `content` is kept as an alias of the full sheet so anything still
+                            # reading the pre-DESIGN.md shape keeps working.
+                            "content": design.design_md,
+                            "design_md": design.design_md,
+                            "theme_brief": design.theme_brief,
                             "source_url": url,
-                            "available": tokens.available,
-                            "reason": tokens.reason,
-                            "css": design_tokens_service.tokens_to_css(tokens),
-                            "accent": tokens.accent,
-                            "page_background": tokens.page_background,
-                            "body_text": tokens.body_text,
+                            "available": design.available,
+                            "reason": design.reason,
+                            "sources": list(design.sources),
+                            "notes": design.notes,
+                            "screenshots": [
+                                {
+                                    "url": shot.image_url,
+                                    "label": shot.label,
+                                    "kind": shot.kind,
+                                    "width": shot.width,
+                                    "height": shot.height,
+                                    "model_safe": shot.model_safe,
+                                }
+                                for shot in design.screenshots
+                            ],
+                            # Pre-filtered, so the prompt builder never has to re-derive which
+                            # images the model API will accept.
+                            "model_screenshot_urls": [s.image_url for s in design.model_screenshots],
                         },
                         written_by_asset_id=None,
                     )
                 )
                 await session.commit()
                 logger.info(
-                    "Stored brand design tokens run_id=%s url=%s available=%s v%s",
+                    "Stored page design run_id=%s url=%s available=%s sources=%s shots=%s v%s",
                     run_id,
                     url,
-                    tokens.available,
+                    design.available,
+                    ",".join(design.sources) or "none",
+                    len(design.screenshots),
                     version,
                 )
 
-    return markdown
+    if not design.available:
+        # Stored above either way — an unreadable page is a finding worth keeping, because it stops
+        # every later stage re-paying for a page known to refuse readers. But the stages get the
+        # stated-unavailable sheet, not nothing, so they build in flagged greys instead of guessing.
+        return PageDesignInput(
+            design_md=design.design_md, theme_brief=design.theme_brief
+        )
+
+    return PageDesignInput(
+        design_md=design.design_md,
+        theme_brief=design.theme_brief,
+        screenshot_urls=tuple(s.image_url for s in design.model_screenshots),
+    )
+
+
+class ScreenshotOut(BaseModel):
+    url: str
+    label: str = ""
+    kind: str = ""
+    width: int | None = None
+    height: int | None = None
+    #: False when the image is past what the model API accepts, so it is shown to the operator but
+    #: never sent to the model. The UI says so rather than leaving a silent gap.
+    model_safe: bool = True
+
+
+class PageDesignResponse(BaseModel):
+    source_url: str
+    available: bool
+    reason: str | None = None
+    #: The full DESIGN.md — YAML token front matter plus rationale. What the CRO rewrite is built
+    #: against, and what the operator downloads.
+    design_md: str = ""
+    #: Colours, type, shapes and logo only. What the lead-magnet stages are built against.
+    theme_brief: str = ""
+    screenshots: list[ScreenshotOut] = []
+    #: Which readers answered: "styleguide", "fonts", "css parse", "screenshots".
+    sources: list[str] = []
+    notes: list[str] = []
+
+
+@router.get("/runs/{run_id}/design", response_model=PageDesignResponse)
+async def read_run_page_design(run_id: str) -> PageDesignResponse:
+    """The DESIGN.md captured for this run, as stored — no capture, no credits.
+
+    Separate from `POST /pipeline/design` on purpose: this one is free and safe for the UI to poll
+    or for an operator to open twice, because the expensive read already happened on the run's first
+    HTML stage.
+    """
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{run_id!r} is not a run id.") from exc
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        stored = await _stored_design_tokens(session, run_uuid)
+    if stored is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No design has been captured for this run yet. It is read on the first stage "
+            "that builds HTML.",
+        )
+
+    value, _on_run = stored
+    return PageDesignResponse(
+        source_url=value.get("source_url") or "",
+        available=bool(value.get("available")),
+        reason=value.get("reason"),
+        design_md=value.get("design_md") or value.get("content") or "",
+        theme_brief=value.get("theme_brief") or "",
+        screenshots=[ScreenshotOut(**shot) for shot in (value.get("screenshots") or [])],
+        sources=list(value.get("sources") or []),
+        notes=list(value.get("notes") or []),
+    )
+
+
+class PageDesignRequest(BaseModel):
+    url: str
+    #: Skip the two screenshot calls. For a preview where the operator only wants to see the tokens.
+    with_screenshots: bool = True
+
+
+@router.post("/design", response_model=PageDesignResponse)
+async def capture_page_design_route(payload: PageDesignRequest) -> PageDesignResponse:
+    """Capture one page's DESIGN.md and reference screenshots. **17 Context.dev credits**
+    (10 styleguide + 5 fonts + 2 screenshots), or 15 with `with_screenshots=false`.
+
+    Unattached to a run, so nothing is stored: this is the "show me what you'd read off this URL"
+    button, not the path a generation takes. A stage capture goes through `resolve_page_design`,
+    which caches on the run.
+    """
+    design = await design_md_service.capture_page_design(
+        payload.url, with_screenshots=payload.with_screenshots
+    )
+    return PageDesignResponse(
+        source_url=design.source_url,
+        available=design.available,
+        reason=design.reason,
+        design_md=design.design_md,
+        theme_brief=design.theme_brief,
+        screenshots=[
+            ScreenshotOut(
+                url=shot.image_url,
+                label=shot.label,
+                kind=shot.kind,
+                width=shot.width,
+                height=shot.height,
+                model_safe=shot.model_safe,
+            )
+            for shot in design.screenshots
+        ],
+        sources=list(design.sources),
+        notes=list(design.notes),
+    )
 
 
 class DesignTokensRequest(BaseModel):
@@ -1506,6 +1670,559 @@ async def read_design_tokens(payload: DesignTokensRequest) -> DesignTokensRespon
         font_links=tokens.font_links,
         markdown=design_tokens_service.tokens_to_markdown(tokens),
         css=design_tokens_service.tokens_to_css(tokens),
+    )
+
+
+# --------------------------------------------------------------------------------------
+# The page replica
+#
+# `design_md.py` gives a stage the client's palette and, since the structure walk, the client's
+# section order. This is the step past both: the client's actual page, with only its words
+# replaced. See `app/services/page_replica.py` for why that has to be a different mechanism rather
+# than a stronger instruction.
+#
+# The template is captured once per run and cached here exactly as the design sheet is, and for the
+# same reason — it is a property of the page, not of the stage reading it. It is *not* inheritable
+# down the `source_run_id` chain, which is the one place this key differs from
+# `brand_design_tokens`: a brand is shared between a parent page and its sub-services, but a
+# template is one specific document, and a sub-service page assembled from its parent's template
+# would be a copy of the parent page.
+# --------------------------------------------------------------------------------------
+
+PAGE_TEMPLATE_CONTEXT_KEY = "page_replica_template"
+
+
+def _registrable_host(url: str) -> str:
+    """The host, minus `www.`, lowercased. Enough to answer "is this the client's own site?" —
+    deliberately not a public-suffix parse, which would need a dependency and a suffix list to tell
+    `example.co.uk` from `example.co`."""
+    host = urlparse(url if "://" in url else f"https://{url}").netloc.lower()
+    host = host.split("@")[-1].split(":")[0]
+    return host[4:] if host.startswith("www.") else host
+
+
+def _client_hosts(answers: dict[str, str], profile: dict[str, str]) -> set[str]:
+    candidates = [answers.get("client_website_url") or "", profile.get("website_url") or ""]
+    return {host for host in (_registrable_host(value) for value in candidates if value.strip()) if host}
+
+
+def _replica_refusal(url: str, answers: dict[str, str], profile: dict[str, str]) -> str | None:
+    """Why this URL must not be templated, or None when it may be.
+
+    Matching a page's palette and reproducing a page's markup are different acts. The first is
+    fine against any reference — a client is allowed to admire somebody's design. The second
+    produces a near-copy of the document, and that is only appropriate when the document is the
+    client's own.
+
+    `existing_page_url` and `parent_pillar_page_url` are normally the client's own pages, but
+    "normally" is not a guarantee: pasting a competitor's URL into the CRO stage's Existing Page
+    field is an ordinary thing to do while researching, and it must not quietly yield a clone of
+    that competitor's site.
+
+    When there is no client domain on record there is nothing to compare against, and this allows
+    the capture rather than refusing. Refusing would block the common case — a run where
+    `existing_page_url` is the only URL anybody filled in — on the basis of an absent field rather
+    than a detected problem.
+    """
+    target = _registrable_host(url)
+    if not target:
+        return f"{url!r} has no host to check against the client's own domain."
+
+    hosts = _client_hosts(answers, profile)
+    if not hosts:
+        return None
+    if any(target == host or target.endswith(f".{host}") or host.endswith(f".{target}") for host in hosts):
+        return None
+    return (
+        f"{target} is not the client's own domain ({', '.join(sorted(hosts))}). Its palette, type "
+        "and section order are still used as a reference, but its markup is not copied — "
+        "reproducing another company's page is a different thing from matching its design."
+    )
+
+
+async def _stored_page_template(session: AsyncSession, run_uuid: uuid.UUID) -> tuple[dict, uuid.UUID] | None:
+    found = await _latest_context_entry(session, run_uuid, PAGE_TEMPLATE_CONTEXT_KEY)
+    if found is None:
+        return None
+    entry, on_run = found
+    return (entry.value if isinstance(entry.value, dict) else {}), on_run
+
+
+def _template_from_stored(value: dict) -> page_replica_service.PageTemplate | None:
+    """Rebuild a `PageTemplate` from its stored row.
+
+    The slots are rehydrated rather than re-derived. Re-walking the stored template would produce
+    the same ids from the same document *today*, and would silently produce different ones the
+    moment the slot rules change — writing the copy meant for one line into another, on every run
+    captured before the change. The ids are stored because they are identifiers, not derivations.
+    """
+    if not value:
+        return None
+    slots = tuple(
+        page_replica_service.Slot(
+            slot_id=row["slot_id"],
+            path=tuple(row["path"]),
+            role=row.get("role", "text"),
+            original=row.get("original", ""),
+            max_chars=int(row.get("max_chars", 0)),
+            band_index=int(row.get("band_index", 0)),
+            band_role=row.get("band_role", ""),
+            holder=row.get("holder", ""),
+            locked=bool(row.get("locked")),
+            lock_reason=row.get("lock_reason", ""),
+        )
+        for row in (value.get("slots") or [])
+    )
+    return page_replica_service.PageTemplate(
+        source_url=value.get("source_url") or "",
+        available=bool(value.get("available")),
+        reason=value.get("reason"),
+        template_html=value.get("template_html") or "",
+        slots=slots,
+        source=value.get("source") or "direct",
+        notes=list(value.get("notes") or []),
+    )
+
+
+def _template_to_stored(template: page_replica_service.PageTemplate) -> dict:
+    return {
+        "source_url": template.source_url,
+        "available": template.available,
+        "reason": template.reason,
+        "template_html": template.template_html,
+        "source": template.source,
+        "notes": template.notes,
+        "band_count": template.structure.band_count if template.structure is not None else 0,
+        "slots": [
+            {
+                "slot_id": slot.slot_id,
+                "path": list(slot.path),
+                "role": slot.role,
+                "original": slot.original,
+                "max_chars": slot.max_chars,
+                "band_index": slot.band_index,
+                "band_role": slot.band_role,
+                "holder": slot.holder,
+                "locked": slot.locked,
+                "lock_reason": slot.lock_reason,
+            }
+            for slot in template.slots
+        ],
+    }
+
+
+async def resolve_page_template(
+    run_id: str | None,
+    answers: dict[str, str],
+    profile: dict[str, str],
+) -> page_replica_service.PageTemplate | None:
+    """This run's page template, capturing it once if it has none.
+
+    Returns None when there is no URL to read. That is not an error: the replica is an *addition*
+    to a replica stage's deliverable, and a stage without a template produces exactly what it
+    produced before this existed — its own document, built against DESIGN.md and the structure walk.
+
+    Capture costs 0 credits when the free fetch answers and 1 when the page has to be rendered, so
+    it happens once per run and is read from context on every stage after the first.
+    """
+    url = _design_source_url(answers, profile)
+    if not url:
+        return None
+
+    session_factory = get_sessionmaker()
+    run_uuid: uuid.UUID | None = None
+    if run_id:
+        try:
+            run_uuid = uuid.UUID(run_id)
+        except ValueError:
+            run_uuid = None
+
+    if run_uuid is not None:
+        async with session_factory() as session:
+            stored = await _stored_page_template(session, run_uuid)
+        if stored is not None:
+            value, _on_run = stored
+            # Re-capture when the operator has pointed the run at a different page; reuse otherwise.
+            if value.get("source_url") == url:
+                return _template_from_stored(value)
+
+    refusal = _replica_refusal(url, answers, profile)
+    if refusal:
+        logger.info("Page replica declined for run_id=%s url=%s: %s", run_id, url, refusal)
+        template = page_replica_service.PageTemplate(source_url=url, available=False, reason=refusal)
+    else:
+        template = await page_replica_service.capture_page_template(url)
+
+    if run_uuid is not None:
+        # Stored either way, for the reason the design sheet is: a page known to refuse readers,
+        # or a reference known to be somebody else's, is a finding worth keeping rather than a
+        # question every later stage in the run re-asks.
+        async with session_factory() as session:
+            if await session.get(Run, run_uuid) is not None:
+                version = await _next_version(session, run_uuid, PAGE_TEMPLATE_CONTEXT_KEY)
+                session.add(
+                    ContextEntry(
+                        run_id=run_uuid,
+                        context_key=PAGE_TEMPLATE_CONTEXT_KEY,
+                        version=version,
+                        value=_template_to_stored(template),
+                        written_by_asset_id=None,
+                    )
+                )
+                await session.commit()
+                logger.info(
+                    "Stored page template run_id=%s url=%s available=%s slots=%s bytes=%s v%s",
+                    run_id,
+                    url,
+                    template.available,
+                    len(template.slots),
+                    template.byte_size,
+                    version,
+                )
+    return template
+
+
+class SlotOut(BaseModel):
+    slot_id: str
+    role: str
+    original: str
+    max_chars: int
+    band_index: int = 0
+    band_role: str = ""
+    holder: str = ""
+    locked: bool = False
+    lock_reason: str = ""
+
+
+class PageTemplateResponse(BaseModel):
+    source_url: str
+    available: bool
+    reason: str | None = None
+    #: How the HTML was read: "direct" (free) or "context.dev" (1 credit).
+    source: str = "direct"
+    band_count: int = 0
+    slot_count: int = 0
+    open_slot_count: int = 0
+    locked_slot_count: int = 0
+    template_bytes: int = 0
+    #: The deck exactly as the assembly pass will see it, so an operator can read what the model is
+    #: being asked before spending a generation on it.
+    copy_deck: str = ""
+    #: Every slot, locked ones included. The locked list is the point of the preview: it is where an
+    #: operator checks that the phone number, the nav and the brand mark really are being held.
+    slots: list[SlotOut] = []
+    notes: list[str] = []
+
+
+def _template_response(template: page_replica_service.PageTemplate) -> PageTemplateResponse:
+    return PageTemplateResponse(
+        source_url=template.source_url,
+        available=template.available,
+        reason=template.reason,
+        source=template.source,
+        band_count=template.structure.band_count if template.structure is not None else 0,
+        slot_count=len(template.slots),
+        open_slot_count=len(template.open_slots),
+        locked_slot_count=len(template.locked_slots),
+        template_bytes=template.byte_size,
+        copy_deck=page_replica_service.copy_deck_markdown(template),
+        slots=[
+            SlotOut(
+                slot_id=slot.slot_id,
+                role=slot.role,
+                original=slot.original,
+                max_chars=slot.max_chars,
+                band_index=slot.band_index,
+                band_role=slot.band_role,
+                holder=slot.holder,
+                locked=slot.locked,
+                lock_reason=slot.lock_reason,
+            )
+            for slot in template.slots
+        ],
+        notes=list(template.notes),
+    )
+
+
+class PageTemplateRequest(BaseModel):
+    url: str
+
+
+@router.post("/replica", response_model=PageTemplateResponse)
+async def capture_page_template_route(payload: PageTemplateRequest) -> PageTemplateResponse:
+    """Capture one page as a fillable template. **0 credits** normally, 1 if it has to be rendered.
+
+    Unattached to a run, so nothing is stored, and no domain check is applied: this is the "show me
+    the slots you would fill on this page" button, and looking at a page is not copying it. The
+    domain check belongs on `resolve_page_template`, which is the path that produces a document.
+    """
+    template = await page_replica_service.capture_page_template(payload.url)
+    return _template_response(template)
+
+
+@router.get("/runs/{run_id}/replica", response_model=PageTemplateResponse)
+async def read_run_page_template(run_id: str) -> PageTemplateResponse:
+    """The template captured for this run, as stored. Free, and safe to poll."""
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{run_id!r} is not a run id.") from exc
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        stored = await _stored_page_template(session, run_uuid)
+    if stored is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No page template has been captured for this run yet. It is read on the first "
+            "replica stage (CRO or Pillar Page).",
+        )
+
+    value, _on_run = stored
+    template = _template_from_stored(value)
+    if template is None:
+        raise HTTPException(status_code=404, detail="This run's stored page template is empty.")
+
+    response = _template_response(template)
+    # From the row rather than re-walked: the stored template carries no `PageStructure`, and
+    # re-extracting one to fill in a single integer would parse a 300KB document per poll.
+    response.band_count = int(value.get("band_count") or 0)
+    return response
+
+
+#: Where an assembled page is kept. A deliverable, not a cache: it is the artifact an operator
+#: hands over, and re-assembling writes a new version rather than replacing this one, like every
+#: other row in this table.
+PAGE_REPLICA_OUTPUT_CONTEXT_KEY = "page_replica_output"
+
+
+async def _assemble_replica(
+    run_uuid: uuid.UUID,
+    asset_id: str,
+    template: page_replica_service.PageTemplate,
+    draft: str,
+    *,
+    chat_session_id: str | None = None,
+    allow_structural_changes: bool = False,
+) -> page_replica_service.ReplicaResult:
+    """Run the assembly pass, store the assembled page, and return the report.
+
+    One helper for both callers — the stage stream, which assembles automatically when a replica
+    stage finishes, and the explicit re-assemble route an operator uses after editing the draft.
+    They must not drift: an operator comparing the two would be comparing this pipeline against
+    itself.
+    """
+    deck = page_replica_service.copy_deck_markdown(
+        template, allow_structural_changes=allow_structural_changes
+    )
+    reply = await generate_replica_copy(
+        deck,
+        draft,
+        on_usage=usage_service.recorder(
+            kind="replica_assembly",
+            chat_session_id=chat_session_id,
+            run_id=str(run_uuid),
+            asset_id=asset_id,
+        ),
+    )
+    # The ops are read only when the channel was opened. Parsing them unconditionally would let a
+    # model that volunteered a `structure` array reshape a page nobody asked it to reshape.
+    changes = page_replica_service.parse_structure_ops(reply) if allow_structural_changes else ()
+    result = page_replica_service.apply_copy(
+        template, page_replica_service.parse_copy_map(reply), changes
+    )
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        if await session.get(Run, run_uuid) is not None:
+            version = await _next_version(session, run_uuid, PAGE_REPLICA_OUTPUT_CONTEXT_KEY)
+            session.add(
+                ContextEntry(
+                    run_id=run_uuid,
+                    context_key=PAGE_REPLICA_OUTPUT_CONTEXT_KEY,
+                    version=version,
+                    value={
+                        "asset_id": asset_id,
+                        "source_url": template.source_url,
+                        "html": result.html,
+                        "filled": result.filled,
+                        "kept": result.kept,
+                        "intact": result.intact,
+                        "rejected": [list(row) for row in result.rejected],
+                        "warnings": [list(row) for row in result.warnings],
+                        "checks": [[name, passed, detail] for name, passed, detail in result.checks],
+                        "structural": [list(row) for row in result.structural],
+                    },
+                    written_by_asset_id=asset_id,
+                )
+            )
+            await session.commit()
+            logger.info(
+                "Stored assembled replica run_id=%s asset_id=%s filled=%d/%d intact=%s v%s",
+                run_uuid,
+                asset_id,
+                result.filled,
+                result.total,
+                result.intact,
+                version,
+            )
+    return result
+
+
+class AssembleReplicaRequest(BaseModel):
+    asset_id: str = "cro"
+    #: The stage document to take the copy from. Defaults to the stage's latest stored output, so
+    #: the ordinary call is `{}`.
+    draft: str | None = None
+    chat_session_id: str | None = None
+    #: Let the assembly request a shape change — hide a band, trim a grid, reorder bands. Off by
+    #: default, and the default is the product decision: the replica exists so the generated page is
+    #: indistinguishable from the client's own. This is the operator saying "I have read the CRO
+    #: audit and I want its structural recommendations applied too", which is a different request.
+    allow_structural_changes: bool = False
+
+
+class ReplicaCheckOut(BaseModel):
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+class AssembledReplicaResponse(BaseModel):
+    source_url: str
+    #: The assembled page: the client's markup, the generated words.
+    html: str
+    filled: int
+    kept: int
+    fill_rate: float
+    #: True only when every structural check passed. The gate worth showing in the UI.
+    intact: bool
+    #: `[slot_id, why]` for copy that was refused, and for copy applied but worth a second look.
+    rejected: list[list[str]] = []
+    warnings: list[list[str]] = []
+    checks: list[ReplicaCheckOut] = []
+    #: `[what was done, the reason given]` for each applied shape change. Empty on the default
+    #: path. Shown to the operator verbatim — an unjustifiable change should be visible as one.
+    structural: list[list[str]] = []
+
+
+@router.post("/runs/{run_id}/replica/assemble", response_model=AssembledReplicaResponse)
+async def assemble_run_replica(run_id: str, payload: AssembleReplicaRequest) -> AssembledReplicaResponse:
+    """Run the assembly pass for this run and return the client's page with the new copy in it.
+
+    Separate from stage generation on purpose. The stage's own document is the deliverable its
+    master prompt defines and is untouched by any of this; the replica is a second artifact built
+    *from* it, and an operator who has just edited the draft wants it re-assembled without paying
+    for the whole stage again.
+    """
+    if payload.asset_id not in PAGE_REPLICA_STAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{payload.asset_id!r} does not build a page, so there is nothing to assemble. "
+            f"The replica applies to: {', '.join(sorted(PAGE_REPLICA_STAGES))}.",
+        )
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{run_id!r} is not a run id.") from exc
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        stored = await _stored_page_template(session, run_uuid)
+        draft = payload.draft or ""
+        if not draft.strip():
+            # The stage's own output, which lives in the context store under the asset id.
+            found = await _latest_context_entry(session, run_uuid, payload.asset_id)
+            if found is not None:
+                entry, _on_run = found
+                draft = (entry.value or {}).get("content") or ""
+
+    if stored is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No page template has been captured for this run, so there is nothing to "
+            "assemble into.",
+        )
+    if not draft.strip():
+        raise HTTPException(
+            status_code=422,
+            detail=f"The {payload.asset_id} stage has no output to take copy from yet. Run it "
+            "first, or pass a draft.",
+        )
+
+    value, _on_run = stored
+    template = _template_from_stored(value)
+    if template is None or not template.available:
+        reason = (template.reason if template is not None else None) or "no template was captured"
+        raise HTTPException(status_code=422, detail=f"This run's page template is unavailable: {reason}")
+
+    result = await _assemble_replica(
+        run_uuid,
+        payload.asset_id,
+        template,
+        draft,
+        chat_session_id=payload.chat_session_id,
+        allow_structural_changes=payload.allow_structural_changes,
+    )
+
+    return AssembledReplicaResponse(
+        source_url=template.source_url,
+        html=result.html,
+        filled=result.filled,
+        kept=result.kept,
+        fill_rate=round(result.fill_rate, 3),
+        intact=result.intact,
+        rejected=[[slot_id, why] for slot_id, why in result.rejected],
+        warnings=[[slot_id, why] for slot_id, why in result.warnings],
+        checks=[
+            ReplicaCheckOut(name=name, passed=passed, detail=detail)
+            for name, passed, detail in result.checks
+        ],
+        structural=[[what, why] for what, why in result.structural],
+    )
+
+
+@router.get("/runs/{run_id}/replica/output", response_model=AssembledReplicaResponse)
+async def read_run_replica_output(run_id: str) -> AssembledReplicaResponse:
+    """The most recently assembled page for this run. Free — the generation already happened.
+
+    Separate from `POST .../assemble` for the same reason `GET .../design` is separate from
+    `POST /design`: one of them spends a call and one of them does not, and the UI needs to be able
+    to show the artifact without deciding to pay for it.
+    """
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{run_id!r} is not a run id.") from exc
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        found = await _latest_context_entry(session, run_uuid, PAGE_REPLICA_OUTPUT_CONTEXT_KEY)
+    if found is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No page has been assembled for this run yet. It is built when a replica stage "
+            "(CRO or Pillar Page) finishes.",
+        )
+
+    value = found[0].value or {}
+    filled = int(value.get("filled") or 0)
+    kept = int(value.get("kept") or 0)
+    total = filled + kept
+    return AssembledReplicaResponse(
+        source_url=value.get("source_url") or "",
+        html=value.get("html") or "",
+        filled=filled,
+        kept=kept,
+        fill_rate=round(filled / total, 3) if total else 0.0,
+        intact=bool(value.get("intact")),
+        rejected=[list(row) for row in (value.get("rejected") or [])],
+        warnings=[list(row) for row in (value.get("warnings") or [])],
+        checks=[
+            ReplicaCheckOut(name=row[0], passed=bool(row[1]), detail=row[2] if len(row) > 2 else "")
+            for row in (value.get("checks") or [])
+        ],
+        structural=[list(row) for row in (value.get("structural") or [])],
     )
 
 
@@ -1800,10 +2517,34 @@ async def _generation_sse_stream(
         if prepass_event is not None:
             yield _sse(prepass_event)
 
-        # Read once per run and cached; None when there is no page to read or it refused.
-        # `build_prompt` simply omits the block then, and the stage's own prompt falls back
-        # to asking for brand values rather than inventing a palette.
-        design_tokens_markdown = await resolve_design_tokens(run_id, answers, client_profile)
+        # Captured once per run and cached; None when there is no page to read. `build_prompt`
+        # simply omits the block then, and the stage's own prompt falls back to asking for brand
+        # values rather than inventing a palette. Which view of it a stage sees — the full DESIGN.md
+        # or the theme brief — and whether it gets the screenshots is decided in `generation.py`.
+        page_design = await resolve_page_design(run_id, answers, client_profile)
+
+        # Only the stages that rebuild a page, and only when there is a page to rebuild. Captured
+        # before the generation rather than after it so the operator learns *now* whether the
+        # replica is going to happen — a template that turns out to be unavailable is worth knowing
+        # about while the stage is still running, not after it has finished.
+        page_template = None
+        if asset_id in PAGE_REPLICA_STAGES:
+            page_template = await resolve_page_template(run_id, answers, client_profile)
+            if page_template is not None:
+                yield _sse(
+                    {
+                        "type": "replica_template",
+                        "available": page_template.available,
+                        "reason": page_template.reason,
+                        "source_url": page_template.source_url,
+                        "open_slots": len(page_template.open_slots),
+                        "locked_slots": len(page_template.locked_slots),
+                        "notes": page_template.notes,
+                    }
+                )
+
+        assembling = page_template is not None and page_template.available and run_id
+        chunks: list[str] = []
 
         async for delta in generate_stage_stream(
             asset_id,
@@ -1816,9 +2557,48 @@ async def _generation_sse_stream(
                 asset_id=asset_id,
                 phase=phase,
             ),
-            design_tokens_markdown=design_tokens_markdown,
+            page_design=page_design,
         ):
+            if assembling:
+                chunks.append(delta)
             yield _sse({"type": "delta", "text": delta})
+
+        if assembling and chunks:
+            # A second billed call, so it announces itself. Wrapped separately from the stage's own
+            # handler below: the stage document is already streamed and complete at this point, and
+            # a failure to build the *extra* artifact must not be reported as the stage failing.
+            yield _sse({"type": "replica_start"})
+            try:
+                assert page_template is not None
+                result = await _assemble_replica(
+                    uuid.UUID(run_id),
+                    asset_id,
+                    page_template,
+                    "".join(chunks),
+                    chat_session_id=chat_session_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — the stage succeeded; only the extra failed
+                fault = classify_api_error(exc)
+                logger.exception("Replica assembly failed stage=%r fault=%s", asset_id, fault.code)
+                yield _sse({"type": "replica_error", "message": fault.message, "code": fault.code})
+            else:
+                # The HTML itself is not put on the wire. It is 100-400KB, it is already stored, and
+                # `GET /runs/{run_id}/replica/output` serves it — a single SSE frame carrying a
+                # whole document is a good way to stall a UI mid-stream for no gain.
+                yield _sse(
+                    {
+                        "type": "replica",
+                        "asset_id": asset_id,
+                        "source_url": page_template.source_url,
+                        "filled": result.filled,
+                        "kept": result.kept,
+                        "intact": result.intact,
+                        "rejected": [list(row) for row in result.rejected],
+                        "warnings": [list(row) for row in result.warnings],
+                        "checks": [[name, passed, detail] for name, passed, detail in result.checks],
+                        "structural": [list(row) for row in result.structural],
+                    }
+                )
     except Exception as exc:  # noqa: BLE001 - every failure is classified and streamed, never swallowed
         # One handler, because what the operator needs is the same either way: a classified fault
         # rather than a raw SDK string. `classify` never raises, so an unrecognised error still

@@ -886,6 +886,10 @@ class DesignTokens:
     stylesheet_urls: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     logo: Logo | None = None
+    #: The page's HTML, as fetched. Not a token — a byproduct of the fetch, kept so
+    #: `page_structure.py` can read the DOM without a second request for the same document. Excluded
+    #: from `repr` because it is a whole web page and this dataclass is logged.
+    html: str = field(default="", repr=False)
 
     @property
     def page_background(self) -> str | None:
@@ -1017,6 +1021,7 @@ def _build_tokens(source_url: str, sources: _Sources) -> DesignTokens:
         buttons=_collect_buttons(sources, properties=declared),
         stylesheet_urls=sources.stylesheet_urls,
         notes=sources.notes,
+        html=sources.html,
     )
 
 

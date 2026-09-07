@@ -9,21 +9,30 @@ gets pasted is the visible prose, while accordion bodies, FAQ answers, button la
 contact details — exactly the things Audits 1, 3 and 7 look for — are the parts people miss. The
 stage already collects "Existing Page URL" one question earlier, so the page is one fetch away.
 
-Two readers, tried in order
----------------------------
+Three readers, tried in order
+-----------------------------
 1. **Direct** — this backend's own HTTP fetch plus the extractor below. Fast, free, and right for
    the server-rendered marketing page this stage usually points at.
-2. **Anthropic's `web_fetch` server tool** — used only when the direct read fails or comes back
-   almost empty. That covers the two classes a plain GET can never handle: sites whose WAF refuses
-   server-side clients outright (403 to every user agent — g2.com answers this backend with a 403
-   and that fetcher with 24k characters), and sites that render their copy in the browser. No
-   headless browser, no Chromium dependency; the page text is taken from the tool result rather
-   than from anything the model writes, so nothing is paraphrased. Disable with
-   `SCRAPER_CLAUDE_FALLBACK=0`.
+2. **Context.dev** (`GET /web/scrape/markdown`, 1 credit) — used only when the direct read fails or
+   comes back almost empty. That covers the two classes a plain GET can never handle: sites whose
+   WAF refuses server-side clients outright (403 to every user agent — g2.com answers this backend
+   with a 403), and sites that render their copy in the browser. Context.dev egresses from its own
+   fleet and renders the page, so it clears both, and it returns Markdown — headings, lists and
+   link text preserved — which is the same shape the extractor below produces. No headless browser
+   and no Chromium dependency here. Disable with `CONTEXT_DEV_SCRAPER=0`.
+   Docs: https://docs.context.dev/api-reference/web-scraping/markdown
+3. **Anthropic's `web_fetch` server tool** — last, for the case where Context.dev is unconfigured
+   or itself comes back thin. The page text is taken from the tool result rather than from anything
+   the model writes, so nothing is paraphrased. Disable with `SCRAPER_CLAUDE_FALLBACK=0`.
 
-`ScrapedPage.source` records which reader answered, and the UI says so. If both fail the operator
-is asked to paste, with the direct read's reason shown — silent partial extraction is the one
-outcome worth ruling out, because the CRO audit would then quote a page that isn't the client's.
+Context.dev sits ahead of the Claude fetcher because it is the cheaper and more literal of the two:
+one credit against a model call, and a rendered-page-to-Markdown conversion rather than a model
+being asked to trigger a fetch. Both are only ever reached when the free direct read has already
+failed.
+
+`ScrapedPage.source` records which reader answered, and the UI says so. If all fail the operator is
+asked to paste, with the direct read's reason shown — silent partial extraction is the one outcome
+worth ruling out, because the CRO audit would then quote a page that isn't the client's.
 
 Extraction shape
 ----------------
@@ -48,6 +57,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
+from app.services import context_dev
 from app.services.claude_client import get_client
 
 logger = logging.getLogger(__name__)
@@ -154,8 +164,9 @@ class ScrapedPage:
     text: str
     word_count: int
     truncated: bool
-    # How the page was read: "direct" is this backend's own HTTP fetch, "claude" is Anthropic's
-    # server-side fetcher, used when the direct read is blocked or comes back empty.
+    # How the page was read: "direct" is this backend's own HTTP fetch, "context.dev" is
+    # Context.dev's rendered scrape, "claude" is Anthropic's server-side fetcher. The last two are
+    # only reached when the direct read is blocked or comes back empty.
     source: str = "direct"
     warnings: list[str] = field(default_factory=list)
 
@@ -479,6 +490,54 @@ def _tidy_fetcher_markdown(text: str) -> str:
     return _BLANK_RUN.sub("\n\n", "\n".join(kept)).strip()
 
 
+def _context_dev_enabled() -> bool:
+    """The Context.dev reader is ON whenever a key is configured, unless `CONTEXT_DEV_SCRAPER=0`.
+
+    Two switches rather than one: the env flag is for turning the spend off deliberately, and the
+    key check is so a deployment that simply has not been given a key degrades to the old two-reader
+    behaviour instead of logging an error on every blocked page.
+    """
+    if os.environ.get("CONTEXT_DEV_SCRAPER", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    return context_dev.is_configured()
+
+
+async def _fetch_via_context_dev(url: str) -> ScrapedPage:
+    """Read `url` through Context.dev's Markdown scrape. Costs 1 credit, so it is only ever called
+    after the free direct read has failed or come back thin.
+
+    The Markdown comes back with headings as `#`, list items bulleted and link text inline — the
+    same structure-preserving shape `extract_readable_text` produces from HTML — so the CRO audit's
+    "compare section order" checks work on it unchanged. No `max_age_ms` is passed: the cached copy
+    is the right default for a marketing page, and paying for a live fetch of a page that has not
+    moved is waste.
+    """
+    try:
+        page = await context_dev.scrape_markdown(url)
+    except context_dev.ContextDevError as exc:
+        # Re-raised as a ScrapeError so `scrape_page` has one exception type to reason about; the
+        # wrapper has already turned the SDK failure into a sentence worth showing.
+        raise ScrapeError(str(exc)) from exc
+
+    text = page.markdown
+    logger.info(
+        "Read page via Context.dev url=%r chars=%s cache_age_ms=%s",
+        url,
+        len(text),
+        page.cache_age_ms,
+    )
+    return ScrapedPage(
+        url=url,
+        final_url=page.final_url,
+        title=page.title,
+        meta_description=page.description,
+        text=text,
+        word_count=page.word_count,
+        truncated=False,
+        source="context.dev",
+    )
+
+
 def _claude_fallback_enabled() -> bool:
     """The Claude-fetcher fallback is ON unless explicitly disabled with `SCRAPER_CLAUDE_FALLBACK=0`."""
     return os.environ.get("SCRAPER_CLAUDE_FALLBACK", "1").strip().lower() not in {"0", "false", "no", "off"}
@@ -564,10 +623,28 @@ async def _read_direct(url: str) -> ScrapedPage:
     return page
 
 
+# The fallback readers, in the order they are tried, each paired with the line the UI shows so a
+# fallback read is never invisible. Both are only reached when the free direct read has failed.
+_FALLBACK_READERS: tuple[tuple[str, str], ...] = (
+    ("context.dev", "Read through Context.dev's page reader"),
+    ("claude", "Read through Claude's page reader"),
+)
+
+
+def _fallback_reader(name: str):
+    """Map a reader name to its enabled-check and its coroutine. Kept as a lookup rather than an
+    if/elif chain so adding a fourth reader is one tuple entry above and one line here."""
+    return {
+        "context.dev": (_context_dev_enabled, _fetch_via_context_dev),
+        "claude": (_claude_fallback_enabled, _fetch_via_claude),
+    }[name]
+
+
 async def scrape_page(raw_url: str) -> ScrapedPage:
-    """Read one page and return its copy, trying the direct reader first and Anthropic's fetcher
-    second. Raises `ScrapeError` only when both fail — the direct reader's reason is the one raised,
-    since it is the one that describes the page ("blocked an automated read", "returned HTTP 404").
+    """Read one page and return its copy, trying the direct reader first, then Context.dev, then
+    Anthropic's fetcher. Raises `ScrapeError` only when all of them fail — the direct reader's
+    reason is the one raised, since it is the one that describes the page ("blocked an automated
+    read", "returned HTTP 404").
     """
     url = normalize_url(raw_url)
 
@@ -579,36 +656,48 @@ async def scrape_page(raw_url: str) -> ScrapedPage:
         direct_error = exc
         logger.info("Direct read failed url=%r: %s", url, exc)
 
-    # The fallback earns its call in exactly two situations: the direct read was refused, or it came
+    # A fallback earns its cost in exactly two situations: the direct read was refused, or it came
     # back with too little text to be the page (a JS shell, a consent wall). A good direct read is
-    # never second-guessed.
-    if (direct_error or (page and page.low_content)) and _claude_fallback_enabled():
-        try:
-            fallback = await _fetch_via_claude(url)
-        except ScrapeError as exc:
-            logger.warning("Fallback read also failed url=%r: %s", url, exc)
-        except Exception:  # noqa: BLE001 — an Anthropic/transport failure is not the operator's problem
-            # Swallowed on purpose: the direct reader's verdict below is the actionable one, and a
-            # rate limit on the fallback should not turn into the message the operator reads.
-            logger.exception("Fallback read errored url=%r", url)
-        else:
-            if not fallback.low_content:
-                fallback.warnings.append(
-                    "Read through Claude's page reader: "
-                    + (
-                        "this site refuses direct server-side requests."
-                        if direct_error
-                        else "the direct read came back almost empty, so the page renders in the browser."
-                    )
-                )
+    # never second-guessed, so neither paid reader is touched on the common path.
+    if direct_error or (page and page.low_content):
+        why = (
+            "this site refuses direct server-side requests."
+            if direct_error
+            else "the direct read came back almost empty, so the page renders in the browser."
+        )
+        for name, label in _FALLBACK_READERS:
+            enabled, read = _fallback_reader(name)
+            if not enabled():
+                continue
+            try:
+                fallback = await read(url)
+            except ScrapeError as exc:
+                logger.warning("Fallback read via %s also failed url=%r: %s", name, url, exc)
+                continue
+            except Exception:  # noqa: BLE001 — an upstream/transport failure is not the operator's problem
+                # Swallowed on purpose: the direct reader's verdict below is the actionable one, and
+                # a rate limit on a fallback should not become the message the operator reads.
+                logger.exception("Fallback read via %s errored url=%r", name, url)
+                continue
+
+            if fallback.low_content:
                 logger.info(
-                    "Read page url=%r via=claude words=%s (direct: %s)",
+                    "Fallback read via %s for url=%r was also thin (%s words)",
+                    name,
                     url,
                     fallback.word_count,
-                    "failed" if direct_error else "thin",
                 )
-                return fallback
-            logger.info("Fallback read for url=%r was also thin (%s words)", url, fallback.word_count)
+                continue
+
+            fallback.warnings.append(f"{label}: {why}")
+            logger.info(
+                "Read page url=%r via=%s words=%s (direct: %s)",
+                url,
+                name,
+                fallback.word_count,
+                "failed" if direct_error else "thin",
+            )
+            return fallback
 
     if page is None:
         # Both readers are out. Raise the direct reader's message: it names what the site did.

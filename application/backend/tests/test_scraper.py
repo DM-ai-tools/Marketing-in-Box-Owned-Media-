@@ -1,11 +1,17 @@
 """Tests for `app/services/scraper.py`.
 
-Scoped to the parts that are pure: HTML -> text extraction, URL normalisation, and the
-public-host guard. The fetch itself is a network call and is left to manual verification against a
-real page — mocking httpx here would only test the mock.
+Scoped to the parts that are pure: HTML -> text extraction, URL normalisation, the public-host
+guard, and `scrape_page`'s choice of reader. The fetch itself is a network call and is left to
+manual verification against a real page — mocking httpx here would only test the mock.
+
+The reader-order tests at the bottom patch all three readers rather than mocking transports: what
+matters there is that neither paid fallback (Context.dev, then Claude) is reached while the free
+direct read is good.
 """
 
 from __future__ import annotations
+
+import types
 
 import pytest
 
@@ -190,3 +196,125 @@ def test_link_text_is_kept_and_urls_dropped():
     assert _tidy_fetcher_markdown("Ask about [our pricing](https://x.com/p).") == "Ask about our pricing."
     # A bracketed aside is not a link and must be left alone.
     assert _tidy_fetcher_markdown("A literal [aside] stays.") == "A literal [aside] stays."
+
+
+# ---------------------------------------------------------------------------------------------
+# Reader order: direct -> Context.dev -> Claude
+#
+# No network and no credits: `_read_direct` and the two fallback readers are all patched. What is
+# under test is `scrape_page`'s choice of reader, which is the part that spends money.
+# ---------------------------------------------------------------------------------------------
+
+
+def _page(text: str, source: str):
+    from app.services.scraper import ScrapedPage
+
+    return ScrapedPage(
+        url="https://example.com",
+        final_url="https://example.com",
+        title="T",
+        meta_description=None,
+        text=text,
+        word_count=len(text.split()),
+        truncated=False,
+        source=source,
+    )
+
+
+_FULL = " ".join(["word"] * 400)
+
+
+@pytest.fixture
+def readers(monkeypatch):
+    """Patch all three readers and record which ones were called."""
+    from app.services import scraper
+
+    called: list[str] = []
+
+    def install(name, attr, result):
+        async def reader(url):
+            called.append(name)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(scraper, attr, reader)
+
+    monkeypatch.setattr(scraper, "_context_dev_enabled", lambda: True)
+    monkeypatch.setattr(scraper, "_claude_fallback_enabled", lambda: True)
+    return types.SimpleNamespace(called=called, install=install, monkeypatch=monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_a_good_direct_read_spends_nothing(readers):
+    from app.services.scraper import scrape_page
+
+    readers.install("direct", "_read_direct", _page(_FULL, "direct"))
+    readers.install("context.dev", "_fetch_via_context_dev", _page(_FULL, "context.dev"))
+    readers.install("claude", "_fetch_via_claude", _page(_FULL, "claude"))
+
+    page = await scrape_page("https://example.com")
+
+    assert page.source == "direct"
+    assert readers.called == ["direct"]
+
+
+@pytest.mark.asyncio
+async def test_context_dev_answers_before_claude_is_reached(readers):
+    from app.services.scraper import scrape_page
+
+    readers.install("direct", "_read_direct", ScrapeError("403"))
+    readers.install("context.dev", "_fetch_via_context_dev", _page(_FULL, "context.dev"))
+    readers.install("claude", "_fetch_via_claude", _page(_FULL, "claude"))
+
+    page = await scrape_page("https://example.com")
+
+    assert page.source == "context.dev"
+    assert readers.called == ["direct", "context.dev"]
+    assert "Context.dev" in page.warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_claude_still_covers_a_context_dev_failure(readers):
+    from app.services.scraper import scrape_page
+
+    readers.install("direct", "_read_direct", ScrapeError("403"))
+    readers.install("context.dev", "_fetch_via_context_dev", ScrapeError("Context.dev answered HTTP 402"))
+    readers.install("claude", "_fetch_via_claude", _page(_FULL, "claude"))
+
+    page = await scrape_page("https://example.com")
+
+    assert page.source == "claude"
+    assert readers.called == ["direct", "context.dev", "claude"]
+
+
+@pytest.mark.asyncio
+async def test_a_thin_fallback_read_is_not_accepted(readers):
+    """A JS shell read by every reader is still a JS shell. The direct read's own verdict is what
+    the operator gets, rather than three words of nav copy presented as the page."""
+    from app.services.scraper import scrape_page
+
+    readers.install("direct", "_read_direct", _page("Loading", "direct"))
+    readers.install("context.dev", "_fetch_via_context_dev", _page("Loading", "context.dev"))
+    readers.install("claude", "_fetch_via_claude", _page("Loading", "claude"))
+
+    page = await scrape_page("https://example.com")
+
+    assert page.source == "direct"
+    assert page.low_content
+    assert readers.called == ["direct", "context.dev", "claude"]
+
+
+@pytest.mark.asyncio
+async def test_context_dev_is_skipped_when_unconfigured(readers):
+    from app.services import scraper
+
+    readers.monkeypatch.setattr(scraper, "_context_dev_enabled", lambda: False)
+    readers.install("direct", "_read_direct", ScrapeError("403"))
+    readers.install("context.dev", "_fetch_via_context_dev", _page(_FULL, "context.dev"))
+    readers.install("claude", "_fetch_via_claude", _page(_FULL, "claude"))
+
+    page = await scraper.scrape_page("https://example.com")
+
+    assert page.source == "claude"
+    assert readers.called == ["direct", "claude"]
