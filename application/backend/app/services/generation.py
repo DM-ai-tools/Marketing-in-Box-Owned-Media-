@@ -500,9 +500,19 @@ PAGE_REPLICA_STAGES: frozenset[str] = frozenset({"cro", "pillar_page"})
 # reproduce a layout it was never meant to copy. It still has to look like the same brand.
 BRAND_THEME_STAGES: frozenset[str] = BRAND_TOKEN_STAGES - PAGE_REPLICA_STAGES
 
-# Only the CRO rewrite is shown the page. It is the one stage whose job is "this page, rewritten",
-# where section order and hero composition are part of the brief rather than context.
-SCREENSHOT_STAGES: frozenset[str] = frozenset({"cro"})
+# The stages shown the page itself. Both of them rebuild a page that already exists, so section
+# order and hero composition are part of their brief rather than context.
+#
+# `pillar_page` was missing here, and its own intake is the argument for including it: the stage's
+# required `reference_design_source` field is "URL / description of the page whose visual design to
+# replicate", and its master prompt states as Rule 1 that every colour, button, layout and visual
+# element must trace back to that reference. Withholding the reference images from the one stage
+# whose first instruction is "replicate this page" left it tracing back to a token sheet, which
+# says what the page is made of and nothing about what it looks like.
+#
+# Free: the two shots are captured once per run either way (`capture_page_design`), so adding a
+# stage here costs prompt tokens and no credits.
+SCREENSHOT_STAGES: frozenset[str] = frozenset({"cro", "pillar_page"})
 
 _BRAND_TOKEN_DIRECTIVE = (
     "These are the client's REAL design tokens, read from their own live page's CSS — not a "

@@ -14,6 +14,15 @@ Persistence (Postgres):
                                                   ContextEntry version, advance its RunStage to
                                                   APPROVED, and record the approval in the audit log
 
+Standalone runs (skip to a stage without running the ones before it — see
+docs/Asset_Dependency_Map.md):
+  - GET  /pipeline/runs/{run_id}/readiness/{asset_id}
+                                                  which of a stage's upstream documents this run
+                                                  already has, which are missing, and what would
+                                                  have to run to fill them (free, read-only)
+  - POST /pipeline/runs/{run_id}/context          file a document under a context key by hand, so a
+                                                  stage can run without its producer
+
 Intake helper:
   - POST /pipeline/design                        capture a page's DESIGN.md + screenshots (17 credits)
   - GET  /pipeline/runs/{run_id}/design          the DESIGN.md already captured for a run (free)
@@ -36,6 +45,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Literal
@@ -81,6 +91,13 @@ from app.services import (
     usage as usage_service,
 )
 from app.services.api_errors import classify as classify_api_error
+from app.services.dependencies import (
+    UNRESOLVED,
+    Dependency,
+    dependencies_for,
+    producer_of,
+    seedable_keys,
+)
 from app.services.generation import (
     DEFAULT_PHASE,
     PAGE_REPLICA_STAGES,
@@ -759,6 +776,358 @@ async def get_run_context(run_id: str, context_key: str) -> RunContextResponse:
 
 
 # --------------------------------------------------------------------------------------
+# Standalone runs: seed a dependency, and report what a stage is still missing
+#
+# The pipeline's default is to run in order, and these two routes are what let an operator skip to
+# a stage anyway. `docs/Asset_Dependency_Map.md` is the analysis behind them; the graph itself lives
+# in `app/services/dependencies.py`, so nothing here maintains a second copy of it.
+#
+# The division of labour between the two:
+#
+#   GET  /runs/{id}/readiness/{asset}  — read-only, free. "Can `offers` run on this run, and if not,
+#                                        what exactly is missing and what are my options for each."
+#   POST /runs/{id}/context            — the "I'll provide it myself" option: file a document under
+#                                        a context key by hand, as if a stage had approved it.
+#
+# What is deliberately *not* here: anything to do with the competitor prepasses. Each of the ten
+# runs itself inside its own stage and does its own web search, so it is never something an operator
+# has to supply or run first. Readiness reports those fields under `prepass_fields`, apart from
+# `dependencies`, for exactly that reason — `lead_magnet`'s competitor list is a `required` field
+# that no asset upstream produces, and listing it as a dependency would send an operator hunting
+# for a stage that does not exist.
+# --------------------------------------------------------------------------------------
+
+
+class SeedContextRequest(BaseModel):
+    context_key: NonBlankStr
+    # The document itself. No upper bound — a real ICP is several thousand characters. Blank is the
+    # only rejected value, because a blank seed satisfies every downstream check while carrying
+    # nothing, which is worse for the operator than the stage having asked.
+    content: NonBlankStr
+    # Free text the operator leaves for themselves ("client's own ICP deck, Aug 2026"). Stored on
+    # the entry, not in the audit log: `approval_audit_log.asset_id` is a non-null FK to a stage and
+    # a seeded key has no stage behind it.
+    note: str | None = None
+
+
+class SeedContextResponse(BaseModel):
+    run_id: str
+    context_key: str
+    version: int
+    chars: int
+    #: The asset that normally writes this key, so the UI can say what has been stood in for.
+    producer: str | None = None
+
+
+@router.post("/runs/{run_id}/context", response_model=SeedContextResponse)
+async def seed_run_context(run_id: str, payload: SeedContextRequest) -> SeedContextResponse:
+    """File a document under a context key by hand, so a stage that depends on it can run without
+    the stage that would normally have produced it.
+
+    This is the "I already have this" path: a client who arrives with their own ICP, or an operator
+    who wants only the Plan of Action and has the twelve documents before it sitting in a folder.
+    The entry is written exactly like an approved stage output — same table, same key, same version
+    sequence — so every reader downstream (`get_run_context`, and the UI's own context resolution
+    on top of it) needs no special case. It is marked `seeded: true` in the stored value so the one
+    thing that *is* different is visible: no stage produced it and nothing was reviewed.
+
+    `written_by_asset_id` is left null rather than pointed at the producing asset. Claiming `icp`
+    wrote a document `icp` never saw would corrupt the one column that says where output came from.
+
+    Seeding does not lock anything out. If the real stage is run later it appends a higher version
+    and wins, because "latest" is `ORDER BY version DESC` — the seed becomes history rather than an
+    obstacle.
+
+    Only keys some asset actually reads are accepted (422 lists them). That is not caution about
+    write volume: a mistyped key is accepted silently by the database, and the operator's evidence
+    that they had supplied the dependency would be the stage carrying on asking for it.
+    """
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid run_id: {run_id!r}") from exc
+
+    allowed = seedable_keys()
+    if payload.context_key not in allowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{payload.context_key!r} is not a seedable context key — no stage reads it. "
+                f"Seedable keys: {', '.join(sorted(allowed))}"
+            ),
+        )
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        run = await session.get(Run, run_uuid)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+        version = await _next_version(session, run_uuid, payload.context_key)
+        value: dict[str, object] = {"content": payload.content, "seeded": True}
+        if payload.note:
+            value["note"] = payload.note
+
+        session.add(
+            ContextEntry(
+                run_id=run_uuid,
+                context_key=payload.context_key,
+                version=version,
+                value=value,
+                written_by_asset_id=None,
+            )
+        )
+        await session.commit()
+
+    logger.info(
+        "Seeded context run_id=%s context_key=%r version=%d chars=%d",
+        run_id,
+        payload.context_key,
+        version,
+        len(payload.content),
+    )
+    return SeedContextResponse(
+        run_id=run_id,
+        context_key=payload.context_key,
+        version=version,
+        chars=len(payload.content),
+        producer=producer_of(payload.context_key),
+    )
+
+
+class DependencyStatus(BaseModel):
+    field_id: str
+    label: str
+    context_key: str
+    #: Set when the field reads one row out of the document rather than the whole thing. Reported so
+    #: the UI can say which part is wanted; readiness itself is judged at the key, because whether a
+    #: sub-key can be found inside a document is the resolver's business, not this route's.
+    sub_key: str | None = None
+    required: bool
+    fallback: str
+    #: The asset whose output lands under `context_key`, or null when nothing writes it — in which
+    #: case "run the producer first" is not one of the operator's options and seeding is.
+    producer: str | None = None
+    ready: bool
+    #: The key the document was actually found under, which is what to fetch it back with. Either
+    #: `context_key` (a hand-seeded document) or `producer` (an approved stage, which the store
+    #: files under its asset id and nothing else). Null when nothing was found.
+    stored_under: str | None = None
+    #: A field whose schema declares no upstream key at all — the `unresolved_context_key`
+    #: placeholder, on three fields. Nothing produces it and nothing can seed it: the stage asks
+    #: for it every time, by design. Reported so the UI can show it as a question rather than as a
+    #: missing document, and excluded from `blocked` for the same reason — `funnel_hub_media`'s
+    #: reference folder is `required` and would otherwise make that stage permanently blocked.
+    manual: bool = False
+    #: True when what is there was seeded by hand rather than approved from a stage.
+    seeded: bool = False
+    source: Literal["this_run", "inherited"] | None = None
+    #: The run the value was actually found on, when that is not this one (a Phase 2 run reading its
+    #: Phase 1 parent). Null for anything found on this run.
+    from_run_id: str | None = None
+    version: int | None = None
+    chars: int | None = None
+
+
+class PrepassFieldStatus(BaseModel):
+    """A field the stage's own competitor prepass fills. Never an operator's problem — reported so
+    the UI can show the step without offering to satisfy it."""
+
+    field_id: str
+    label: str
+    context_key: str
+    required: bool
+    #: Whether this run has already run the prepass, i.e. whether entering the stage will spend a
+    #: search or reuse what is there.
+    ready: bool
+    version: int | None = None
+
+
+class AssetReadinessResponse(BaseModel):
+    run_id: str
+    asset_id: str
+    phase: str
+    #: True when at least one required dependency is missing. The stage can still be entered — the
+    #: fallback on 64 of the 65 context fields is to ask — but it will ask for a document.
+    blocked: bool
+    dependencies: list[DependencyStatus]
+    #: The competitor prepass that runs inside this stage, if it has one.
+    prepass: str | None = None
+    prepass_fields: list[PrepassFieldStatus] = []
+    #: Assets that would have to run, in order, to satisfy what is *still* missing. Computed against
+    #: this run rather than statically, so a run that already holds the ICP is not told to run it.
+    run_first: list[str] = []
+    #: Context keys this stage reads that a caller may seed by hand, for the "I'll provide it" path.
+    seedable: list[str] = []
+    #: Keys this stage publishes when it completes, so a caller can see what running it unblocks.
+    writes: list[str] = []
+
+
+@router.get("/runs/{run_id}/readiness/{asset_id}", response_model=AssetReadinessResponse)
+async def get_asset_readiness(
+    run_id: str, asset_id: str, phase: str = DEFAULT_PHASE
+) -> AssetReadinessResponse:
+    """What `asset_id` needs before it can run, and which of those this run already has.
+
+    Free and read-only — it reads the context store and the dependency graph, and nothing else. This
+    is what the "start at this stage" gate is built on: for each missing dependency the operator gets
+    the same three options, and the fields here are what decide which of them are even offered.
+
+      - **use what is there** — `ready` is true. `source`, `from_run_id` and `seeded` say where it
+        came from, because "the ICP from the parent run" and "an ICP approved in this run" are not
+        the same offer.
+      - **provide it yourself** — always available for a key in `seedable`; the only option when
+        `producer` is null (`email_sequence_copy`, which `sms_sequence` reads and no asset writes).
+      - **run the producer first** — `run_first` in dependency order, already filtered to what is
+        actually missing.
+
+    Inheritance is honoured throughout: a Phase 2 run reading its Phase 1 parent's ICP is ready, not
+    blocked. `PHASE_SCOPED_CONTEXT_KEYS` still does not cross the boundary.
+    """
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid run_id: {run_id!r}") from exc
+
+    if not has_stage(asset_id, phase):
+        raise HTTPException(
+            status_code=404, detail=f"Unknown asset_id {asset_id!r} for phase {phase!r}"
+        )
+
+    spec = dependencies_for(asset_id, phase)
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        run = await session.get(Run, run_uuid)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+
+        # One probe per distinct key, however many fields read it — `offers` reads the CRO
+        # terminology map three times, for three different rows of it.
+        probes: dict[str, tuple[ContextEntry, uuid.UUID] | None] = {}
+
+        async def probe(context_key: str) -> tuple[ContextEntry, uuid.UUID] | None:
+            if context_key not in probes:
+                probes[context_key] = await _latest_context_entry(session, run_uuid, context_key)
+            return probes[context_key]
+
+        async def resolve(dep: Dependency) -> tuple[ContextEntry, uuid.UUID, str] | None:
+            """The stored entry that satisfies `dep`, and the key it was actually stored under.
+
+            Two keys have to be tried, because the store has two ways of holding the same document
+            and a field can be satisfied by either:
+
+              - the context key itself — which is where a hand-seeded document lands, and
+              - the *producing asset's id* — which is where an approved stage lands. `save_stage`
+                writes `context_key = asset_id` and nothing else, so the four extra keys `cro`
+                publishes (`cro_rewritten_copy` and the rest) have no rows of their own. Probing
+                only the key would report the CRO rewrite as missing on a run that had approved
+                the CRO stage — the one wrong answer that would make this route worse than nothing,
+                because the operator would go and run a stage they had already run.
+
+            The session store on the client resolves the same way round: an approved stage's entry
+            is filed under every key in its `writesContextKeys`.
+
+            An entry whose value carries no `content` counts as missing rather than as ready — it is
+            the shape a pre-DESIGN.md row can have, and reporting it ready would hand the stage an
+            empty document. `get_run_context` 404s on the same condition.
+            """
+            candidates = [dep.context_key]
+            if dep.producer and dep.producer != dep.context_key:
+                candidates.append(dep.producer)
+            for key in candidates:
+                found = await probe(key)
+                if found is None or not isinstance(found[0].value, dict):
+                    continue
+                content = found[0].value.get("content")
+                if isinstance(content, str) and content:
+                    return found[0], found[1], key
+            return None
+
+        dependencies: list[DependencyStatus] = []
+        for dep in spec.dependencies:
+            found = await resolve(dep)
+            status = DependencyStatus(
+                field_id=dep.field_id,
+                label=dep.label,
+                context_key=dep.context_key,
+                sub_key=dep.sub_key,
+                required=dep.required,
+                fallback=dep.fallback,
+                producer=dep.producer,
+                ready=found is not None,
+                manual=dep.context_key == UNRESOLVED,
+            )
+            if found is not None:
+                entry, found_on, stored_under = found
+                status = status.model_copy(
+                    update={
+                        "stored_under": stored_under,
+                        "seeded": bool(entry.value.get("seeded")),
+                        "source": "this_run" if found_on == run_uuid else "inherited",
+                        "from_run_id": None if found_on == run_uuid else str(found_on),
+                        "version": entry.version,
+                        "chars": len(str(entry.value.get("content"))),
+                    }
+                )
+            dependencies.append(status)
+
+        prepass_fields: list[PrepassFieldStatus] = []
+        for dep in spec.prepass_fields:
+            found = await probe(dep.context_key)
+            prepass_fields.append(
+                PrepassFieldStatus(
+                    field_id=dep.field_id,
+                    label=dep.label,
+                    context_key=dep.context_key,
+                    required=dep.required,
+                    ready=found is not None,
+                    version=found[0].version if found is not None else None,
+                )
+            )
+
+        # The chain of assets still to run, in dependency order. Same walk as
+        # `transitive_producers`, except a branch stops the moment the run already holds the
+        # document — which is the difference between "run twelve stages" and "run one".
+
+        order: list[str] = []
+        walked: set[str] = set()
+
+        async def walk(current: str) -> None:
+            if current in walked:
+                return
+            walked.add(current)
+            try:
+                current_spec = dependencies_for(current, phase)
+            except KeyError:
+                # An asset this phase does not run. Not an error worth failing the report over —
+                # it simply contributes nothing to walk.
+                return
+            for dep in current_spec.required:
+                if dep.producer and dep.producer != current and await resolve(dep) is None:
+                    await walk(dep.producer)
+            if current != asset_id and current not in order:
+                order.append(current)
+
+        await walk(asset_id)
+
+    seedable = sorted({d.context_key for d in spec.dependencies} & seedable_keys())
+
+    return AssetReadinessResponse(
+        run_id=run_id,
+        asset_id=asset_id,
+        phase=phase,
+        blocked=any(d.required and not d.ready and not d.manual for d in dependencies),
+        dependencies=dependencies,
+        prepass=spec.prepass,
+        prepass_fields=prepass_fields,
+        run_first=order,
+        seedable=seedable,
+        writes=list(spec.writes),
+    )
+
+
+# --------------------------------------------------------------------------------------
 # Keyword clustering
 #
 # Runs once per run as a prepass immediately after ICP is approved — the first moment the run knows
@@ -1370,21 +1739,75 @@ async def save_headline_selection(
 
 DESIGN_TOKENS_CONTEXT_KEY = "brand_design_tokens"
 
+# What the capture *produces*, not what the page contains. A stored sheet is reused for the life of
+# a run — a brand does not change between stages and 17 credits per stage would be the largest line
+# on a run — but that cache was unconditional, so a run captured before an improvement to
+# `design_md.py` kept serving the older document forever and re-running the stage changed nothing.
+# That is exactly what happened when the `## Page structure` walk landed.
+#
+# Bumping this re-captures every run once, on its next stage, and is the only way an improvement to
+# the captured document reaches a run that already exists. Bump it whenever `build_design_md` starts
+# emitting something a stage needs.
+#
+#   1 — tokens only (pre-DESIGN.md, `content` alone)
+#   2 — DESIGN.md: front matter, colours, type, components, logo
+#   3 — adds the `## Page structure` band walk (`page_structure.py`)
+DESIGN_CAPTURE_VERSION = 3
+
 # In preference order. The parent page first — a company's brand is most concretely expressed on
 # the page actually being extended, and a home page can differ from a service page's template.
-_DESIGN_SOURCE_FIELDS = ("existing_page_url", "parent_pillar_page_url", "client_website_url")
+#
+# `reference_design_source` sits third, and its absence here was a real bug worth naming: it is the
+# Pillar Page stage's *own* design reference field ("URL / description of the page whose visual
+# design to replicate"), and `pillar_page.json` has neither `existing_page_url` nor
+# `parent_pillar_page_url`. So a Pillar Page run read `client_website_url` — the client's home page
+# — no matter which page the operator had actually pointed at, and a run with only the reference
+# filled in read nothing at all and built in placeholder greys. No stage carries both this field
+# and `existing_page_url`, so the ordering between them never arises.
+_DESIGN_SOURCE_FIELDS = (
+    "existing_page_url",
+    "parent_pillar_page_url",
+    "reference_design_source",
+    "client_website_url",
+)
 _DESIGN_SOURCE_FACTS = ("website_url",)
+
+# `reference_design_source` is a `file_attach` accepting a file *or* text, so its value is a URL
+# only some of the time — it is also where an operator pastes "take the spacing and card treatment,
+# not the palette", or attaches a screenshot. A URL is extracted from it rather than assumed, and a
+# value with no URL in it is passed over as though the field were blank.
+_URL_IN_TEXT = re.compile(r"https?://[^\s<>\"')\]]+")
+_BARE_DOMAIN = re.compile(r"^(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+(?:/\S*)?$", re.I)
+
+
+def _as_url(value: str) -> str | None:
+    """A URL out of an intake answer, or None when there is not one in it."""
+    value = value.strip()
+    if not value:
+        return None
+    found = _URL_IN_TEXT.search(value)
+    if found:
+        return found.group(0).rstrip(".,;:")
+    # A bare host, which is how people write a URL when a field does not insist on the scheme.
+    # Only when it is the *whole* answer: a domain mentioned inside a sentence of art direction is
+    # being talked about, not nominated.
+    if _BARE_DOMAIN.match(value):
+        return f"https://{value}"
+    return None
 
 
 def _design_source_url(answers: dict[str, str], profile: dict[str, str]) -> str | None:
     for field_id in _DESIGN_SOURCE_FIELDS:
         value = (answers.get(field_id) or "").strip()
-        if value and not value.startswith("[[context:"):
-            return value
+        if not value or value.startswith("[[context:"):
+            continue
+        url = _as_url(value)
+        if url:
+            return url
     for fact in _DESIGN_SOURCE_FACTS:
-        value = (profile.get(fact) or "").strip()
-        if value:
-            return value
+        url = _as_url(profile.get(fact) or "")
+        if url:
+            return url
     return None
 
 
@@ -1394,6 +1817,28 @@ async def _stored_design_tokens(session: AsyncSession, run_uuid: uuid.UUID) -> t
         return None
     entry, on_run = found
     return (entry.value if isinstance(entry.value, dict) else {}), on_run
+
+
+def _reuse_stored_design(value: dict, url: str | None) -> tuple[bool, str]:
+    """Whether this run's stored design sheet may be served as-is. Returns `(reuse, why not)`.
+
+    Split out of `resolve_page_design` so the rule is testable without a database, because it is the
+    rule that decides whether an operator re-running a stage sees any change at all — and it
+    previously decided "no" unconditionally.
+    """
+    if not url:
+        # Nothing better is available: there is no URL to re-read. Whatever is stored is served
+        # regardless of its age.
+        return True, ""
+    if value.get("source_url") != url:
+        return False, f"the run now points at {url} rather than {value.get('source_url')!r}"
+    stored_version = int(value.get("capture_version") or 1)
+    if stored_version < DESIGN_CAPTURE_VERSION:
+        return False, (
+            f"the stored sheet is a v{stored_version} capture and the current format is "
+            f"v{DESIGN_CAPTURE_VERSION}"
+        )
+    return True, ""
 
 
 def _page_design_input(value: dict) -> PageDesignInput | None:
@@ -1447,11 +1892,10 @@ async def resolve_page_design(
             stored = await _stored_design_tokens(session, run_uuid)
         if stored is not None:
             value, _on_run = stored
-            # Re-capture when the operator has since pointed the run at a different page; reuse
-            # otherwise. A brand does not change between stages, and 17 credits per stage would be
-            # the single largest line on a run.
-            if not url or value.get("source_url") == url:
+            reuse, why = _reuse_stored_design(value, url)
+            if reuse:
                 return _page_design_input(value)
+            logger.info("Re-capturing page design for run_id=%s: %s", run_id, why)
 
     if not url:
         return None
@@ -1477,6 +1921,7 @@ async def resolve_page_design(
                             "design_md": design.design_md,
                             "theme_brief": design.theme_brief,
                             "source_url": url,
+                            "capture_version": DESIGN_CAPTURE_VERSION,
                             "available": design.available,
                             "reason": design.reason,
                             "sources": list(design.sources),
@@ -1691,6 +2136,11 @@ async def read_design_tokens(payload: DesignTokensRequest) -> DesignTokensRespon
 
 PAGE_TEMPLATE_CONTEXT_KEY = "page_replica_template"
 
+#: See `DESIGN_CAPTURE_VERSION` for the argument. Bump when the slot rules change — a stored
+#: template's slot ids are identifiers, so a run holding ids from older rules must re-capture rather
+#: than have them reinterpreted.
+REPLICA_CAPTURE_VERSION = 1
+
 
 def _registrable_host(url: str) -> str:
     """The host, minus `www.`, lowercased. Enough to answer "is this the client's own site?" —
@@ -1792,6 +2242,7 @@ def _template_to_stored(template: page_replica_service.PageTemplate) -> dict:
         "template_html": template.template_html,
         "source": template.source,
         "notes": template.notes,
+        "capture_version": REPLICA_CAPTURE_VERSION,
         "band_count": template.structure.band_count if template.structure is not None else 0,
         "slots": [
             {
@@ -1842,8 +2293,12 @@ async def resolve_page_template(
             stored = await _stored_page_template(session, run_uuid)
         if stored is not None:
             value, _on_run = stored
-            # Re-capture when the operator has pointed the run at a different page; reuse otherwise.
-            if value.get("source_url") == url:
+            # Re-capture when the operator has pointed the run at a different page, or when the
+            # stored template predates the current slot rules; reuse otherwise.
+            if (
+                value.get("source_url") == url
+                and int(value.get("capture_version") or 0) >= REPLICA_CAPTURE_VERSION
+            ):
                 return _template_from_stored(value)
 
     refusal = _replica_refusal(url, answers, profile)

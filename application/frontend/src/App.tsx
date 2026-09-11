@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AssetReader } from "./pipeline/AssetReader";
 import { ChatHistorySidebar } from "./pipeline/ChatHistorySidebar";
 import { FaultDialog } from "./pipeline/FaultDialog";
 import { GenerationStream } from "./pipeline/GenerationStream";
 import { PipelineDiagram } from "./pipeline/PipelineDiagram";
+import { ViewBar } from "./pipeline/ViewBar";
 import { TopNav } from "./pipeline/TopNav";
 import { UsagePanel } from "./pipeline/UsagePanel";
 import { useUiStore } from "./store/uiStore";
@@ -116,8 +118,12 @@ function App() {
       </div>
       <SidebarDrawer />
       <UsageOverlay />
+      {/* At the root for the same reason the usage sheet is: it is an overlay over both working
+          panes, and mounting it inside the transcript would clip it to that column's width. */}
+      <AssetReader />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ViewBar />
         <TopNav />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           {/* The chat carries the actual deliverables (a CRO rewrite is a full page of markdown),

@@ -256,6 +256,60 @@ export const SCRAPE_SOURCES: Record<string, string> = {
   existing_page_content: "existing_page_url",
 };
 
+/** Stages whose page-source question has "there is no such page yet" as a real answer.
+ *
+ * `cro` audits an existing page, and a run routinely has none to audit: the ICP is for Social Media
+ * Marketing for e-commerce and the client has never had a page for that service. Nothing in the UI
+ * said so, and the field is `required` — so the operator's only ways forward were to nominate a
+ * page the audit is not about (usually the home page, which then also became the DESIGN.md source)
+ * or to type something the prompt does not recognise.
+ *
+ * The capability was already there. `Master_Prompt_Universal_Page_Rewrite_v1.md` reads:
+ *
+ * > Default execution mode is **Quick Win (Spear Gun)** … If the inputs state "NEW PAGE", switch to
+ * > build-from-scratch mode and skip Step 2's before/after comparisons, retaining every other
+ * > instruction.
+ *
+ * and both fields' own instructions offer the sentinel (`YOUR ANSWER / NEW PAGE — no existing URL`).
+ * So this is not a new mode; it is the existing one made reachable by something other than knowing
+ * the exact phrase to type. `backend/tests/test_new_page_mode.py` connects the three files that
+ * have to agree — the prompt's clause, the schema's field instructions, and this table — so the
+ * mode cannot be edited out from under the button that offers it.
+ *
+ * The answers written are the field instructions verbatim rather than a bare "NEW PAGE", because
+ * they land in the INPUTS block an operator may later read back.
+ */
+export interface NewPageOption {
+  /** The field asking for the page — where the offer appears. */
+  urlFieldId: string;
+  /** The field asking for that page's copy, answered at the same moment: asking for the content of
+   * a page that does not exist is the same question twice. */
+  contentFieldId: string;
+  urlAnswer: string;
+  contentAnswer: string;
+  /** Names what the page would be *for*, so the question is about a service rather than abstract.
+   * Must sit earlier in the asset's field list than `urlFieldId`. */
+  subjectFieldId: string;
+  /** The stage that builds a page from nothing, for an operator who would rather skip this one.
+   * It is the second option and not the first: this stage is what *writes the copy* that stage
+   * builds from, so skipping it moves the copy problem rather than solving it. */
+  insteadAssetId: string;
+}
+
+export const NEW_PAGE_OPTIONS: Record<string, NewPageOption> = {
+  cro: {
+    urlFieldId: "existing_page_url",
+    contentFieldId: "existing_page_content",
+    urlAnswer: "NEW PAGE — no existing URL",
+    contentAnswer: "NEW PAGE — NO EXISTING COPY",
+    subjectFieldId: "target_service_or_sub_service",
+    insteadAssetId: "pillar_page",
+  },
+};
+
+/** The sentinel the prompt switches on. Both answers above must contain it. */
+export const NEW_PAGE_MARKER = "NEW PAGE";
+
 /** Main assets whose competitor analysis runs as its own reviewable step *before* the stage's
  * intake — everything it needs (the client's URL, industry, region) is already in the run-level
  * profile from ICP, so there is nothing to wait for.

@@ -1,13 +1,26 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Hint } from "../components/Hint";
 import { PhaseToggle } from "./PhaseToggle";
 import { PHASE_META, PHASE_ORDER, stagesFor, totalStagesFor } from "./pipelineData";
-import { usePipelineStore } from "./pipelineStore";
+import { approvedAssetIds, usePipelineStore } from "./pipelineStore";
 
 type NodeStatus = "idle" | "pending" | "running" | "hitl" | "done";
 
-function statusFor(index: number, currentIndex: number, activeStatus: "running" | "hitl" | null): NodeStatus {
-  if (index < currentIndex) return "done";
+/** `done` comes from the transcript, not from the cursor's position.
+ *
+ * `index < currentIndex` was the old test and it only held while the run was strictly sequential.
+ * A stage started out of order or skipped moves the cursor past stages that were never built, and
+ * every one of them would have reported "✓ Saved" — see `approvedAssetIds`. A stage the cursor has
+ * passed but that holds no approved output now reads "Queued", which is both true and what makes it
+ * offer a way back in. */
+function statusFor(
+  index: number,
+  currentIndex: number,
+  activeStatus: "running" | "hitl" | null,
+  done: boolean,
+): NodeStatus {
+  if (done) return "done";
   if (index === currentIndex) return activeStatus ?? "pending";
   if (index === currentIndex + 1 && activeStatus !== null) return "pending";
   return "idle";
@@ -121,6 +134,11 @@ export function PipelineDiagram() {
   const activeStatus = usePipelineStore((s) => s.activeStatus);
   const progress = usePipelineStore((s) => s.progress);
   const navStatus = usePipelineStore((s) => s.navStatus);
+  const startAtStage = usePipelineStore((s) => s.startAtStage);
+  // The messages array, then the set — a selector returning a fresh `Set` would hand
+  // `useSyncExternalStore` a new snapshot on every read.
+  const messages = usePipelineStore((s) => s.messages);
+  const approved = useMemo(() => approvedAssetIds(messages, phase), [messages, phase]);
   const runningLabel = navStatus === "Awaiting Input" ? "Awaiting Input" : "Generating…";
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
   const reduceMotion = useReducedMotion();
@@ -132,7 +150,7 @@ export function PipelineDiagram() {
 
   const stages = stagesFor(phase);
   const total = totalStagesFor(phase);
-  const doneCount = Math.min(currentIndex, total);
+  const doneCount = Math.min(approved.size, total);
   const pct = Math.round((doneCount / total) * 100);
   // +1 when moving to a later phase, -1 coming back, so the rows travel the way the switch did.
   const direction = PHASE_ORDER.indexOf(phase) === 0 ? -1 : 1;
@@ -148,6 +166,11 @@ export function PipelineDiagram() {
             Asset Pipeline
           </div>
           <PhaseToggle />
+          <Hint>
+            Queued stages can be started out of order — "Start here" checks what that stage needs
+            against this run first, and offers to use what's already here, take a document you
+            paste, or run the one stage that produces it.
+          </Hint>
         </div>
 
         {/* `mode="wait"` so the outgoing sequence is gone before the incoming one arrives: run
@@ -163,8 +186,12 @@ export function PipelineDiagram() {
             exit="exit"
           >
             {stages.map((stage, i) => {
-          const status = statusFor(i, currentIndex, activeStatus);
+          const status = statusFor(i, currentIndex, activeStatus, approved.has(stage.asset.asset_id));
           const isLast = i === stages.length - 1;
+          // Queued only. A stage that is running, next, or already saved has its own affordances
+          // (the review gate, the resume banner, Re-run) and a second way in would compete with
+          // them. Withheld entirely mid-generation: jumping then abandons a stream in flight.
+          const startable = status === "idle" && activeStatus !== "running";
           return (
             <motion.div
               key={stage.asset.asset_id}
@@ -176,6 +203,10 @@ export function PipelineDiagram() {
                   nodeRefs.current[i] = el;
                 }}
                 className={`rounded-2xl border-2 bg-[var(--bg-raised)] px-3 py-2.5 transition-[opacity,box-shadow] duration-300 ease-out @[20rem]:px-3.5 @[20rem]:py-3 ${NODE_STYLE[status]}`}
+                // Inline, not a second opacity utility: `NODE_STYLE.idle` already carries
+                // `opacity-40` and which of two same-specificity utilities wins depends on
+                // stylesheet order, not on the order they are written here.
+                style={startable ? { opacity: 0.75 } : undefined}
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                   <span
@@ -204,6 +235,15 @@ export function PipelineDiagram() {
                   </span>
                 </div>
                 <ProgressBar status={status} progress={progress} />
+                {startable && (
+                  <button
+                    type="button"
+                    onClick={() => startAtStage(stage.asset.asset_id)}
+                    className="mt-1 min-h-9 cursor-pointer py-1 text-[0.7rem] font-semibold underline underline-offset-2 text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] sm:min-h-0"
+                  >
+                    Start here →
+                  </button>
+                )}
               </div>
               {!isLast && <Connector active={status === "running"} done={status === "done"} />}
             </motion.div>

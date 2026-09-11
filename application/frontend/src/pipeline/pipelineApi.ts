@@ -778,3 +778,99 @@ export async function fetchCompetitorBriefing(
   const body = await unwrap<{ asset_id: string; summary: string }>(res, "Competitor briefing");
   return body.summary;
 }
+
+/** One upstream document a stage reads, and whether this run already has it — the row the
+ * start-at-a-stage gate is built from. Mirrors `DependencyStatus` in `app/routers/pipeline.py`. */
+export interface DependencyStatus {
+  field_id: string;
+  label: string;
+  context_key: string;
+  sub_key: string | null;
+  required: boolean;
+  fallback: string;
+  /** The asset whose output lands under `context_key`, or null when nothing writes it — in which
+   * case "run the producer first" is not one of the operator's options and pasting is. */
+  producer: string | null;
+  ready: boolean;
+  /** The key the document was actually stored under, which is what to fetch it back with: the
+   * context key for a pasted document, the producing asset's id for an approved stage. */
+  stored_under: string | null;
+  seeded: boolean;
+  source: "this_run" | "inherited" | null;
+  from_run_id: string | null;
+  version: number | null;
+  chars: number | null;
+  /** A field with no upstream key at all — the stage asks for it every time. Not a missing
+   * document, and deliberately excluded from `blocked`. */
+  manual: boolean;
+}
+
+/** A field the stage's own competitor prepass fills. Never something to run first or to supply:
+ * the search happens inside the stage. */
+export interface PrepassFieldStatus {
+  field_id: string;
+  label: string;
+  context_key: string;
+  required: boolean;
+  ready: boolean;
+  version: number | null;
+}
+
+export interface AssetReadiness {
+  run_id: string;
+  asset_id: string;
+  phase: string;
+  blocked: boolean;
+  dependencies: DependencyStatus[];
+  prepass: string | null;
+  prepass_fields: PrepassFieldStatus[];
+  /** Assets that would have to run, in order, to fill what is still missing — already filtered
+   * against this run, so a run that holds the ICP is not told to produce one. */
+  run_first: string[];
+  seedable: string[];
+  writes: string[];
+}
+
+/** What `assetId` still needs before it can run on this run. Free and read-only.
+ *
+ * This is what makes starting at stage 09 possible without running the eight before it: the answer
+ * says, per document, whether the run already has it (and from where), whether it can be pasted,
+ * and which assets would otherwise have to run. See `docs/Asset_Dependency_Map.md`. */
+export async function fetchAssetReadiness(
+  runId: string,
+  assetId: string,
+  phase: PipelinePhase,
+): Promise<AssetReadiness> {
+  const res = await fetch(
+    `/api/pipeline/runs/${runId}/readiness/${assetId}?phase=${encodeURIComponent(phase)}`,
+  );
+  return unwrap<AssetReadiness>(res, "Stage readiness");
+}
+
+export interface SeedContextResponse {
+  run_id: string;
+  context_key: string;
+  version: number;
+  chars: number;
+  producer: string | null;
+}
+
+/** File a document under a context key by hand, so a stage can run without the stage that would
+ * normally have produced it.
+ *
+ * Written exactly like an approved stage output — same table, same versioning — and marked
+ * `seeded` so the one thing that differs is visible: nothing generated it and nothing reviewed it.
+ * It does not lock anything out; running the real stage later appends a higher version and wins. */
+export async function seedRunContext(
+  runId: string,
+  contextKey: string,
+  content: string,
+  note?: string,
+): Promise<SeedContextResponse> {
+  const res = await fetch(`/api/pipeline/runs/${runId}/context`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ context_key: contextKey, content, note: note ?? null }),
+  });
+  return unwrap<SeedContextResponse>(res, "Provide document");
+}

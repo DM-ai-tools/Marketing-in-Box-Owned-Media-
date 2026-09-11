@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketing-in-a-Box — UI Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   Tokens — copied from application/frontend/src/index.css so this demo reads
+   as the same product. Strict dual tone: every surface is a tint of ink or
+   paper. The three accents encode state only.
+   ========================================================================== */
+:root{
+  --color-ink:#16150f; --color-paper:#f6f3ec;
+  --color-electric-blue:#0b5fff; --color-signal-orange:#ff6a00; --color-signal-green:#16a34a;
+  --electric-blue-fg:#fff; --signal-orange-fg:#fff; --signal-green-fg:#fff;
+
+  --bg:var(--color-paper);
+  --bg-raised:color-mix(in srgb, var(--color-paper) 92%, var(--color-ink) 8%);
+  --bg-sunken:color-mix(in srgb, var(--color-paper) 96%, var(--color-ink) 4%);
+  --fg:var(--color-ink);
+  --fg-muted:color-mix(in srgb, var(--color-ink) 62%, var(--color-paper) 38%);
+  --fg-faint:color-mix(in srgb, var(--color-ink) 38%, var(--color-paper) 62%);
+  --border:color-mix(in srgb, var(--color-ink) 14%, var(--color-paper) 86%);
+  --border-strong:color-mix(in srgb, var(--color-ink) 28%, var(--color-paper) 72%);
+  --hover:color-mix(in srgb, var(--color-ink) 7%, var(--color-paper) 93%);
+  --accent:var(--color-ink); --accent-fg:var(--color-paper);
+  --font-sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:var(--color-ink);
+  --bg-raised:color-mix(in srgb, var(--color-ink) 88%, var(--color-paper) 12%);
+  --bg-sunken:color-mix(in srgb, var(--color-ink) 94%, var(--color-paper) 6%);
+  --fg:var(--color-paper);
+  --fg-muted:color-mix(in srgb, var(--color-paper) 66%, var(--color-ink) 34%);
+  --fg-faint:color-mix(in srgb, var(--color-paper) 42%, var(--color-ink) 58%);
+  --border:color-mix(in srgb, var(--color-paper) 16%, var(--color-ink) 84%);
+  --border-strong:color-mix(in srgb, var(--color-paper) 30%, var(--color-ink) 70%);
+  --hover:color-mix(in srgb, var(--color-paper) 9%, var(--color-ink) 91%);
+  --accent:var(--color-paper); --accent-fg:var(--color-ink);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+html{font-size:clamp(15px,calc(15px + (100vw - 1280px) * 0.003125),17px)}
+body{
+  background:var(--bg);color:var(--fg);font-family:var(--font-sans);
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- demo control bar (not part of the product) ---------- */
+.democtl{
+  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  padding:.5rem .85rem;background:var(--color-ink);color:var(--color-paper);
+  font-size:.72rem;letter-spacing:.01em;
+}
+:root[data-theme="dark"] .democtl{background:#000}
+.democtl .tag{
+  font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:.62rem;
+  padding:.2rem .45rem;border-radius:4px;background:var(--color-signal-orange);color:#fff;
+}
+.democtl .spacer{flex:1}
+.democtl button{
+  border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:.3rem .7rem;
+  font-size:.72rem;font-weight:600;opacity:.85;transition:.15s
+}
+.democtl button:hover{opacity:1;background:rgba(255,255,255,.1)}
+.democtl button.on{background:var(--color-paper);color:var(--color-ink);border-color:transparent;opacity:1}
+.democtl .hint{opacity:.6}
+
+/* ---------- app shell ---------- */
+.app{display:flex;flex-direction:column;height:100%}
+.shell{display:flex;flex:1;min-height:0}
+
+.topnav{
+  display:flex;align-items:center;gap:.75rem;padding:.6rem 1rem;
+  border-bottom:1px solid var(--border);background:var(--bg);flex-shrink:0
+}
+.brand{display:flex;align-items:center;gap:.5rem;font-weight:700;font-size:.9rem;letter-spacing:-.01em}
+.brand .dot{width:1.4rem;height:1.4rem;border-radius:7px;background:var(--accent);color:var(--accent-fg);
+  display:grid;place-items:center;font-size:.72rem;font-weight:800}
+.phasetog{display:flex;background:var(--bg-sunken);border:1px solid var(--border);border-radius:999px;padding:2px}
+.phasetog button{padding:.25rem .7rem;border-radius:999px;font-size:.75rem;font-weight:600;color:var(--fg-muted)}
+.phasetog button.on{background:var(--accent);color:var(--accent-fg)}
+.pill{
+  display:inline-flex;align-items:center;gap:.35rem;border:1px solid var(--border);
+  border-radius:999px;padding:.22rem .6rem;font-size:.7rem;color:var(--fg-muted);white-space:nowrap
+}
+.pill b{color:var(--fg);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{
+  width:15rem;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg-sunken);
+  padding:.8rem .6rem;overflow-y:auto
+}
+.sidebar h4{margin:.2rem .4rem .5rem;font-size:.64rem;text-transform:uppercase;letter-spacing:.09em;color:var(--fg-faint)}
+.newchat{
+  width:100%;border:1px dashed var(--border-strong);border-radius:10px;padding:.45rem;
+  font-size:.76rem;font-weight:600;color:var(--fg-muted);margin-bottom:.7rem
+}
+.newchat:hover{background:var(--hover);color:var(--fg)}
+.chatrow{
+  display:block;width:100%;text-align:left;padding:.42rem .5rem;border-radius:8px;
+  font-size:.78rem;color:var(--fg-muted);line-height:1.3;margin-bottom:1px
+}
+.chatrow:hover{background:var(--hover)}
+.chatrow.on{background:var(--bg-raised);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1px var(--border)}
+.chatrow small{display:block;font-size:.66rem;color:var(--fg-faint);font-weight:400;margin-top:1px}
+
+/* ---------- centre column ---------- */
+.center{flex:1;min-width:0;display:flex;flex-direction:column}
+.tabs{display:flex;gap:.2rem;padding:.45rem .9rem 0;border-bottom:1px solid var(--border);flex-shrink:0}
+.tabs button{
+  padding:.4rem .75rem;font-size:.78rem;font-weight:600;color:var(--fg-faint);
+  border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:.35rem
+}
+.tabs button:hover{color:var(--fg-muted)}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent)}
+.tabs .count{font-size:.62rem;background:var(--bg-sunken);border:1px solid var(--border);
+  border-radius:999px;padding:0 .32rem;font-variant-numeric:tabular-nums}
+.scroll{flex:1;min-height:0;overflow-y:auto;padding:1rem .9rem 3rem}
+.stream{max-width:47rem;margin:0 auto;display:flex;flex-direction:column;gap:.6rem}
+
+/* ---------- cards ---------- */
+.card{
+  border:1px solid var(--border);background:var(--bg-raised);border-radius:14px;
+  overflow:hidden;animation:rise .3s cubic-bezier(.16,1,.3,1) both
+}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+.chead{display:flex;align-items:center;gap:.5rem;padding:.7rem .8rem;flex-wrap:wrap}
+.chead .emoji{font-size:1rem;line-height:1}
+.chead .title{font-size:.85rem;font-weight:650;letter-spacing:-.005em}
+.stagechip{
+  font-size:.6rem;font-weight:700;letter-spacing:.04em;border:1px solid var(--border-strong);
+  border-radius:999px;padding:.1rem .4rem;color:var(--fg-muted);white-space:nowrap
+}
+.chead .grow{flex:1}
+
+/* meta line: the "N parts · N words" summary that replaces the wall */
+.cmeta{
+  padding:0 .8rem .55rem;font-size:.73rem;color:var(--fg-muted);
+  display:flex;gap:.4rem;align-items:center;flex-wrap:wrap
+}
+.cmeta .sep{color:var(--fg-faint)}
+.flag{
+  display:inline-flex;align-items:center;gap:.28rem;font-weight:650;font-size:.71rem;
+  border-radius:999px;padding:.12rem .5rem;border:1px solid;
+}
+.flag.orange{color:var(--color-signal-orange);border-color:color-mix(in srgb,var(--color-signal-orange) 45%,transparent)}
+.flag.green{color:var(--color-signal-green);border-color:color-mix(in srgb,var(--color-signal-green) 45%,transparent)}
+.flag.blue{color:var(--color-electric-blue);border-color:color-mix(in srgb,var(--color-electric-blue) 45%,transparent)}
+
+/* section outline rows — the core of Phase 1 */
+.outline{border-top:1px solid var(--border)}
+.orow{
+  display:flex;align-items:center;gap:.55rem;width:100%;text-align:left;
+  padding:.5rem .8rem;font-size:.79rem;border-bottom:1px solid var(--border);transition:background .12s
+}
+.orow:last-child{border-bottom:none}
+.orow:hover{background:var(--hover)}
+.orow .caret{width:.7rem;color:var(--fg-faint);font-size:.62rem;transition:transform .18s;flex-shrink:0}
+.orow.open .caret{transform:rotate(90deg)}
+.orow .olabel{font-weight:550;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orow .okind{
+  font-size:.62rem;color:var(--fg-faint);border:1px solid var(--border);border-radius:4px;
+  padding:0 .28rem;flex-shrink:0
+}
+.orow .owords{font-size:.68rem;color:var(--fg-faint);font-variant-numeric:tabular-nums;flex-shrink:0;min-width:3.4rem;text-align:right}
+.obody{
+  display:none;padding:.1rem .8rem .8rem 2.05rem;border-bottom:1px solid var(--border);
+  background:var(--bg-sunken)
+}
+.obody.open{display:block;animation:fade .2s ease both}
+@keyframes fade{from{opacity:0}}
+
+/* action row — Phase 5 density: one primary, rest behind ⋯ */
+.actions{display:flex;align-items:center;gap:.4rem;padding:.6rem .8rem;border-top:1px solid var(--border);flex-wrap:wrap}
+.btn{
+  border:1px solid var(--border-strong);border-radius:999px;padding:.32rem .75rem;
+  font-size:.75rem;font-weight:600;display:inline-flex;align-items:center;gap:.35rem;transition:.14s
+}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn.primary:hover{opacity:.88;background:var(--accent)}
+.btn.ghost{border-color:var(--border);color:var(--fg-muted)}
+.btn.sm{padding:.22rem .55rem;font-size:.7rem}
+.menu{position:relative}
+.menu .sheet{
+  position:absolute;right:0;bottom:calc(100% + .35rem);z-index:20;min-width:11rem;
+  background:var(--bg-raised);border:1px solid var(--border-strong);border-radius:10px;
+  padding:.25rem;box-shadow:0 12px 32px rgb(0 0 0 / .16);display:none
+}
+.menu.open .sheet{display:block}
+.menu .sheet button{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;
+  padding:.4rem .5rem;border-radius:7px;font-size:.76rem}
+.menu .sheet button:hover{background:var(--hover)}
+.menu .sheet hr{border:none;border-top:1px solid var(--border);margin:.25rem .3rem}
+
+/* saved, collapsed one-liner — Phase 5 */
+.savedrow{
+  display:flex;align-items:center;gap:.55rem;border:1px solid var(--border);
+  border-radius:11px;background:var(--bg);padding:.5rem .75rem;font-size:.78rem;color:var(--fg-muted)
+}
+.savedrow:hover{background:var(--bg-raised)}
+.savedrow .tick{color:var(--color-signal-green);font-weight:700}
+.savedrow .nm{color:var(--fg);font-weight:600}
+.savedrow .grow{flex:1}
+
+/* summary strips — Phase 3 */
+.strip{display:flex;gap:.4rem;padding:0 .8rem .7rem;flex-wrap:wrap}
+.chip{
+  border:1px solid var(--border);border-radius:8px;background:var(--bg-sunken);
+  padding:.3rem .5rem;font-size:.7rem;color:var(--fg-muted);line-height:1.25
+}
+.chip b{display:block;color:var(--fg);font-size:.74rem;font-weight:600}
+.swatches{display:flex;gap:.25rem;align-items:center}
+.sw{width:1.05rem;height:1.05rem;border-radius:5px;border:1px solid rgb(0 0 0 /.14)}
+.thumbs{display:flex;gap:.45rem;padding:0 .8rem .75rem;overflow-x:auto}
+.thumb{
+  flex-shrink:0;width:5.2rem;border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);overflow:hidden;text-align:left
+}
+.thumb:hover{border-color:var(--border-strong)}
+.thumb .shot{height:3.4rem;background:linear-gradient(160deg,#fff 0%,#eee 100%);position:relative;overflow:hidden}
+:root[data-theme="dark"] .thumb .shot{background:linear-gradient(160deg,#2a2a24,#191914)}
+.thumb .shot i{position:absolute;left:.3rem;right:.3rem;background:var(--border-strong);border-radius:2px;display:block}
+.thumb .cap{padding:.2rem .35rem;font-size:.6rem;color:var(--fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- live generation — Phase 4 ---------- */
+.card.live{border-color:var(--color-electric-blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-electric-blue) 12%,transparent)}
+.steps{padding:.15rem .8rem .7rem;display:flex;flex-direction:column;gap:.28rem}
+.step{display:flex;align-items:center;gap:.5rem;font-size:.76rem;color:var(--fg-faint)}
+.step .bullet{
+  width:1.05rem;height:1.05rem;border-radius:50%;border:1.5px solid var(--border-strong);
+  display:grid;place-items:center;font-size:.6rem;flex-shrink:0;font-weight:700
+}
+.step.done{color:var(--fg-muted)}
+.step.done .bullet{background:var(--color-signal-green);border-color:transparent;color:#fff}
+.step.now{color:var(--fg);font-weight:600}
+.step.now .bullet{border-color:var(--color-electric-blue);color:var(--color-electric-blue);animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--color-electric-blue) 18%,transparent)}}
+.step .el{margin-left:auto;font-size:.66rem;color:var(--fg-faint);font-variant-numeric:tabular-nums}
+.progress{height:3px;background:var(--bg-sunken);border-radius:999px;overflow:hidden;margin:.1rem .8rem .7rem}
+.progress i{display:block;height:100%;background:var(--color-electric-blue);border-radius:999px;transition:width .4s ease}
+
+/* the collapsed live ticker: 3 lines, not 3000 */
+.ticker{
+  margin:0 .8rem .7rem;border:1px solid var(--border);border-radius:9px;background:var(--bg-sunken);
+  padding:.45rem .6rem;font-family:var(--font-mono);font-size:.7rem;line-height:1.5;
+  color:var(--fg-muted);height:3.9rem;overflow:hidden;position:relative
+}
+.ticker::before{
+  content:"";position:absolute;inset:0 0 auto;height:1.1rem;
+  background:linear-gradient(var(--bg-sunken),transparent);pointer-events:none
+}
+.ticker .cur{color:var(--fg)}
+.ticker .cursor{display:inline-block;width:.44em;height:.95em;background:var(--color-electric-blue);
+  vertical-align:-.12em;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.tickerbar{
+  display:flex;align-items:center;gap:.4rem;padding:0 .8rem .7rem;font-size:.7rem;color:var(--fg-faint)
+}
+
+/* ---------- prose (the "before" view and reader body) ---------- */
+.prose{font-size:.84rem;line-height:1.62;color:var(--fg)}
+.prose h2{font-size:.98rem;font-weight:700;margin:1.3rem 0 .45rem;letter-spacing:-.01em}
+.prose h2:first-child{margin-top:0}
+.prose h3{font-size:.85rem;font-weight:650;margin:1rem 0 .3rem;opacity:.92}
+.prose p{margin:.5rem 0}
+.prose ul,.prose ol{margin:.5rem 0;padding-left:1.15rem}
+.prose li{margin:.2rem 0}
+.prose strong{font-weight:650}
+.prose table{width:100%;border-collapse:collapse;font-size:.78rem;margin:.6rem 0}
+.prose th{text-align:left;font-weight:650;border-bottom:1px solid var(--border);padding:.3rem .5rem .3rem 0}
+.prose td{border-bottom:1px solid var(--border);padding:.3rem .5rem .3rem 0;vertical-align:top}
+.prose code{font-family:var(--font-mono);font-size:.9em;background:var(--bg-sunken);padding:.05rem .28rem;border-radius:4px}
+.prose blockquote{border-left:2px solid var(--border-strong);margin:.6rem 0;padding-left:.7rem;color:var(--fg-muted);font-style:italic}
+.prose hr{border:none;border-top:1px solid var(--border);margin:1rem 0}
+
+/* ---------- right rail: pipeline diagram ---------- */
+.rail{width:16rem;flex-shrink:0;border-left:1px solid var(--border);background:var(--bg-sunken);
+  padding:.85rem .7rem;overflow-y:auto}
+.rail h4{margin:0 .3rem .3rem;font-size:.64rem;text-transform:uppercase;letter-spacing:.09em;color:var(--fg-faint)}
+.rail .sub{margin:0 .3rem .7rem;font-size:.68rem;color:var(--fg-faint)}
+.node{
+  display:flex;align-items:center;gap:.5rem;border:1px solid var(--border);border-radius:9px;
+  background:var(--bg);padding:.36rem .5rem;margin-bottom:.28rem;font-size:.74rem
+}
+.node .e{font-size:.82rem;flex-shrink:0}
+.node .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node .b{font-size:.58rem;font-weight:700;border-radius:999px;padding:.08rem .34rem;white-space:nowrap}
+.node.idle{opacity:.42}
+.node.idle .b{border:1px solid var(--border-strong);color:var(--fg-faint)}
+.node.next{border-color:var(--border-strong)}
+.node.next .b{border:1px solid var(--border-strong);color:var(--fg-muted)}
+.node.done{border-color:color-mix(in srgb,var(--color-signal-green) 40%,var(--border))}
+.node.done .b{background:var(--color-signal-green);color:#fff}
+.node.run{border-color:var(--color-electric-blue)}
+.node.run .b{background:var(--color-electric-blue);color:#fff;animation:blink 1.4s steps(2) infinite}
+.node.hitl{border-color:var(--color-signal-orange)}
+.node.hitl .b{background:var(--color-signal-orange);color:#fff}
+
+/* ---------- reader pane — Phase 2 ---------- */
+.scrim{position:fixed;inset:0;background:rgb(0 0 0/.42);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.reader{
+  position:fixed;top:0;right:0;bottom:0;width:min(48rem,94vw);z-index:50;
+  background:var(--bg);border-left:1px solid var(--border-strong);
+  box-shadow:-18px 0 46px rgb(0 0 0/.18);
+  transform:translateX(101%);transition:transform .28s cubic-bezier(.16,1,.3,1);
+  display:flex;flex-direction:column
+}
+.reader.on{transform:none}
+.rhead{display:flex;align-items:center;gap:.55rem;padding:.7rem .9rem;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.rhead .t{font-size:.88rem;font-weight:650}
+.rhead .grow{flex:1}
+.rbody{flex:1;min-height:0;display:flex}
+.rnav{
+  width:14rem;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg-sunken);
+  padding:.7rem .45rem;overflow-y:auto
+}
+.rnav h5{margin:.1rem .45rem .4rem;font-size:.6rem;text-transform:uppercase;letter-spacing:.09em;color:var(--fg-faint)}
+.rnav a{
+  display:block;padding:.32rem .5rem;border-radius:7px;font-size:.75rem;color:var(--fg-muted);
+  text-decoration:none;line-height:1.3;border-left:2px solid transparent
+}
+.rnav a:hover{background:var(--hover);color:var(--fg)}
+.rnav a.on{background:var(--bg-raised);color:var(--fg);font-weight:600;border-left-color:var(--accent)}
+.rnav a small{display:block;font-size:.63rem;color:var(--fg-faint);font-weight:400}
+.rnav a.sub{padding-left:1.3rem;font-size:.72rem}
+.rmain{flex:1;min-width:0;overflow-y:auto;padding:1.1rem 1.4rem 4rem}
+.rmain .sec{scroll-margin-top:1rem;padding-bottom:1.5rem;margin-bottom:1.5rem;border-bottom:1px solid var(--border)}
+.rmain .sec:last-child{border-bottom:none}
+.rmain .sechead{display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem}
+.rmain .sechead h2{margin:0;font-size:1.02rem}
+.rmain .sechead .grow{flex:1}
+.find{
+  border:1px solid var(--border-strong);border-radius:999px;background:var(--bg-sunken);
+  padding:.24rem .6rem;font-size:.73rem;color:var(--fg);width:9.5rem;font-family:inherit
+}
+.find::placeholder{color:var(--fg-faint)}
+
+/* rendered page preview — the existing HtmlPreview, kept */
+.pagepreview{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;margin:.6rem 0}
+:root[data-theme="dark"] .pagepreview{background:#141410}
+.pagepreview .bar{
+  display:flex;align-items:center;gap:.4rem;padding:.35rem .55rem;background:var(--bg-sunken);
+  border-bottom:1px solid var(--border);font-size:.68rem;color:var(--fg-muted)
+}
+.pagepreview .bar .grow{flex:1}
+.fakepage{padding:0;background:#fff;color:#16150f;font-size:.62rem}
+:root[data-theme="dark"] .fakepage{background:#fff}
+.fakepage .nav{display:flex;align-items:center;gap:.5rem;padding:.5rem .7rem;border-bottom:1px solid #e8e4da}
+.fakepage .logo{font-weight:800;letter-spacing:-.02em;color:#0b5fff;font-size:.72rem}
+.fakepage .nav .lk{color:#5b5a52;font-size:.58rem}
+.fakepage .nav .grow{flex:1}
+.fakepage .cta{background:#a4d36b;color:#121212;border-radius:999px;padding:.18rem .5rem;font-weight:700;font-size:.56rem}
+.fakepage .hero{padding:1.1rem .8rem;text-align:center;background:linear-gradient(180deg,#f7fbf2,#fff)}
+.fakepage .hero h1{margin:0 0 .3rem;font-size:.95rem;letter-spacing:-.02em;color:#121212;line-height:1.2}
+.fakepage .hero p{margin:0 0 .5rem;color:#5b5a52;font-size:.6rem}
+.fakepage .row{display:flex;gap:.4rem;padding:.6rem .8rem;justify-content:center}
+.fakepage .cardx{flex:1;border:1px solid #e8e4da;border-radius:8px;padding:.45rem;text-align:center}
+.fakepage .cardx .ic{width:1.1rem;height:1.1rem;border-radius:5px;background:#a4d36b;margin:0 auto .25rem}
+.fakepage .cardx b{display:block;font-size:.58rem;color:#121212}
+.fakepage .cardx span{font-size:.53rem;color:#7a7970}
+.fakepage .strip2{display:flex;gap:.6rem;justify-content:center;padding:.5rem;background:#faf8f3;border-block:1px solid #eee}
+.fakepage .strip2 i{display:block;width:2.4rem;height:.7rem;background:#d8d4c8;border-radius:3px}
+.fakepage .foot{padding:.5rem .8rem;background:#121212;color:#cfcec6;font-size:.53rem;display:flex;gap:.6rem}
+
+/* ---------- deliverables tab — Phase 6 ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(11.5rem,1fr));gap:.7rem;max-width:56rem;margin:0 auto}
+.dcard{border:1px solid var(--border);border-radius:12px;background:var(--bg-raised);overflow:hidden;text-align:left}
+.dcard:hover{border-color:var(--border-strong)}
+.dcard .top{height:4.6rem;background:var(--bg-sunken);display:grid;place-items:center;font-size:1.5rem;border-bottom:1px solid var(--border)}
+.dcard .in{padding:.5rem .6rem}
+.dcard .in b{display:block;font-size:.78rem;font-weight:650}
+.dcard .in span{font-size:.67rem;color:var(--fg-faint)}
+.dcard .in .meta{margin-top:.3rem;display:flex;gap:.3rem;align-items:center}
+
+/* ---------- annotations ---------- */
+.anno{
+  display:none;margin:0 0 .1rem;font-size:.68rem;line-height:1.45;
+  border-left:2px solid var(--color-signal-orange);padding:.3rem .55rem;
+  background:color-mix(in srgb,var(--color-signal-orange) 7%,transparent);
+  color:var(--fg-muted);border-radius:0 7px 7px 0
+}
+body.anno-on .anno{display:block}
+.anno b{color:var(--color-signal-orange);font-weight:700}
+
+.beforewrap{display:none}
+body.mode-before .beforewrap{display:block}
+body.mode-before .afterwrap{display:none}
+.warnbox{
+  border:1px solid color-mix(in srgb,var(--color-signal-orange) 45%,var(--border));
+  background:color-mix(in srgb,var(--color-signal-orange) 6%,transparent);
+  border-radius:11px;padding:.6rem .75rem;font-size:.75rem;color:var(--fg-muted);margin-bottom:.6rem
+}
+.warnbox b{color:var(--fg)}
+.scrollnote{
+  position:sticky;bottom:0;text-align:center;font-size:.68rem;color:var(--fg-faint);
+  padding:.4rem;background:linear-gradient(transparent,var(--bg) 60%)
+}
+@media (max-width:1180px){.rail{display:none}}
+@media (max-width:900px){.sidebar{display:none}}
+</style>
+</head>
+<body class="anno-on">
+
+<div class="app">
+
+  <!-- ============ demo-only controls ============ -->
+  <div class="democtl">
+    <span class="tag">Demo</span>
+    <span class="hint">Static mockup — no app code was changed</span>
+    <span class="spacer"></span>
+    <button id="btnMode">Show “before” (today)</button>
+    <button id="btnPlay">▶ Play generation</button>
+    <button id="btnAnno" class="on">Annotations on</button>
+    <button id="btnTheme">◐ Dark</button>
+  </div>
+
+  <header class="topnav">
+    <div class="brand"><span class="dot">M</span> Marketing-in-a-Box</div>
+    <div class="phasetog"><button class="on">Phase 1</button><button>Phase 2</button></div>
+    <span class="spacer" style="flex:1"></span>
+    <span class="pill">Client <b>Acme Dental</b></span>
+    <span class="pill">◷ <b>6</b>/15 saved</span>
+    <span class="pill">$<b>4.18</b> this run</span>
+  </header>
+
+  <div class="shell">
+
+    <!-- ============ chat history ============ -->
+    <aside class="sidebar">
+      <button class="newchat">＋ New chat</button>
+      <h4>Recent</h4>
+      <button class="chatrow on">Acme Dental — full build<small>Phase 1 · 6 of 15 saved</small></button>
+      <button class="chatrow">Northside Plumbing<small>Phase 2 · complete</small></button>
+      <button class="chatrow">Harbour Legal — pillar refresh<small>Phase 1 · 3 of 15 saved</small></button>
+      <button class="chatrow">Vero Fitness<small>Phase 1 · complete</small></button>
+      <button class="chatrow">Traffic Radius demo<small>Phase 1 · 1 of 15 saved</small></button>
+    </aside>
+
+    <!-- ============ centre ============ -->
+    <main class="center">
+      <div class="tabs">
+        <button class="on" data-tab="transcript">Transcript</button>
+        <button data-tab="deliverables">Deliverables <span class="count">6</span></button>
+      </div>
+
+      <div class="scroll" id="scroll">
+
+        <!-- ---------------- BEFORE ---------------- -->
+        <div class="beforewrap">
+          <div class="stream">
+            <div class="warnbox">
+              <b>“Before” — how it renders today.</b> <code>GenerationCard</code> passes the whole
+              document to <code>&lt;Markdown&gt;</code> in one blob, always expanded, in a flat
+              auto-scrolling list of 15 stages. Below is <em>one</em> stage, abridged. Scroll it —
+              then switch back to “after”.
+            </div>
+
+            <div class="card">
+              <div class="chead">
+                <span class="emoji">🔍</span><span class="title">CRO — Page Rewrite</span>
+                <span class="stagechip">STAGE 02</span>
+              </div>
+              <div style="padding:0 .8rem .8rem">
+                <div class="prose" id="beforeProse"></div>
+              </div>
+              <div class="actions">
+                <button class="btn primary">Save to Context</button>
+                <button class="btn">Refine</button>
+                <button class="btn">Re-run</button>
+                <button class="btn">Download .md</button>
+                <button class="btn">Download .html</button>
+              </div>
+            </div>
+            <div class="scrollnote">…and fourteen more stages below this one, in the same column.</div>
+          </div>
+        </div>
+
+        <!-- ---------------- AFTER ---------------- -->
+        <div class="afterwrap">
+          <div class="stream" id="tabTranscript">
+
+            <p class="anno"><b>Phase 5 — density.</b> Approved stages collapse to one line. Six of
+              them now occupy the height that one used to.</p>
+
+            <div class="savedrow"><span class="tick">✓</span><span class="stagechip">01</span>
+              <span class="nm">🎯 ICP — Ideal Customer Profile</span>
+              <span class="grow"></span><span>2,140 w</span><button class="btn sm ghost">Open</button></div>
+
+            <!-- CRO card: the core Phase 1 pattern -->
+            <p class="anno"><b>Phase 1 — parse, don’t dump.</b> The prompt already declares
+              “<code>PART 0 … PART 3</code>”. <code>assetDocument.ts</code> reads those headings and the
+              card becomes four rows instead of 6,200 words. Click a row to peek inline.</p>
+
+            <div class="card">
+              <div class="chead">
+                <span class="emoji">🔍</span><span class="title">CRO — Page Rewrite</span>
+                <span class="stagechip">STAGE 02</span>
+                <span class="grow"></span>
+                <span class="flag green">✓ complete</span>
+              </div>
+              <div class="cmeta">
+                4 parts <span class="sep">·</span> 6,240 words <span class="sep">·</span> 1 page preview
+                <span class="flag orange" title="Every [CLIENT TO CONFIRM] placeholder in the document">⚑ 9 to confirm</span>
+              </div>
+
+              <p class="anno" style="margin:0 .8rem .55rem"><b>Phase 3 — result summary.</b> Facts
+                pulled out of the parsed sections. The “9 to confirm” count is the operator’s real
+                to-do list — today it is buried in Part 3 prose.</p>
+              <div class="strip">
+                <div class="chip"><b>7</b>audit findings</div>
+                <div class="chip"><b>13</b>sections rewritten</div>
+                <div class="chip"><b>2</b>sections skipped</div>
+                <div class="chip"><b>+41%</b>proof density</div>
+              </div>
+
+              <div class="outline" id="croOutline">
+                <button class="orow" data-body="b0"><span class="caret">▶</span>
+                  <span class="olabel">Part 0 — Mode Resolution</span>
+                  <span class="okind">table</span><span class="owords">40 w</span></button>
+                <div class="obody" id="b0">
+                  <div class="prose">
+                    <table><tr><th>Input</th><th>Resolved</th></tr>
+                      <tr><td>Page scope</td><td>SERVICE PAGE</td></tr>
+                      <tr><td>Awareness</td><td>Solution-aware</td></tr>
+                      <tr><td>Mode</td><td>REWRITE (not rebuild)</td></tr></table>
+                  </div>
+                </div>
+
+                <button class="orow" data-body="b1"><span class="caret">▶</span>
+                  <span class="olabel">Part 1 — CRO Audit Report</span>
+                  <span class="okind">7 findings</span><span class="owords">1,900 w</span></button>
+                <div class="obody" id="b1">
+                  <div class="prose">
+                    <h3>Audit 1 — Above-the-fold clarity</h3>
+                    <p><strong>Finding.</strong> The hero leads with “Melbourne’s Results-Driven
+                      Digital Marketing Agency” — a category claim, not an outcome. Nothing above the
+                      fold names the visitor or what they get.</p>
+                    <p><strong>Recommendation.</strong> Lead with the outcome and the timeframe…</p>
+                    <p style="color:var(--fg-faint)">＋ 6 further findings in this part.</p>
+                  </div>
+                </div>
+
+                <button class="orow" data-body="b2"><span class="caret">▶</span>
+                  <span class="olabel">Part 2 — Rewritten Page</span>
+                  <span class="okind">13 sections</span><span class="owords">3,100 w</span></button>
+                <div class="obody" id="b2">
+                  <div class="prose">
+                    <h3>Section 1 — Hero</h3>
+                    <p><strong>H1.</strong> Fill your chairs with the patients you actually want —
+                      in 90 days, or we work free until you do.</p>
+                    <p style="color:var(--fg-faint)">＋ 12 further sections in this part.</p>
+                  </div>
+                </div>
+
+                <button class="orow" data-body="b3"><span class="caret">▶</span>
+                  <span class="olabel">Part 3 — Implementation Pack</span>
+                  <span class="okind">checklist</span><span class="owords">1,100 w</span></button>
+                <div class="obody" id="b3">
+                  <div class="prose">
+                    <p><strong>Title tag.</strong> Dental Implants Melbourne | Acme Dental</p>
+                    <p><strong>Placeholders to confirm (9).</strong></p>
+                    <ul><li><code>[CLIENT TO CONFIRM: implant warranty length]</code></li>
+                      <li><code>[CLIENT TO CONFIRM: finance provider name]</code></li>
+                      <li style="color:var(--fg-faint)">＋ 7 more</li></ul>
+                  </div>
+                </div>
+              </div>
+
+              <p class="anno" style="margin:.55rem .8rem 0"><b>Phase 5 — one primary action.</b>
+                Save stays visible; Refine, Re-run and the two downloads move behind <code>⋯</code>.</p>
+              <div class="actions">
+                <button class="btn primary" onclick="openReader()">Open full document ↗</button>
+                <button class="btn">Save to Context</button>
+                <span class="grow" style="flex:1"></span>
+                <div class="menu" id="m1">
+                  <button class="btn ghost" onclick="tog('m1')">⋯</button>
+                  <div class="sheet">
+                    <button>✎ Refine / request changes</button>
+                    <button>↻ Re-run this asset</button>
+                    <hr>
+                    <button>⭳ Download .md</button>
+                    <button>⭳ Download .html</button>
+                    <button>⧉ Copy all</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pillar page card with visual summary -->
+            <p class="anno"><b>Phase 3 — the page is shown, not described.</b> Palette swatches and a
+              live preview come from the same parse. <code>HtmlPreview</code> already exists and is reused.</p>
+
+            <div class="card">
+              <div class="chead">
+                <span class="emoji">🏛️</span><span class="title">Pillar Page Design</span>
+                <span class="stagechip">STAGE 03</span>
+                <span class="grow"></span><span class="flag blue">◷ awaiting review</span>
+              </div>
+              <div class="cmeta">
+                4 parts <span class="sep">·</span> 4,880 words <span class="sep">·</span>
+                <span class="swatches">
+                  <span class="sw" style="background:#a4d36b"></span>
+                  <span class="sw" style="background:#072032"></span>
+                  <span class="sw" style="background:#ffffff"></span>
+                  <span class="sw" style="background:#3d3d3d"></span>
+                </span>
+                <span class="sep">·</span> Montserrat 300/500
+              </div>
+              <div class="strip">
+                <div class="chip"><b>9</b>bands, in order</div>
+                <div class="chip"><b>5</b>client logos kept</div>
+                <div class="chip"><b>3</b>inline SVGs kept</div>
+                <div class="chip"><b>1300 049 490</b>phone preserved</div>
+              </div>
+              <div style="padding:0 .8rem .7rem">
+                <div class="pagepreview">
+                  <div class="bar">▤ Rendered page <span class="grow" style="flex:1"></span>
+                    <span>1440 × 4210</span><button class="btn sm ghost">Open ↗</button></div>
+                  <div class="fakepage">
+                    <div class="nav"><span class="logo">◤ ACME</span>
+                      <span class="lk">Implants</span><span class="lk">Veneers</span><span class="lk">About</span>
+                      <span class="grow" style="flex:1"></span><span class="cta">Book a consult</span></div>
+                    <div class="hero"><h1>Fill your chairs with the patients you want</h1>
+                      <p>Implant marketing that pays for itself in 90 days — or we work free.</p>
+                      <span class="cta">Get my free plan</span></div>
+                    <div class="strip2"><i></i><i></i><i></i><i></i><i></i></div>
+                    <div class="row">
+                      <div class="cardx"><span class="ic"></span><b>Implant SEO</b><span>Rank for the searches that convert</span></div>
+                      <div class="cardx"><span class="ic"></span><b>Google Ads</b><span>Profit per click, not impressions</span></div>
+                      <div class="cardx"><span class="ic"></span><b>Page design</b><span>Built to turn traffic into calls</span></div>
+                    </div>
+                    <div class="foot"><span>◤ ACME</span><span>1300 049 490</span><span>Level 4, 190 Queen St</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="outline">
+                <button class="orow" data-body="p1"><span class="caret">▶</span><span class="olabel">Part 1 — Design System Extracted</span><span class="okind">tokens</span><span class="owords">620 w</span></button>
+                <div class="obody" id="p1"><div class="prose"><p>Palette, type scale, spacing and component styles read off the reference page…</p></div></div>
+                <button class="orow" data-body="p2"><span class="caret">▶</span><span class="olabel">Part 2 — Competitive Benchmark</span><span class="okind">table</span><span class="owords">840 w</span></button>
+                <div class="obody" id="p2"><div class="prose"><p>ADOPT / EXCEED / SKIP per structural pattern…</p></div></div>
+                <button class="orow" data-body="p3"><span class="caret">▶</span><span class="olabel">Part 3 — Full Designed Page</span><span class="okind">html</span><span class="owords">2,700 w</span></button>
+                <div class="obody" id="p3"><div class="prose"><p>Rendered above rather than as 900 lines of grey code.</p></div></div>
+                <button class="orow" data-body="p4"><span class="caret">▶</span><span class="olabel">Part 4 — SEO Implementation Pack</span><span class="okind">checklist</span><span class="owords">720 w</span></button>
+                <div class="obody" id="p4"><div class="prose"><p>Title, meta, H2 outline, internal links, schema…</p></div></div>
+              </div>
+              <div class="actions">
+                <button class="btn primary" onclick="openReader()">Open full document ↗</button>
+                <button class="btn">Save to Context</button>
+                <span class="grow" style="flex:1"></span>
+                <div class="menu" id="m2"><button class="btn ghost" onclick="tog('m2')">⋯</button>
+                  <div class="sheet"><button>✎ Refine</button><button>↻ Re-run</button><hr>
+                    <button>⭳ Download .html</button><button>⧉ Copy all</button></div></div>
+              </div>
+            </div>
+
+            <!-- Plural deliverable: blog -->
+            <p class="anno"><b>Phase 1 on a plural asset.</b> The blog prompt emits
+              “<code>## Blog N — [Title]</code>” per post, five subsections each. Five posts become
+              five rows, not 10,000 words.</p>
+
+            <div class="card">
+              <div class="chead"><span class="emoji">📝</span><span class="title">Blog Post</span>
+                <span class="stagechip">STAGE 08</span><span class="grow"></span>
+                <span class="flag green">✓ complete</span></div>
+              <div class="cmeta">1 set plan + 5 posts <span class="sep">·</span> 10,410 words</div>
+              <div class="outline">
+                <button class="orow" data-body="g0"><span class="caret">▶</span><span class="olabel">Part 1 — The Set Plan</span><span class="okind">table</span><span class="owords">410 w</span></button>
+                <div class="obody" id="g0"><div class="prose"><p>Topic, intent, target term and internal-link map for all five.</p></div></div>
+                <button class="orow" data-body="g1"><span class="caret">▶</span><span class="olabel">Blog 1 — How Much Do Dental Implants Cost in Melbourne?</span><span class="okind">5 parts</span><span class="owords">2,180 w</span></button>
+                <div class="obody" id="g1"><div class="prose">
+                  <p style="color:var(--fg-muted);font-size:.76rem">Keyword analysis · Outline · Full post · SEO checklist · Content brief</p>
+                  <h3>Full post</h3><p>Most Melbourne clinics quote a single number. That number is
+                  almost never what you pay…</p></div></div>
+                <button class="orow" data-body="g2"><span class="caret">▶</span><span class="olabel">Blog 2 — Implants vs Bridges: An Honest Comparison</span><span class="okind">5 parts</span><span class="owords">2,050 w</span></button>
+                <div class="obody" id="g2"><div class="prose"><p>…</p></div></div>
+                <button class="orow" data-body="g3"><span class="caret">▶</span><span class="olabel">Blog 3 — What Happens at an Implant Consultation</span><span class="okind">5 parts</span><span class="owords">1,940 w</span></button>
+                <div class="obody" id="g3"><div class="prose"><p>…</p></div></div>
+                <button class="orow" data-body="g4"><span class="caret">▶</span><span class="olabel">Blog 4 — Are Cheap Overseas Implants Worth It?</span><span class="okind">5 parts</span><span class="owords">2,120 w</span></button>
+                <div class="obody" id="g4"><div class="prose"><p>…</p></div></div>
+                <button class="orow" data-body="g5"><span class="caret">▶</span><span class="olabel">Blog 5 — Recovery Week by Week</span><span class="okind">5 parts</span><span class="owords">1,710 w</span></button>
+                <div class="obody" id="g5"><div class="prose"><p>…</p></div></div>
+              </div>
+              <div class="actions"><button class="btn primary" onclick="openReader()">Open full document ↗</button>
+                <button class="btn">Save to Context</button><span class="grow" style="flex:1"></span>
+                <div class="menu" id="m3"><button class="btn ghost" onclick="tog('m3')">⋯</button>
+                  <div class="sheet"><button>⭳ Download all 5 as .md</button><button>⧉ Copy all</button></div></div></div>
+            </div>
+
+            <!-- Lead magnet: file thumbnails -->
+            <div class="card">
+              <div class="chead"><span class="emoji">🧲</span><span class="title">Lead Magnet</span>
+                <span class="stagechip">STAGE 07</span><span class="grow"></span>
+                <span class="flag green">✓ complete</span></div>
+              <div class="cmeta">10 built files <span class="sep">·</span> 6 briefs <span class="sep">·</span> 12,900 words</div>
+              <p class="anno" style="margin:0 .8rem .55rem"><b>Phase 3.</b> Step 5 builds one
+                standalone HTML file per concept. Each gets a real thumbnail instead of a fenced code block.</p>
+              <div class="thumbs">
+                <button class="thumb"><span class="shot"><i style="top:.35rem;height:.4rem"></i><i style="top:.95rem;height:.22rem;right:1.6rem"></i><i style="top:1.4rem;height:.22rem;right:2.2rem"></i><i style="top:2.1rem;height:.7rem"></i></span><span class="cap">Implant Cost Calculator</span></button>
+                <button class="thumb"><span class="shot"><i style="top:.35rem;height:.4rem"></i><i style="top:.95rem;height:.9rem"></i><i style="top:2.05rem;height:.22rem;right:1.4rem"></i></span><span class="cap">90-Day Chair Plan</span></button>
+                <button class="thumb"><span class="shot"><i style="top:.3rem;height:.26rem;right:2rem"></i><i style="top:.75rem;height:1.5rem"></i><i style="top:2.45rem;height:.24rem"></i></span><span class="cap">Consult Checklist</span></button>
+                <button class="thumb"><span class="shot"><i style="top:.4rem;height:.5rem"></i><i style="top:1.1rem;height:.5rem"></i><i style="top:1.8rem;height:.5rem"></i><i style="top:2.5rem;height:.5rem"></i></span><span class="cap">Finance Comparison</span></button>
+                <button class="thumb"><span class="shot"><i style="top:.35rem;height:.4rem"></i><i style="top:1rem;height:1.1rem"></i></span><span class="cap">Recovery Timeline</span></button>
+                <button class="thumb" style="display:grid;place-items:center;color:var(--fg-faint);font-size:.7rem;height:auto;min-height:4rem">＋5 more</button>
+              </div>
+              <div class="actions"><button class="btn primary" onclick="openReader()">Open full document ↗</button>
+                <button class="btn">Save to Context</button><span class="grow" style="flex:1"></span>
+                <div class="menu" id="m4"><button class="btn ghost" onclick="tog('m4')">⋯</button>
+                  <div class="sheet"><button>⭳ Download all 10 files</button></div></div></div>
+            </div>
+
+            <!-- LIVE generation -->
+            <p class="anno"><b>Phase 4 — “what’s happening where”.</b> The
+              <code>PART n</code> / <code>STEP n</code> headings arrive <em>inside</em> the stream, so the
+              step tracker is derived from the text with no backend change. The raw stream collapses
+              to three lines. Press <b>▶ Play generation</b> above.</p>
+
+            <div class="card live" id="liveCard">
+              <div class="chead"><span class="emoji">🎥</span><span class="title">Webinar</span>
+                <span class="stagechip">STAGE 11</span><span class="grow"></span>
+                <span class="flag blue" id="liveFlag">◷ generating…</span></div>
+              <div class="cmeta" id="liveMeta">Step 1 of 8 · Reading context</div>
+              <div class="progress"><i id="liveBar" style="width:4%"></i></div>
+              <div class="steps" id="liveSteps"></div>
+              <div class="ticker" id="liveTicker"><span class="cur">Waiting for the first token…</span><span class="cursor"></span></div>
+              <div class="tickerbar">
+                <button class="btn sm ghost" id="btnFull">▾ Show full stream</button>
+                <span class="grow" style="flex:1"></span>
+                <span id="liveWords">0 words</span>
+              </div>
+            </div>
+
+            <div style="height:1rem"></div>
+          </div>
+
+          <!-- ---------------- DELIVERABLES ---------------- -->
+          <div class="grid" id="tabDeliverables" style="display:none">
+            <button class="dcard"><span class="top">🎯</span><span class="in"><b>ICP</b><span>Ideal Customer Profile</span>
+              <span class="meta"><span class="flag green">✓ saved</span><span style="font-size:.64rem;color:var(--fg-faint)">2,140 w</span></span></span></button>
+            <button class="dcard"><span class="top">🔍</span><span class="in"><b>CRO Rewrite</b><span>4 parts · 1 page</span>
+              <span class="meta"><span class="flag orange">⚑ 9 to confirm</span></span></span></button>
+            <button class="dcard"><span class="top">🏛️</span><span class="in"><b>Pillar Page</b><span>Designed page + SEO pack</span>
+              <span class="meta"><span class="flag blue">◷ review</span></span></span></button>
+            <button class="dcard"><span class="top">💰</span><span class="in"><b>Value Ladder</b><span>5 rungs</span>
+              <span class="meta"><span class="flag green">✓ saved</span></span></span></button>
+            <button class="dcard"><span class="top">🧲</span><span class="in"><b>Lead Magnets</b><span>10 built files</span>
+              <span class="meta"><span class="flag green">✓ saved</span></span></span></button>
+            <button class="dcard"><span class="top">📝</span><span class="in"><b>Blog Set</b><span>5 posts · 10,410 w</span>
+              <span class="meta"><span class="flag green">✓ saved</span></span></span></button>
+            <button class="dcard" style="border-style:dashed;opacity:.6"><span class="top">⭳</span>
+              <span class="in"><b>Download everything</b><span>one .zip, all approved assets</span></span></button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============ right rail ============ -->
+    <aside class="rail">
+      <h4>Pipeline</h4>
+      <p class="sub">Phase 1 · 6 of 15 saved</p>
+      <div class="node done"><span class="e">🎯</span><span class="n">ICP</span><span class="b">✓</span></div>
+      <div class="node done"><span class="e">🔍</span><span class="n">CRO Rewrite</span><span class="b">✓</span></div>
+      <div class="node hitl"><span class="e">🏛️</span><span class="n">Pillar Page</span><span class="b">⏸ REVIEW</span></div>
+      <div class="node done"><span class="e">🔀</span><span class="n">Funnel</span><span class="b">✓</span></div>
+      <div class="node done"><span class="e">💰</span><span class="n">Value Ladder</span><span class="b">✓</span></div>
+      <div class="node done"><span class="e">🧲</span><span class="n">Lead Magnet</span><span class="b">✓</span></div>
+      <div class="node done"><span class="e">📝</span><span class="n">Blog Post</span><span class="b">✓</span></div>
+      <div class="node run"><span class="e">🎥</span><span class="n">Webinar</span><span class="b">LIVE</span></div>
+      <div class="node next"><span class="e">📖</span><span class="n">Book</span><span class="b">Next</span></div>
+      <div class="node idle"><span class="e">🎙️</span><span class="n">Podcast</span><span class="b">Queued</span></div>
+      <div class="node idle"><span class="e">💬</span><span class="n">SMS Sequence</span><span class="b">Queued</span></div>
+      <div class="node idle"><span class="e">✅</span><span class="n">Plan of Action</span><span class="b">Queued</span></div>
+      <p class="anno" style="margin-top:.5rem"><b>Phase 4.</b> This rail already exists
+        (<code>PipelineDiagram.tsx</code>) but is desktop-only. A slim version becomes always-visible.</p>
+    </aside>
+  </div>
+</div>
+
+<!-- ============ reader pane ============ -->
+<div class="scrim" id="scrim" onclick="closeReader()"></div>
+<aside class="reader" id="reader" role="dialog" aria-label="Document reader">
+  <div class="rhead">
+    <span class="emoji">🔍</span><span class="t">CRO — Page Rewrite</span>
+    <span class="stagechip">STAGE 02</span>
+    <span class="grow" style="flex:1"></span>
+    <input class="find" placeholder="Find in document…">
+    <button class="btn ghost sm">⭳</button>
+    <button class="btn ghost sm" onclick="closeReader()">✕ Close</button>
+  </div>
+  <div class="rbody">
+    <nav class="rnav">
+      <h5>Contents</h5>
+      <a href="#s0" class="on">Part 0 — Mode Resolution<small>table · 40 w</small></a>
+      <a href="#s1">Part 1 — CRO Audit Report<small>7 findings · 1,900 w</small></a>
+      <a href="#s1a" class="sub">Audit 1 — Above-the-fold</a>
+      <a href="#s1b" class="sub">Audit 2 — Proof &amp; specificity</a>
+      <a href="#s2">Part 2 — Rewritten Page<small>13 sections · 3,100 w</small></a>
+      <a href="#s3">Part 3 — Implementation Pack<small>checklist · 1,100 w</small></a>
+      <p class="anno" style="margin:.6rem .2rem 0"><b>Phase 2.</b> Outline rail + its own scroll,
+        so opening Part 3 never moves the transcript behind it.</p>
+    </nav>
+    <div class="rmain">
+      <div class="sec" id="s0">
+        <div class="sechead"><h2>Part 0 — Mode Resolution</h2><span class="grow" style="flex:1"></span>
+          <button class="btn sm ghost">⧉ Copy</button></div>
+        <div class="prose">
+          <table><tr><th>Input</th><th>Resolved value</th><th>Source</th></tr>
+            <tr><td>Page scope</td><td>SERVICE PAGE</td><td>intake</td></tr>
+            <tr><td>Awareness stage</td><td>Solution-aware</td><td>ICP · Stage 01</td></tr>
+            <tr><td>Rewrite mode</td><td>REWRITE (structure preserved)</td><td>resolved</td></tr>
+            <tr><td>Locked sections</td><td>Footer, compliance block</td><td>intake</td></tr></table>
+        </div>
+      </div>
+
+      <div class="sec" id="s1">
+        <div class="sechead"><h2>Part 1 — CRO Audit Report</h2><span class="grow" style="flex:1"></span>
+          <button class="btn sm ghost">⧉ Copy</button></div>
+        <div class="prose">
+          <h3 id="s1a">Audit 1 — Above-the-fold clarity</h3>
+          <p><strong>Finding.</strong> The hero leads with “Melbourne’s Results-Driven Digital
+            Marketing Agency”. That is a category claim. Nothing above the fold names the visitor,
+            the outcome, or the timeframe, and the only CTA is “Get a Free Quote” — a request for
+            the visitor’s effort before any value has been established.</p>
+          <blockquote>“Melbourne’s Results-Driven Digital Marketing Agency” — existing H1</blockquote>
+          <p><strong>Recommendation.</strong> Lead with the outcome and a timeframe the client can
+            substantiate. Move the category claim to the subhead where it does no harm.</p>
+          <h3 id="s1b">Audit 2 — Proof and specificity</h3>
+          <p><strong>Finding.</strong> Five client logos sit above any claim they could support, and
+            three testimonials carry first names only, with no result attached.</p>
+          <p><strong>Recommendation.</strong> Pair each logo row with the one metric that client
+            moved. Attach a number to every testimonial or cut it.</p>
+          <p style="color:var(--fg-faint)">＋ Audits 3–7 continue below.</p>
+        </div>
+      </div>
+
+      <div class="sec" id="s2">
+        <div class="sechead"><h2>Part 2 — Rewritten Page</h2><span class="grow" style="flex:1"></span>
+          <button class="btn sm ghost">⧉ Copy</button></div>
+        <div class="prose">
+          <h3>Section 1 — Hero</h3>
+          <p><strong>H1.</strong> Fill your chairs with the patients you actually want — in 90 days,
+            or we work free until you do.</p>
+          <p><strong>Subhead.</strong> Implant and cosmetic marketing for Melbourne practices.
+            No lock-in contracts, and you keep everything we build.</p>
+          <p><strong>Primary CTA.</strong> Get my free 90-day plan → contact form</p>
+          <p><strong>Note.</strong> <code>[CLIENT TO CONFIRM: the 90-day guarantee wording]</code></p>
+          <hr>
+          <h3>Section 2 — Proof bar</h3>
+          <p>Keep the five existing client logos. Pair each with the metric that client moved.</p>
+          <p style="color:var(--fg-faint)">＋ Sections 3–13 continue.</p>
+        </div>
+      </div>
+
+      <div class="sec" id="s3">
+        <div class="sechead"><h2>Part 3 — Implementation Pack</h2><span class="grow" style="flex:1"></span>
+          <button class="btn sm ghost">⧉ Copy</button></div>
+        <div class="prose">
+          <p><strong>Title tag.</strong> Dental Implants Melbourne | 90-Day Plan | Acme Dental</p>
+          <p><strong>Meta description.</strong> Implant marketing for Melbourne practices…</p>
+          <p><strong>Placeholders to confirm — 9</strong></p>
+          <ul>
+            <li><code>[CLIENT TO CONFIRM: implant warranty length]</code> — Section 4</li>
+            <li><code>[CLIENT TO CONFIRM: finance provider name]</code> — Section 6</li>
+            <li><code>[CLIENT TO CONFIRM: the 90-day guarantee wording]</code> — Section 1</li>
+            <li style="color:var(--fg-faint)">＋ 6 more, grouped by section</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+/* ---------- demo plumbing ---------- */
+function tog(id){
+  var el=document.getElementById(id), was=el.classList.contains('open');
+  document.querySelectorAll('.menu.open').forEach(function(m){m.classList.remove('open')});
+  if(!was) el.classList.add('open');
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.menu')) document.querySelectorAll('.menu.open').forEach(function(m){m.classList.remove('open')});
+});
+
+/* accordion rows */
+document.querySelectorAll('.orow').forEach(function(row){
+  row.addEventListener('click',function(){
+    var body=document.getElementById(row.dataset.body);
+    var open=body.classList.toggle('open');
+    row.classList.toggle('open',open);
+  });
+});
+
+/* reader */
+function openReader(){document.getElementById('reader').classList.add('on');document.getElementById('scrim').classList.add('on');}
+function closeReader(){document.getElementById('reader').classList.remove('on');document.getElementById('scrim').classList.remove('on');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeReader()});
+document.querySelectorAll('.rnav a').forEach(function(a){
+  a.addEventListener('click',function(e){
+    e.preventDefault();
+    document.querySelectorAll('.rnav a').forEach(function(x){x.classList.remove('on')});
+    a.classList.add('on');
+    var t=document.querySelector(a.getAttribute('href'));
+    if(t) t.scrollIntoView({behavior:'smooth',block:'start'});
+  });
+});
+
+/* tabs */
+document.querySelectorAll('.tabs button').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.tabs button').forEach(function(x){x.classList.remove('on')});
+    b.classList.add('on');
+    var d=b.dataset.tab==='deliverables';
+    document.getElementById('tabTranscript').style.display=d?'none':'flex';
+    document.getElementById('tabDeliverables').style.display=d?'grid':'none';
+  });
+});
+
+/* theme, annotations, before/after */
+document.getElementById('btnTheme').addEventListener('click',function(){
+  var dark=document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme',dark?'light':'dark');
+  this.textContent=dark?'◐ Dark':'◑ Light';
+});
+document.getElementById('btnAnno').addEventListener('click',function(){
+  var on=document.body.classList.toggle('anno-on');
+  this.classList.toggle('on',on);
+  this.textContent=on?'Annotations on':'Annotations off';
+});
+document.getElementById('btnMode').addEventListener('click',function(){
+  var before=document.body.classList.toggle('mode-before');
+  this.classList.toggle('on',before);
+  this.textContent=before?'← Back to “after” (proposed)':'Show “before” (today)';
+  document.getElementById('scroll').scrollTop=0;
+});
+
+/* ---------- the "before" wall of text, generated so it is honestly long ---------- */
+(function(){
+  var findings=[
+    ['Above-the-fold clarity','The hero leads with “Melbourne’s Results-Driven Digital Marketing Agency” — a category claim rather than an outcome. Nothing above the fold names the visitor or what they get, and the only call to action asks for the visitor’s effort before any value has been established.','Lead with the outcome and a timeframe the client can substantiate. Move the category claim to the subhead, where it does no harm.'],
+    ['Proof and specificity','Five client logos sit above any claim they could support, and three testimonials carry first names only with no result attached. The page asserts eighteen years in market but never says what that bought the reader.','Pair each logo row with the one metric that client moved. Attach a number to every testimonial, or cut it.'],
+    ['Offer legibility','The service grid describes activities — “technical fixes”, “weekly optimisation” — not outcomes. A visitor cannot tell what they would receive, when, or for how much.','Rewrite each card as outcome, mechanism, timeframe. Name the deliverable.'],
+    ['Friction in the primary action','The enquiry form asks for seven fields including a free-text “what are you trying to fix?”, which is the highest-effort field on the page and sits above the submit button.','Reduce to name, email, phone. Move the qualifying question to the follow-up.'],
+    ['Objection handling','The page never addresses lock-in, price, or what happens if the work does not perform — the three objections the sales team reports most often.','Add a short section answering each in the client’s own words, immediately before the closing CTA.'],
+    ['Navigation and next step','Seven top-level nav items compete with the primary CTA, and the footer repeats all of them plus three more.','Reduce the header to the four pages that convert. Keep the footer as the complete map.'],
+    ['Trust and risk reversal','No guarantee, no named person, no address above the footer, and no indication of who does the work.','Put a named practitioner and the guarantee above the fold. Move the address up.']
+  ];
+  var sections=['Hero','Proof bar','What we do','How it works','Case study','Pricing frame','Objections','Team','Guarantee','FAQ','Secondary proof','Closing CTA','Footer'];
+  var h='<h2>PART 0 — MODE RESOLUTION TABLE</h2>'+
+    '<table><tr><th>Input</th><th>Resolved value</th><th>Source</th></tr>'+
+    '<tr><td>Page scope</td><td>SERVICE PAGE</td><td>intake</td></tr>'+
+    '<tr><td>Awareness stage</td><td>Solution-aware</td><td>ICP · Stage 01</td></tr>'+
+    '<tr><td>Rewrite mode</td><td>REWRITE (structure preserved)</td><td>resolved</td></tr>'+
+    '<tr><td>Locked sections</td><td>Footer, compliance block</td><td>intake</td></tr></table>'+
+    '<h2>PART 1 — CRO AUDIT REPORT</h2>';
+  findings.forEach(function(f,i){
+    h+='<h3>Audit '+(i+1)+' — '+f[0]+'</h3><p><strong>Finding.</strong> '+f[1]+'</p>'+
+       '<p><strong>Recommendation.</strong> '+f[2]+'</p>';
+  });
+  h+='<h2>PART 2 — REWRITTEN PAGE</h2>';
+  sections.forEach(function(s,i){
+    h+='<h3>Section '+(i+1)+' — '+s+'</h3>'+
+      '<p><strong>Heading.</strong> Written in the client’s own language, at the awareness stage resolved in Part 0.</p>'+
+      '<p><strong>Body.</strong> Complete copy written in full — not bullets, not a brief. Ready to hand to a web team, with every claim traceable to something the client can substantiate, and every placeholder marked <code>[CLIENT TO CONFIRM: …]</code> rather than invented.</p>'+
+      '<p><strong>CTA.</strong> Get my free 90-day plan → contact form</p>';
+  });
+  h+='<h2>PART 3 — IMPLEMENTATION PACK</h2>'+
+    '<p><strong>Title tag.</strong> Dental Implants Melbourne | 90-Day Plan | Acme Dental</p>'+
+    '<p><strong>Meta description.</strong> Implant marketing for Melbourne practices — a 90-day plan, no lock-in.</p>'+
+    '<p><strong>H2/H3 outline as implemented.</strong></p><ol>'+sections.map(function(s){return '<li>'+s+'</li>'}).join('')+'</ol>'+
+    '<p><strong>Placeholders to confirm — 9</strong></p><ul>'+
+    ['implant warranty length','finance provider name','the 90-day guarantee wording','lead practitioner name','before/after photo consent','average case value','current monthly enquiry volume','review platform to embed','compliance disclaimer text']
+      .map(function(p){return '<li><code>[CLIENT TO CONFIRM: '+p+']</code></li>'}).join('')+'</ul>'+
+    '<p><strong>Proof assets to collect, in priority order.</strong></p><ol><li>Two implant case studies with figures</li><li>Named practitioner headshots</li><li>Google review export</li></ol>'+
+    '<p><strong>Final ingredient checklist.</strong> Confirmed item by item, with an honest note on anything unmet.</p>';
+  document.getElementById('beforeProse').innerHTML=h;
+})();
+
+/* ---------- Phase 4: simulated live generation ---------- */
+var STEPS=[
+  ['Reading context','ICP, competitor synthesis, brand tokens'],
+  ['Competitor webinar synthesis','4 competitors'],
+  ['Planning the set','3 webinars'],
+  ['Strategy & architecture','per webinar'],
+  ['Full presenter script','the long one'],
+  ['Slide deck brief',''],
+  ['Registration page copy',''],
+  ['Email sequence','5 emails']
+];
+var LINES=[
+  '## STEP 1 — READ CONTEXT','Reading ICP from Stage 01 · 2,140 words',
+  'Brand tokens: Montserrat 300/500, #a4d36b accent','## STEP 2 — COMPETITOR WEBINAR SYNTHESIS',
+  'Found 4 competitor webinars on “dental implant marketing”','Extracting hook / promise / proof pattern per set',
+  '## STEP 2B — PLAN THE SET','Webinar 1 — “The 90-Day Chair Plan”','Webinar 2 — “Why Implant Ads Stop Working”',
+  'Webinar 3 — “What a Full Diary Actually Costs”','## STEP 3 — WEBINAR STRATEGY & ARCHITECTURE',
+  'Webinar 1: promise, mechanism, proof, offer, close','Objection map: price, timing, trust',
+  '## STEP 4 — FULL PRESENTER SCRIPT','Opening: “If your chairs are half full at 3pm on a Tuesday…”',
+  'Beat 2 — the diagnosis','Beat 3 — the mechanism, in three parts','Beat 4 — proof, with figures',
+  '## STEP 5 — SLIDE DECK BRIEF','24 slides, one idea each','## STEP 6 — REGISTRATION PAGE COPY',
+  'Headline, subhead, 3 bullets, presenter bio','## STEP 7 — EMAIL SEQUENCE','Email 1 — confirmation + calendar',
+  'Email 2 — the one objection','## STEP 8 — IMPLEMENTATION NOTES','Done — 3 webinar packages, 18,400 words'
+];
+var timer=null;
+function renderSteps(cur){
+  var h='';
+  STEPS.forEach(function(s,i){
+    var cls = i < cur ? 'done' : (i === cur ? 'now' : '');
+    var mark = i < cur ? '✓' : (i === cur ? '●' : (i + 1));
+    h+='<div class="step '+cls+'"><span class="bullet">'+mark+'</span><span>'+s[0]+'</span>'+
+       (s[1]?'<span class="el">'+s[1]+'</span>':'')+'</div>';
+  });
+  document.getElementById('liveSteps').innerHTML=h;
+}
+renderSteps(0);
+
+document.getElementById('btnPlay').addEventListener('click',function(){
+  if(timer){clearInterval(timer);timer=null;this.textContent='▶ Play generation';return}
+  this.textContent='■ Stop';
+  var i=0,words=0,buf=[],step=0;
+  var card=document.getElementById('liveCard');
+  card.classList.add('live');
+  document.getElementById('liveFlag').className='flag blue';
+  document.getElementById('liveFlag').textContent='◷ generating…';
+  document.getElementById('liveCard').scrollIntoView({behavior:'smooth',block:'center'});
+  timer=setInterval(function(){
+    if(i>=LINES.length){
+      clearInterval(timer);timer=null;
+      document.getElementById('btnPlay').textContent='▶ Play generation';
+      card.classList.remove('live');
+      renderSteps(STEPS.length);
+      document.getElementById('liveFlag').className='flag green';
+      document.getElementById('liveFlag').textContent='✓ complete';
+      document.getElementById('liveMeta').textContent='8 steps · 3 webinar packages · 18,400 words';
+      document.getElementById('liveBar').style.width='100%';
+      document.getElementById('liveTicker').innerHTML='<span class="cur">Parsed into 3 packages, 8 sections each. Card collapsed — nothing was discarded.</span>';
+      return;
+    }
+    var line=LINES[i];
+    if(line.indexOf('## STEP')===0){
+      step=Math.min(step+1,STEPS.length-1);
+      renderSteps(step);
+      document.getElementById('liveMeta').textContent='Step '+(step+1)+' of 8 · '+STEPS[step][0];
+      document.getElementById('liveBar').style.width=(4+(step/STEPS.length)*96).toFixed(0)+'%';
+    }
+    buf.push(line); if(buf.length>3) buf.shift();
+    words+=line.split(' ').length*11;
+    document.getElementById('liveWords').textContent=words.toLocaleString()+' words';
+    document.getElementById('liveTicker').innerHTML=
+      buf.map(function(l,k){return k===buf.length-1?'<span class="cur">'+l+'</span><span class="cursor"></span>':l}).join('<br>');
+    i++;
+  },520);
+});
+
+document.getElementById('btnFull').addEventListener('click',function(){
+  var t=document.getElementById('liveTicker');
+  var big=t.style.height==='16rem';
+  t.style.height=big?'3.9rem':'16rem';
+  this.textContent=big?'▾ Show full stream':'▴ Collapse stream';
+});
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@ import { AccountMenu } from "../auth/AccountMenu";
 import { UsagePill } from "../components/UsagePill";
 import { useUiStore } from "../store/uiStore";
 import { PHASE_META, totalStagesFor } from "./pipelineData";
-import { usePipelineStore } from "./pipelineStore";
+import { messagesInPhase, usePipelineStore } from "./pipelineStore";
 import type { NavStatus } from "./pipelineStore";
 
 const STATUS_STYLE: Record<NavStatus, { dot: string; text: string; blink?: boolean }> = {
@@ -94,6 +94,54 @@ function PaneSwitch() {
   );
 }
 
+/** Whose run this is, and how far it has got.
+ *
+ * Two facts that were only inferable before: the client's name lived in the intake answers and
+ * nowhere on screen, and the stage counter existed only on the mobile pane switch — so on a desktop,
+ * where the pipeline rail is visible but has to be read row by row, there was no single figure for
+ * "how much of this is done".
+ *
+ * Both are dropped below `md`, where the nav is already competing for every pixel with the pane
+ * switch, and the counter is on that switch anyway.
+ */
+function RunPills() {
+  const clientProfile = usePipelineStore((s) => s.clientProfile);
+  const messages = usePipelineStore((s) => s.messages);
+  const phase = usePipelineStore((s) => s.phase);
+  const total = totalStagesFor(phase);
+
+  /* `client_name`, and only that. `clientProfile` is a `Record<string, string>`, so TypeScript
+   * cannot catch a wrong key here — and the obvious guess is wrong: `company_name` is ICP's
+   * *field id*, which `CLIENT_PROFILE_SOURCES` maps onto the `client_name` profile key. Reading
+   * `company_name` compiles and is always undefined. */
+  const client = clientProfile?.client_name?.trim() ?? "";
+  const saved = messagesInPhase(messages, phase).filter(
+    (m) => m.kind === "generation" && m.savePhase === "saved" && !m.superseded,
+  ).length;
+
+  return (
+    <>
+      {client && (
+        <span
+          title={`Client: ${client}`}
+          className="hidden max-w-[12rem] shrink-0 items-center gap-1 truncate rounded-full border border-[var(--border)] px-2.5 py-1 text-[0.74rem] text-[var(--fg-muted)] md:inline-flex"
+        >
+          <span className="truncate font-semibold text-[var(--fg)]">{client}</span>
+        </span>
+      )}
+      <span
+        title={`${saved} of ${total} assets approved and saved to the Context Store`}
+        className="hidden shrink-0 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-1 text-[0.74rem] text-[var(--fg-muted)] md:inline-flex"
+      >
+        <span className="font-semibold tabular-nums text-[var(--fg)]">
+          {saved}/{total}
+        </span>
+        saved
+      </span>
+    </>
+  );
+}
+
 export function TopNav() {
   const navStatus = usePipelineStore((s) => s.navStatus);
   const openSidebar = useUiStore((s) => s.openSidebar);
@@ -127,6 +175,7 @@ export function TopNav() {
         <span className="hidden shrink-0 text-[0.82rem] text-[var(--fg-faint)] 2xl:inline">/ Pipeline Engine</span>
       </div>
 
+      <RunPills />
       <UsagePill />
 
       <PaneSwitch />

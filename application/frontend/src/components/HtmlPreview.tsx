@@ -168,21 +168,12 @@ function PreviewFrame({
   );
 }
 
-export function HtmlPreview({ html, label = "Generated page" }: { html: string; label?: string }) {
-  const [device, setDevice] = useState<DeviceId>(initialDevice);
-  const [showCode, setShowCode] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+/** Copy and Download, shared by the inline preview and the pop-out window.
+ *
+ * Download is the sanctioned way to run a generated page for real: the file opens from `file://`,
+ * which is its own origin, so the page is as isolated on disk as it is in the sandboxed frame. */
+function usePreviewActions(html: string, label: string) {
   const [copied, setCopied] = useState(false);
-  const viewportHeight = useViewportHeight();
-  // Inline, the frame takes a little over half the screen: enough to judge the page, little enough
-  // that the Save/Refine row under it is still reachable without hunting for it. Floored so a short
-  // landscape window still shows something, capped so a tall monitor doesn't hand one preview the
-  // whole column.
-  const inlineFrameHeight = Math.round(Math.min(520, Math.max(240, viewportHeight * 0.55)));
-
-  const srcDoc = toPreviewDocument(html);
-  const deviceWidth = DEVICES.find((d) => d.id === device)!.width;
-  const lineCount = html.split("\n").length;
 
   const copy = useCallback(() => {
     void navigator.clipboard.writeText(html).then(() => {
@@ -202,26 +193,129 @@ export function HtmlPreview({ html, label = "Generated page" }: { html: string; 
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }, [html, label]);
 
+  return { copy, download, copied };
+}
+
+/**
+ * A generated page in a pop-up window.
+ *
+ * A dialog over a dimmed backdrop rather than a full-bleed takeover: a page being reviewed is
+ * judged against the app around it, and a window you can dismiss reads as a preview where a
+ * whole-screen swap reads as navigation. Portalled to `<body>` because `.msg-rise` leaves a settled
+ * `transform` on the message card, and a `fixed` child of a transformed ancestor positions against
+ * that ancestor rather than the viewport.
+ *
+ * **Not** a real browser window, and that is deliberate. `window.open` on a `blob:` URL runs the
+ * page on this app's own origin, with this app's cookies and `/api/*` reachable — exactly the
+ * property the sandbox on this iframe exists to deny, and it matters because competitor text
+ * scraped from third-party pages flows into the prompts that produce this markup. So the "window"
+ * is in-app, and Download covers the case where a real one is wanted: a file opened from `file://`
+ * is its own origin.
+ */
+export function HtmlPreviewDialog({
+  html,
+  label,
+  onClose,
+}: {
+  html: string;
+  label: string;
+  onClose: () => void;
+}) {
+  const [device, setDevice] = useState<DeviceId>(initialDevice);
+  const [showCode, setShowCode] = useState(false);
+  const viewportHeight = useViewportHeight();
+  const { copy, download, copied } = usePreviewActions(html, label);
+
+  const srcDoc = toPreviewDocument(html);
+  const deviceWidth = DEVICES.find((d) => d.id === device)!.width;
+  const lineCount = html.split("\n").length;
+
   useEffect(() => {
-    if (!expanded) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpanded(false);
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expanded]);
+    // The page behind must not scroll while a modal window is over it.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
 
-  const toolbar = (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <DeviceToggle value={device} onChange={setDevice} />
-      <ToolbarButton onClick={() => setShowCode((v) => !v)} active={showCode}>
-        {showCode ? "Hide code" : "Code"}
-      </ToolbarButton>
-      <ToolbarButton onClick={copy}>{copied ? "Copied" : "Copy HTML"}</ToolbarButton>
-      <ToolbarButton onClick={download}>Download</ToolbarButton>
-      <ToolbarButton onClick={() => setExpanded((v) => !v)}>{expanded ? "Close" : "Expand"}</ToolbarButton>
+  // Portalled to `<body>` when there is a body to portal to, and rendered in place when there is
+  // not. The app is client-only so the portal is what always runs in practice; the fallback keeps
+  // the component renderable outside a browser, which is where the checks in `smoke/` run — and a
+  // component that renders *nothing* off-browser is harder to trust than one that renders inline.
+  const content = (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-5">
+      <button
+        type="button"
+        aria-label="Close preview"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-black/55"
+      />
+      {/* Its own `@container`: the toolbar's breakpoints were written against the transcript
+          column, and here the same toolbar spans a window. */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${label} preview`}
+        className="@container relative flex h-full max-h-[94vh] w-full max-w-[100rem] flex-col overflow-hidden rounded-xl border border-[var(--border-strong)] bg-[var(--bg)] shadow-[0_24px_64px_rgb(0_0_0/0.4)]"
+      >
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] px-3 py-2.5 sm:px-4">
+          <span aria-hidden>🖥️</span>
+          <span className="min-w-0 flex-1 truncate text-[0.85rem] font-semibold">{label}</span>
+          <span className="hidden shrink-0 text-[0.68rem] text-[var(--fg-faint)] @[34rem]:inline">
+            {lineCount} lines · {deviceWidth}px
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <DeviceToggle value={device} onChange={setDevice} />
+            <ToolbarButton onClick={() => setShowCode((v) => !v)} active={showCode}>
+              {showCode ? "Hide code" : "Code"}
+            </ToolbarButton>
+            <ToolbarButton onClick={copy}>{copied ? "Copied" : "Copy HTML"}</ToolbarButton>
+            <ToolbarButton onClick={download}>Download</ToolbarButton>
+            <ToolbarButton onClick={onClose}>Close</ToolbarButton>
+          </div>
+        </div>
+        <div className="pane-scroll min-h-0 flex-1 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
+          {showCode ? (
+            <pre className="pane-scroll h-full overflow-auto rounded-xl border border-[var(--border)] bg-[var(--bg-sunken)] p-2.5 text-[0.72rem] leading-relaxed sm:p-3">
+              <code>{html}</code>
+            </pre>
+          ) : (
+            <PreviewFrame
+              document={srcDoc}
+              deviceWidth={deviceWidth}
+              viewportHeight={Math.max(240, Math.min(viewportHeight * 0.94, viewportHeight) - 120)}
+              title={label}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
+
+  return typeof document === "undefined" ? content : createPortal(content, document.body);
+}
+
+export function HtmlPreview({ html, label = "Generated page" }: { html: string; label?: string }) {
+  const [device, setDevice] = useState<DeviceId>(initialDevice);
+  const [showCode, setShowCode] = useState(false);
+  const [popped, setPopped] = useState(false);
+  const viewportHeight = useViewportHeight();
+  const { copy, download, copied } = usePreviewActions(html, label);
+  // Inline, the frame takes a little over half the screen: enough to judge the page, little enough
+  // that the Save/Refine row under it is still reachable without hunting for it. Floored so a short
+  // landscape window still shows something, capped so a tall monitor doesn't hand one preview the
+  // whole column.
+  const inlineFrameHeight = Math.round(Math.min(520, Math.max(240, viewportHeight * 0.55)));
+
+  const srcDoc = toPreviewDocument(html);
+  const deviceWidth = DEVICES.find((d) => d.id === device)!.width;
+  const lineCount = html.split("\n").length;
 
   return (
     <div className="my-3 min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-sunken)] p-2 @[30rem]:p-2.5">
@@ -237,52 +331,39 @@ export function HtmlPreview({ html, label = "Generated page" }: { html: string; 
             {lineCount} lines · {deviceWidth}px
           </span>
         </div>
-        {toolbar}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <DeviceToggle value={device} onChange={setDevice} />
+          <ToolbarButton onClick={() => setShowCode((v) => !v)} active={showCode}>
+            {showCode ? "Hide code" : "Code"}
+          </ToolbarButton>
+          <ToolbarButton onClick={copy}>{copied ? "Copied" : "Copy HTML"}</ToolbarButton>
+          <ToolbarButton onClick={download}>Download</ToolbarButton>
+          <ToolbarButton onClick={() => setPopped(true)}>Pop out</ToolbarButton>
+        </div>
       </div>
 
-      {expanded ? (
-        // The overlay is showing the same document; a second live iframe behind it would render
-        // the whole page twice for nothing.
-        <p className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-6 text-center text-[0.78rem] text-[var(--fg-muted)]">
-          Open in full screen — press Esc or Close to bring it back here.
-        </p>
-      ) : showCode ? (
+      {showCode ? (
         <pre className="pane-scroll max-h-[60vh] overflow-auto rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 text-[0.7rem] leading-relaxed sm:max-h-[520px] sm:p-3">
           <code>{html}</code>
         </pre>
       ) : (
-        <PreviewFrame document={srcDoc} deviceWidth={deviceWidth} viewportHeight={inlineFrameHeight} title={label} />
+        <div className="relative">
+          <PreviewFrame document={srcDoc} deviceWidth={deviceWidth} viewportHeight={inlineFrameHeight} title={label} />
+          {/* The frame stays interactive — accordions and tabs are part of what is being reviewed —
+              so the enlarge affordance is a button over one corner rather than a click handler on
+              the frame, which would have to swallow every click meant for the page. */}
+          <button
+            type="button"
+            onClick={() => setPopped(true)}
+            title={`Open ${label} in a window`}
+            className="absolute right-2 top-2 cursor-pointer rounded-full border border-[var(--border-strong)] bg-[var(--bg)]/90 px-2 py-1 text-[0.68rem] font-semibold text-[var(--fg-muted)] backdrop-blur-sm hover:bg-[var(--bg)] hover:text-[var(--fg)]"
+          >
+            ⤢ Pop out
+          </button>
+        </div>
       )}
 
-      {expanded &&
-        createPortal(
-          // Portalled to <body>: `.msg-rise` leaves a settled `transform` on the message card,
-          // which would otherwise make this fixed overlay position against the card, not the
-          // viewport.
-          // Its own `@container`: the toolbar's breakpoints were written against the transcript
-          // column, and here the same toolbar spans the whole viewport.
-          <div className="@container fixed inset-0 z-50 flex flex-col bg-[var(--bg)]">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2.5 sm:px-4">
-              <span className="min-w-0 flex-1 truncate text-[0.85rem] font-semibold">{label}</span>
-              {toolbar}
-            </div>
-            <div className="pane-scroll min-h-0 flex-1 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
-              {showCode ? (
-                <pre className="pane-scroll h-full overflow-auto rounded-xl border border-[var(--border)] bg-[var(--bg-sunken)] p-2.5 text-[0.72rem] leading-relaxed sm:p-3">
-                  <code>{html}</code>
-                </pre>
-              ) : (
-                <PreviewFrame
-                  document={srcDoc}
-                  deviceWidth={deviceWidth}
-                  viewportHeight={Math.max(240, viewportHeight - 110)}
-                  title={label}
-                />
-              )}
-            </div>
-          </div>,
-          document.body,
-        )}
+      {popped && <HtmlPreviewDialog html={html} label={label} onClose={() => setPopped(false)} />}
     </div>
   );
 }

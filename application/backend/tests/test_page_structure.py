@@ -489,3 +489,164 @@ def test_the_structure_survives_a_page_whose_css_could_not_be_read(page_html):
     assert "NOT AVAILABLE" in combined
     assert "Do not invent a palette" in combined
     assert "### The 9 bands, in order" in combined
+
+
+# ----------------------------------------------------------------------------------------------
+# Why a re-run produced the same page
+#
+# Reported: the Pillar Page stage was re-run after the structure walk landed and produced the same
+# output as before — no logo, no page format. Two independent causes, both pinned here.
+# ----------------------------------------------------------------------------------------------
+
+
+def test_the_pillar_page_stages_own_reference_field_is_a_design_source():
+    """Cause one. `pillar_page.json` has neither `existing_page_url` nor `parent_pillar_page_url`
+    — its design reference is `reference_design_source` ("URL / description of the page whose
+    visual design to replicate"). That field was not in `_DESIGN_SOURCE_FIELDS`, so a Pillar Page
+    run read `client_website_url` instead: the client's home page, not the page the operator
+    pointed at."""
+    from app.routers.pipeline import _design_source_url
+
+    answers = {
+        "client_website_url": "https://acmedental.com.au",
+        "reference_design_source": "https://trafficradius.com.au/",
+    }
+    assert _design_source_url(answers, {}) == "https://trafficradius.com.au/"
+
+
+def test_a_reference_only_run_is_no_longer_read_as_having_no_page():
+    """The worse half of the same bug: with no client website filled in, the resolution returned
+    None and every HTML stage built in flagged placeholder greys."""
+    from app.routers.pipeline import _design_source_url
+
+    assert (
+        _design_source_url({"reference_design_source": "https://trafficradius.com.au/"}, {})
+        == "https://trafficradius.com.au/"
+    )
+
+
+def test_the_existing_page_url_still_outranks_the_reference_field():
+    from app.routers.pipeline import _design_source_url
+
+    answers = {
+        "existing_page_url": "https://acmedental.com.au/implants",
+        "reference_design_source": "https://trafficradius.com.au/",
+        "client_website_url": "https://acmedental.com.au",
+    }
+    assert _design_source_url(answers, {}) == "https://acmedental.com.au/implants"
+
+
+def test_a_url_is_extracted_from_an_art_direction_sentence():
+    """The field is a `file_attach` accepting text, and the frontend's own placeholder is a
+    sentence: "e.g. https://stripe.com/pricing — take the spacing and card treatment, not the
+    palette". Handing that whole string to the fetcher reads nothing."""
+    from app.routers.pipeline import _design_source_url
+
+    answers = {
+        "reference_design_source": (
+            "https://stripe.com/pricing — take the spacing and card treatment, not the palette"
+        )
+    }
+    assert _design_source_url(answers, {}) == "https://stripe.com/pricing"
+
+
+def test_a_reference_with_no_url_in_it_is_passed_over():
+    """A screenshot or a paragraph of art direction is a legitimate answer to this field and is not
+    a page anything can fetch. It must fall through to the next source, not become a bad URL."""
+    from app.routers.pipeline import _design_source_url
+
+    answers = {
+        "reference_design_source": "See the attached screenshot — match its card treatment.",
+        "client_website_url": "https://acmedental.com.au",
+    }
+    assert _design_source_url(answers, {}) == "https://acmedental.com.au"
+
+
+def test_a_bare_domain_is_accepted_as_the_whole_answer():
+    from app.routers.pipeline import _design_source_url
+
+    assert _design_source_url({"reference_design_source": "trafficradius.com.au"}, {}) == (
+        "https://trafficradius.com.au"
+    )
+
+
+def test_a_domain_mentioned_inside_a_sentence_is_not_nominated():
+    """A domain being talked about is not a domain being pointed at."""
+    from app.routers.pipeline import _design_source_url
+
+    answers = {"reference_design_source": "Something cleaner than trafficradius.com.au please"}
+    assert _design_source_url(answers, {}) is None
+
+
+def test_a_context_placeholder_is_still_skipped():
+    from app.routers.pipeline import _design_source_url
+
+    answers = {
+        "reference_design_source": "[[context:design_tokens]]",
+        "client_website_url": "https://acmedental.com.au",
+    }
+    assert _design_source_url(answers, {}) == "https://acmedental.com.au"
+
+
+def test_a_stored_sheet_from_an_older_capture_is_re_read():
+    """Cause two, and the one that made the re-run pointless. The stored sheet was reused whenever
+    the URL matched, unconditionally — so a run captured before the structure walk landed kept
+    serving the older document forever, and re-running the stage could not change anything."""
+    from app.routers.pipeline import DESIGN_CAPTURE_VERSION, _reuse_stored_design
+
+    stale = {"source_url": URL, "capture_version": DESIGN_CAPTURE_VERSION - 1, "design_md": "old"}
+    reuse, why = _reuse_stored_design(stale, URL)
+
+    assert not reuse
+    assert f"v{DESIGN_CAPTURE_VERSION}" in why
+
+
+def test_a_sheet_with_no_version_at_all_is_treated_as_the_oldest():
+    """Every row written before this mechanism existed has no `capture_version`, and those are
+    exactly the rows that need re-reading."""
+    from app.routers.pipeline import _reuse_stored_design
+
+    reuse, _why = _reuse_stored_design({"source_url": URL, "content": "tokens only"}, URL)
+    assert not reuse
+
+
+def test_a_current_sheet_for_the_same_page_is_reused():
+    """The cache still has to work: a brand does not change between stages, and 17 credits per
+    stage would be the largest line on a run."""
+    from app.routers.pipeline import DESIGN_CAPTURE_VERSION, _reuse_stored_design
+
+    current = {"source_url": URL, "capture_version": DESIGN_CAPTURE_VERSION}
+    reuse, why = _reuse_stored_design(current, URL)
+
+    assert reuse
+    assert why == ""
+
+
+def test_pointing_the_run_at_a_different_page_re_reads():
+    from app.routers.pipeline import DESIGN_CAPTURE_VERSION, _reuse_stored_design
+
+    stored = {"source_url": "https://old.example/", "capture_version": DESIGN_CAPTURE_VERSION}
+    reuse, why = _reuse_stored_design(stored, URL)
+
+    assert not reuse
+    assert URL in why
+
+
+def test_with_no_url_to_re_read_the_stored_sheet_is_served_whatever_its_age():
+    """Re-capturing needs something to capture. An old sheet beats no sheet, which is what a stage
+    would otherwise get."""
+    from app.routers.pipeline import _reuse_stored_design
+
+    reuse, _why = _reuse_stored_design({"source_url": URL, "capture_version": 1}, None)
+    assert reuse
+
+
+def test_the_pillar_page_stage_is_shown_the_reference_screenshots():
+    """Cause three, and the "page format" half of the report. The stage whose Rule 1 is that every
+    colour, button and layout element must trace back to the reference was the one stage not shown
+    the reference images — so it traced back to a token sheet, which says what the page is made of
+    and nothing about what it looks like."""
+    from app.services.generation import PAGE_REPLICA_STAGES, SCREENSHOT_STAGES
+
+    assert "pillar_page" in SCREENSHOT_STAGES
+    assert SCREENSHOT_STAGES <= PAGE_REPLICA_STAGES

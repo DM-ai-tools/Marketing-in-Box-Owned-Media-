@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { buildAssetExport, downloadExport, shareExport } from "../lib/exportAsset";
+import { useAssetExport, type AssetExportTarget } from "../lib/useAssetExport";
 
 function DownloadIcon() {
   return (
@@ -28,27 +27,6 @@ function ShareIcon() {
       />
     </svg>
   );
-}
-
-/** A transient button label ("Downloaded", "Copied") that reverts on its own, without leaving a
- * timer running against an unmounted card. */
-function useFlash(revertAfterMs = 1800) {
-  const [flash, setFlash] = useState<string | null>(null);
-  const timer = useRef<number | undefined>(undefined);
-
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  return [
-    flash,
-    useCallback(
-      (label: string) => {
-        setFlash(label);
-        window.clearTimeout(timer.current);
-        timer.current = window.setTimeout(() => setFlash(null), revertAfterMs);
-      },
-      [revertAfterMs],
-    ),
-  ] as const;
 }
 
 function QuietButton({
@@ -80,32 +58,8 @@ function QuietButton({
  * Deliberately available before *and* after the asset is saved. Saving files it to the Context
  * Store for the next stage to read, which is a different job from getting it out to a client — and
  * an operator who wants the file is just as likely to want it from an approved asset as a draft. */
-export function AssetExportButtons({
-  text,
-  label,
-  stageNumber,
-}: {
-  text: string;
-  label: string;
-  stageNumber?: number;
-}) {
-  const [downloadFlash, flashDownload] = useFlash();
-  const [shareFlash, flashShare] = useFlash();
-
-  const download = useCallback(() => {
-    downloadExport(buildAssetExport({ text, label, stageNumber }));
-    flashDownload("Downloaded");
-  }, [text, label, stageNumber, flashDownload]);
-
-  const share = useCallback(() => {
-    void shareExport(buildAssetExport({ text, label, stageNumber }), label)
-      .then((outcome) => {
-        if (outcome === "shared") flashShare("Shared");
-        else if (outcome === "copied") flashShare("Copied");
-        // "cancelled" — the user dismissed the share sheet; say nothing.
-      })
-      .catch(() => flashShare("Couldn't share"));
-  }, [text, label, stageNumber, flashShare]);
+export function AssetExportButtons({ text, label, stageNumber }: AssetExportTarget) {
+  const { download, share, downloadFlash, shareFlash } = useAssetExport({ text, label, stageNumber });
 
   return (
     <>
@@ -117,6 +71,47 @@ export function AssetExportButtons({
         <ShareIcon />
         {shareFlash ?? "Share"}
       </QuietButton>
+    </>
+  );
+}
+
+/** The same two actions as rows in an `OverflowMenu`.
+ *
+ * `onDone` fires after either action so the caller can dismiss the menu. The transient label is
+ * still rendered, which matters more here than in the pill row: the menu closes on the click, so
+ * "Downloaded" is the only confirmation the operator would otherwise get — and they will not see
+ * it. Hence the download row stays open long enough to show it by not closing on download. */
+export function AssetExportMenuItems({
+  text,
+  label,
+  stageNumber,
+  onDone,
+}: AssetExportTarget & { onDone?: () => void }) {
+  const { download, share, downloadFlash, shareFlash } = useAssetExport({ text, label, stageNumber });
+
+  return (
+    <>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={download}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[0.8rem] font-medium hover:bg-[var(--hover)]"
+      >
+        <DownloadIcon />
+        {downloadFlash ?? "Download"}
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          share();
+          onDone?.();
+        }}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[0.8rem] font-medium hover:bg-[var(--hover)]"
+      >
+        <ShareIcon />
+        {shareFlash ?? "Share"}
+      </button>
     </>
   );
 }

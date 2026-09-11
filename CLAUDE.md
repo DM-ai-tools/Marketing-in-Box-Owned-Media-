@@ -102,8 +102,74 @@ client's real palette, type and components rather than a plausible invented one.
 ### Where the URL comes from
 
 `_design_source_url` in `app/routers/pipeline.py`, in preference order: `existing_page_url` (the
-CRO stage's own field) → `parent_pillar_page_url` → `client_website_url` → the profile's
-`website_url`.
+CRO stage's own field) → `parent_pillar_page_url` → **`reference_design_source`** (the Pillar Page
+stage's own field) → `client_website_url` → the profile's `website_url`.
+
+`reference_design_source` belongs in that list and its omission was a real bug: `pillar_page.json`
+carries neither of the first two fields, so a Pillar Page run read `client_website_url` — the
+client's *home page* — whichever page the operator had actually nominated, and a run with only the
+reference filled in resolved to nothing and built in placeholder greys.
+
+It is a `file_attach` accepting a file *or* text, so its value is a URL only some of the time — it
+is equally where somebody pastes "take the spacing and card treatment, not the palette" or attaches
+a screenshot. `_as_url` extracts a URL rather than assuming one: the first `https?://` run, or the
+whole answer if it is a bare domain. A domain mentioned *inside* a sentence is being talked about,
+not nominated, so it does not count, and an answer with no URL falls through as if blank.
+
+### When there is no page to audit — `NEW PAGE` mode
+
+A run's ICP is routinely for a service the client has never had a page for: "Social Media Marketing
+for e-commerce" when the site sells one generic Social Media page. The CRO stage audits an
+*existing* page and both `existing_page_url` and `existing_page_content` are `required`, so with
+nothing offered the operator nominates whichever page exists. That is wrong twice: the audit is
+about a page the run is not for, and because `existing_page_url` heads `_DESIGN_SOURCE_FIELDS`, the
+home page silently becomes the design reference every page in the run is built against.
+
+**The prompt already had the answer.** `Master_Prompt_Universal_Page_Rewrite_v1.md`: *"If the inputs
+state `NEW PAGE`, switch to build-from-scratch mode and skip Step 2's before/after comparisons,
+retaining every other instruction."* Both fields' own instructions offer the sentinel. The mode was
+reachable all along by typing one exact phrase, and unreachable in practice.
+
+`NEW_PAGE_OPTIONS` in `pipeline/pipelineData.ts` writes both answers from a button on the URL
+question. Under it, a second option skips CRO for `pillar_page` via the stage gate below.
+
+- **Build-from-scratch is the recommended option, and the order says so.** It keeps the stage, and
+  the stage is what writes `cro_rewritten_copy`, `cro_locked_sections` and `cro_terminology_map` —
+  the three documents `pillar_page` requires. Skipping CRO does not produce them, so it moves the
+  copy problem to the next stage rather than solving it; the gate then asks for five documents by
+  hand. Both are offered because the second is what an operator who only wants a page will ask for,
+  and it is better to state that cost up front than to let them find it three questions later.
+- **Both fields are answered together.** With no page there is nothing to read, so `SCRAPE_SOURCES`
+  does not fire and `existing_page_content` becomes the same question again — which is where an
+  operator who has just said there is no page types "N/A", and the prompt reads a page whose copy is
+  the letters N/A.
+- **The answers are the field instructions verbatim**, em dash included, not a bare `NEW PAGE`: they
+  land in the INPUTS block an operator may read back. `_as_url` returns None for both, so the design
+  source falls through to `parent_pillar_page_url` → `reference_design_source` → `client_website_url`
+  rather than sitting at the top of the list as an unusable value.
+- **Three files have to agree** — the prompt's clause, the schema's `raw_explanation`, and that
+  table — and nothing but `tests/test_new_page_mode.py` connects them. It parses all three. Any one
+  drifting gives the same failure: a button that claims to switch modes, an answer that reads as
+  ordinary page copy, and a "rewrite" of a page that does not exist.
+
+### Staleness — `DESIGN_CAPTURE_VERSION`
+
+A run's sheet is cached under `brand_design_tokens` and reused for the life of the run, because a
+brand does not change between stages and 17 credits per stage would be the largest line on a run.
+That cache used to be unconditional whenever the URL matched, which had a consequence nobody
+noticed until the structure walk landed: **a run captured before an improvement kept serving the
+older document forever, and re-running the stage could not change anything.**
+
+So the stored row carries `capture_version`, and `_reuse_stored_design` re-reads when it is behind.
+Bump `DESIGN_CAPTURE_VERSION` whenever `build_design_md` starts emitting something a stage needs —
+it is the only way an improvement reaches a run that already exists. Bumping it costs one
+re-capture (17 credits) per existing run, on that run's next stage. `REPLICA_CAPTURE_VERSION` does
+the same job for `page_replica_template`, where it matters more: stored slot ids are identifiers,
+so a template captured under older slot rules must be re-read rather than reinterpreted.
+
+Note that **"Refine / Request Changes" never consults the sheet at all** — `generate_revision_stream`
+builds from the previous draft plus the operator's note (`build_revision_prompt`) and is handed no
+`page_design`. Only a full re-run picks up a re-captured sheet.
 
 ### What is merged
 
@@ -125,7 +191,7 @@ Set in `app/services/generation.py`; `PageDesignInput.sheet_for(asset_id)` picks
 | --- | --- | --- |
 | `PAGE_REPLICA_STAGES` | `cro`, `pillar_page` | the **full DESIGN.md** — spacing, elevation, components. Its output stands next to the original. |
 | `BRAND_THEME_STAGES` | `lead_magnet`, `funnel_hub_media`, `webinar` | the **theme brief** — colours, type, shapes, logo. Layout and components stripped, with an explicit "this is a theme, not a template" directive, because a lead magnet has its own structure. |
-| `SCREENSHOT_STAGES` | `cro` | the reference images, as `image` content blocks. |
+| `SCREENSHOT_STAGES` | `cro`, `pillar_page` | the reference images, as `image` content blocks. Free — the shots are captured once per run either way, so a stage here costs prompt tokens and no credits. `pillar_page` was missing and should not have been: its Rule 1 is that every colour, button and layout element traces back to the reference, and it was the one stage not shown the reference. |
 | everything else | `icp`, `funnel`, `sms_sequence`, `plan_of_action`, … | nothing — no palette to get wrong. |
 
 ### Screenshots
@@ -296,3 +362,81 @@ served HTML is a JS shell. Cached once per run under the `page_replica_template`
 - A replica stage's SSE stream emits `replica_template`, then `replica_start`, then `replica` (the
   report; the HTML is stored, not put on the wire) or `replica_error`. An assembly failure never
   reports the stage as failed — the stage's own document is already complete.
+
+---
+
+## Running a stage out of order
+
+The pipeline runs fifteen stages in sequence and that is the right default, not a constraint. Only
+five assets are ever a hard prerequisite for another (`icp`, `cro`, `pillar_page`, `funnel`,
+`webinar`), so "skip to stage 09" usually needs one or two documents rather than the eight stages in
+between. `docs/Asset_Dependency_Map.md` is the analysis; `app/services/dependencies.py` is the graph,
+read from the same `schemas/drafts/*.json` so the two cannot disagree.
+
+### The two routes
+
+- `GET /pipeline/runs/{run_id}/readiness/{asset_id}?phase=` — free. Per dependency: `ready`,
+  `source` (`this_run` | `inherited`), `from_run_id`, `seeded`, `version`, `chars`, `producer`,
+  `stored_under`. Plus `blocked`, `run_first`, `seedable`, `writes`, and `prepass`/`prepass_fields`.
+- `POST /pipeline/runs/{run_id}/context` — `{context_key, content, note?}`. Writes a `ContextEntry`
+  exactly as stage approval does, so every reader downstream needs no special case.
+
+### Rules
+
+- **A document is looked for under two keys.** `save_stage` writes `context_key = asset_id` and
+  nothing else, so the four extra keys `cro` publishes have no rows of their own. Probing only
+  `cro_rewritten_copy` finds nothing on a run whose CRO stage was approved — the one wrong answer
+  that would make readiness worse than nothing, because the operator would re-run a stage they had
+  already run. The context key is tried first (a hand-supplied document) and the producing asset's
+  id second (an approved stage). `hydrateContextFromDb` resolves the same way round.
+- **A seeded entry's `written_by_asset_id` is null.** Pointing it at the producing asset would claim
+  `icp` wrote a document `icp` never saw, corrupting the one column that records where output came
+  from. The value carries `"seeded": true` instead.
+- **Seeding locks nothing out.** Running the real stage later appends a higher version and wins,
+  because "latest" is `ORDER BY version DESC`.
+- **A key outside `seedable_keys()` is a 422 that lists the valid keys.** Not caution about write
+  volume: a mistyped key is accepted silently by the database, and the operator's evidence that they
+  had supplied the dependency would be the stage carrying on asking for it.
+- **The competitor prepasses are never dependencies.** All ten search the web from inside their own
+  stage, so `prepass_fields` is reported apart from `dependencies`.
+  `lead_magnet.competitor_lead_magnet_list` is `required` and nothing upstream writes it — counted
+  as a dependency it would report that stage as permanently unstartable and send an operator looking
+  for a stage that does not exist. `enterGatedStage` hydrates a stored prepass before entering,
+  because the decision to re-search is made from the *session* context, which a reopened chat does
+  not have; without it a resumed run pays for a listing already in the store.
+- **`unresolved_context_key` fields are `manual: true` and excluded from `blocked`.** They are
+  questions the stage asks every time. Counted as missing documents, `funnel_hub_media` reports as
+  permanently blocked with nothing an operator could do about it.
+- **`run_first` is computed against the run, not read off the graph.** A branch stops the moment the
+  run holds the document, so seeding `funnel_stages` drops `pillar_page` and `cro` behind it too —
+  `sms_sequence` goes from four stages to none.
+### Stopping a stage part-way
+
+"Stop this asset" sits above the transcript whenever a stage is in progress — mid-question,
+mid-competitor-scan, mid-stream, or on a draft nobody has saved. All four are states an operator can
+decide they are done with, so there is one control rather than one per state, and it names the stage
+it would stop. `selectCanStop` / `selectStoppableStage` decide both.
+
+- **The stream is genuinely aborted.** `generationRequests` (a module-level map, mirroring
+  `headlineRequests`) holds one `AbortController` per streaming message, and `streamIntoMessage`
+  returns early when `signal.aborted` — a deliberate stop is neither a truncated draft nor a
+  failure, and the old catch would have overwritten "Ready" with "Awaiting Review" of a card no
+  longer on offer. Before this the signal was plumbed through `pipelineApi` and never passed, so a
+  stop would have left the request running and billing.
+- **Nothing approved is touched.** Saved generations and saved competitor analyses keep their cards
+  and their Context Store versions — the same carve-out `rerunStage` makes, and what lets the stop
+  be one click behind an inline confirm rather than a modal.
+- **`rerunReturnIndex` is cleared.** Left set, the next stage to finish would send the operator back
+  to the stage they walked out of.
+- **Phase 2's two run-level questions are not stoppable.** Which parent run, and which sub-service,
+  belong to the run rather than to a stage; the sub-service card is pushed without an `assetId`, so
+  the supersede pass would not reach it and the question would be left on screen with no intake
+  behind it.
+- **The `stage-stopped` card counts as the operator's turn** in `deriveResumeActivity` and
+  `selectNeedsResume`. Without that the resume banner appears underneath it offering to continue the
+  stage they just stopped.
+
+- **"Done" in the pipeline diagram comes from the transcript, not from `currentIndex`.** The two
+  were the same thing only while the run was strictly sequential; `approvedAssetIds` is the
+  authority now. Jumping from stage 02 to stage 09 used to mark seven unbuilt stages "✓ Saved", with
+  the progress bar agreeing.

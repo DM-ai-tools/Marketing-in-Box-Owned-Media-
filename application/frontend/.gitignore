@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Render-check build output (see smoke/README.md)
+smoke/out*

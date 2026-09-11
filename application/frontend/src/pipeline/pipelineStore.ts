@@ -8,6 +8,7 @@ import {
   buildRunKeywords,
   createChatSession,
   createRun,
+  fetchAssetReadiness,
   fetchCompetitorBriefing,
   fetchRunContext,
   getChatSession,
@@ -18,6 +19,7 @@ import {
   saveHeadlineSelection,
   saveStageOutput,
   scrapePage,
+  seedRunContext,
   streamGenerateStage,
   streamRefineStage,
   suggestHeadlines,
@@ -26,6 +28,7 @@ import {
 import { ApiFaultError, StreamTruncatedError } from "./pipelineApi";
 import type {
   ApiFault,
+  AssetReadiness,
   CompetitorAnalysisResult,
   HeadlineCandidate,
   PrepassEvent,
@@ -37,6 +40,7 @@ import {
   COMPETITOR_CONSENT_FIELDS_BY_PHASE,
   FIELD_TO_FACT_BY_PHASE,
   GATED_COMPETITOR_IDS_BY_PHASE,
+  NEW_PAGE_OPTIONS,
   PHASE_META,
   PREPASS_BY_MAIN_ASSET_BY_PHASE,
   SCRAPE_SOURCES,
@@ -66,7 +70,38 @@ export type PipelineMessageKind =
   | "source-run"
   /** Phase 2 only: what an approved competitor set says about the market, read before the stage's
    * own intake. Informational — there is nothing to approve, so it has no save gate. */
-  | "briefing";
+  | "briefing"
+  /** The documents a stage needs, checked against the run, before it is entered out of order. */
+  | "stage-gate"
+  /** A stage the operator stopped part-way, and what they can do next. */
+  | "stage-stopped";
+
+/** A `kind: "stage-gate"` card: the documents `assetId` needs, checked against this run, shown
+ * before the stage is entered out of order.
+ *
+ * The pipeline's default is to run in order and this is what lets an operator skip anyway — see
+ * `docs/Asset_Dependency_Map.md`. Every judgement on the card comes from the server
+ * (`GET /runs/{id}/readiness/{asset}`) rather than from the catalog here, because only the run
+ * knows what it already holds: the same stage is one paste away from running on one run and four
+ * stages away on another.
+ *
+ * What the card must never do is offer to satisfy the competitor scan. It runs itself inside the
+ * stage, which is why `readiness.prepass_fields` is a separate list from `readiness.dependencies`
+ * — `lead_magnet`'s competitor list is a *required* field that nothing upstream produces. */
+export interface StageGateState {
+  assetId: string;
+  /** Index into this phase's stage list, i.e. where entering parks `currentIndex`. */
+  index: number;
+  status: "loading" | "pending" | "entered" | "error";
+  readiness?: AssetReadiness;
+  error?: string;
+  /** The context key whose paste box is open, if any. One at a time: pasting a document is the
+   * slow path and two open boxes read as two halves of one answer. */
+  providing?: string | null;
+  /** The context key currently being written, so its button can say so. */
+  seeding?: string | null;
+  seedError?: string;
+}
 
 /** The auto-run competitor-analysis prepass attached to a generation message, for the 10 stages
  * that have one. Rendered as a status chip on the generation card — it has no review gate of its
@@ -259,6 +294,16 @@ export interface PipelineMessage {
   chosenSourceRunId?: string | null;
   /** Populated on `kind: "briefing"` — the competitor briefing for the stage about to run. */
   briefing?: BriefingState;
+  /** Populated on `kind: "stage-gate"` — what the stage still needs, and the operator's options. */
+  gate?: StageGateState;
+  /** Populated on `kind: "stage-stopped"` — which stage was abandoned, and whether a generation
+   * was actually in flight when it happened (so the card can say a request was cancelled rather
+   * than implying one was). */
+  stopped?: { assetId: string; label: string; wasGenerating: boolean };
+  /** Set on the question for a stage's page-source field, where "there is no such page yet" is a
+   * real answer — see `NEW_PAGE_OPTIONS`. Carries the subject so the offer can name the service the
+   * page would be for rather than asking in the abstract. */
+  pageSource?: { assetId: string; subject?: string };
   /** Set when a resumed chat's draft was cut off mid-stream by the tab closing. The partial text
    * is kept (it may be most of the asset) but the card warns and offers a regeneration. */
   interrupted?: boolean;
@@ -367,6 +412,14 @@ interface PipelineState {
    * than on a message because the faults worth interrupting for — no credit, bad key, no network —
    * are about the account, not about the card the operator happened to be looking at. */
   fault: ApiFault | null;
+  /** A stage the operator asked to start at before the run was ready to open one.
+   *
+   * Only Phase 2 needs it: its first two questions — which Phase 1 run this sits under, and which
+   * sub-service it is for — belong to the run rather than to any stage, and the run row cannot even
+   * be created before the first is answered. So "start at Blog" on a fresh Phase 2 chat parks the
+   * request here and the preamble opens its gate when it finishes, instead of the request being
+   * dropped or the preamble being skipped. */
+  pendingStartAssetId: string | null;
 
   start: () => void;
   submitAnswer: (value: string | number | boolean) => void;
@@ -421,6 +474,36 @@ interface PipelineState {
   /** Re-enter the current stage on a resumed chat that came back with nothing to act on — see
    * `selectNeedsResume`. */
   resumeStage: () => void;
+  /** Open a stage out of sequence, checking first what it still needs.
+   *
+   * The entry point for a client who arrives with their own ICP, or who wants the Offer Ladder and
+   * nothing before it. Never enters the stage on its own: it pushes a `stage-gate` card, because
+   * "use the ICP this run already has" and "use the one I'm about to paste" are not a decision the
+   * pipeline should make silently on the operator's behalf. */
+  startAtStage: (assetId: string) => void;
+  /** Re-read readiness for a gate that failed to load, or that a reopened chat left mid-load. */
+  retryStageGate: (messageId: string) => Promise<void>;
+  /** Open the paste box for one missing document. */
+  provideDependency: (messageId: string, contextKey: string) => void;
+  /** Close it again without supplying anything. */
+  cancelProvideDependency: (messageId: string) => void;
+  /** File the pasted document under `contextKey` for this run, then re-check the gate. */
+  submitProvidedDependency: (messageId: string, contextKey: string, content: string) => Promise<void>;
+  /** Enter the stage the gate is for, with whatever the run now holds. */
+  enterGatedStage: (messageId: string) => Promise<void>;
+  /** Go and run the first asset the gate says is still missing, instead of this one. */
+  runProducerFirst: (messageId: string, assetId: string) => void;
+  /** There is no page for this service yet: answer the page-source field and its content field with
+   * the prompt's own "NEW PAGE" sentinels, which switches the stage to build-from-scratch. */
+  declareNewPage: (messageId: string) => void;
+  /** Abandon this stage and open the one that builds a page from nothing instead. */
+  skipStageForNewPage: (messageId: string) => void;
+  /** Stop the stage in progress and free the run to start a different one.
+   *
+   * Abandons work in flight only: intake answers, an unsaved draft, an in-flight stream (which is
+   * genuinely aborted, not just hidden). Nothing already approved is touched, which is what makes
+   * it safe enough to be one click with an inline confirm rather than a modal. */
+  stopStage: () => void;
 }
 
 /** `IntakeFlow` with its asset collapsed to an id, which is how it is both persisted and parked —
@@ -684,6 +767,12 @@ function deriveResumeActivity(
     if (m.kind === "source-run" && (m.sourceRunStatus === "pending" || m.sourceRunStatus === "error")) {
       return awaitingInput;
     }
+    // A gate owns the turn whether its readiness has arrived or not: while it loads there is
+    // nothing else to do, and once it has, entering the stage is the operator's call.
+    if (m.kind === "stage-gate" && m.gate && m.gate.status !== "entered") return awaitingInput;
+    // A stopped stage is the operator's turn by definition: they stopped it to choose something
+    // else. Counted so a reopened chat does not report itself as mid-run.
+    if (m.kind === "stage-stopped") return awaitingInput;
     if (m.kind === "question" && !m.answered && intake?.awaitingFieldId === m.field?.field_id) return awaitingInput;
     if (m.kind === "competitor" && m.savePhase !== "saved") return awaitingReview;
     if (m.kind === "generation" && !m.refineSubmitted && m.savePhase !== "saved") return awaitingReview;
@@ -711,6 +800,8 @@ export function selectNeedsResume(s: PipelineState): boolean {
     // it as actionable is what suppressed the resume banner on a chat that genuinely needed it.
     if (m.superseded) return false;
     if (m.kind === "context-choice") return m.contextChoiceStatus === "pending";
+    if (m.kind === "stage-gate") return !!m.gate && m.gate.status !== "entered";
+    if (m.kind === "stage-stopped") return true;
     if (m.kind === "headline-choice") return m.headlines?.status !== "chosen";
     if (m.kind === "competitor-consent") return m.consent?.status === "pending";
     if (m.kind === "source-run") return m.sourceRunStatus === "pending" || m.sourceRunStatus === "error";
@@ -1003,6 +1094,53 @@ export function selectCanRerun(s: PipelineState): boolean {
   return s.started;
 }
 
+/** True when there is a stage in progress to stop.
+ *
+ * "In progress" is anything short of approved: a question waiting, a competitor sub-step, a stream
+ * running, or a finished draft nobody has saved. All four are states an operator can decide they
+ * are done with, and offering the button in only some of them would make it look broken in the
+ * others.
+ *
+ * Approved work is never in scope. Stopping does not touch a saved generation or anything already
+ * in the Context Store — it abandons work in flight, which is why it can be a single click. */
+export function selectCanStop(s: PipelineState): boolean {
+  if (!s.started || s.isLoadingSession) return false;
+  if (s.currentIndex >= totalStagesFor(s.phase)) return false;
+
+  // Phase 2 opens with two questions that belong to the *run* rather than to any stage: which
+  // Phase 1 run this builds on, and which sub-service it is for. There is no asset in progress to
+  // abandon at either, and stopping would clear the intake while leaving the question on screen
+  // with nothing behind it — the sub-service card is pushed without an `assetId`, so the supersede
+  // pass does not even reach it.
+  if (s.intake?.awaitingFieldId === SUB_SERVICE_FIELD.field_id) return false;
+  const own = messagesInPhase(s.messages, s.phase);
+  if (own.some((m) => !m.superseded && m.kind === "source-run" && m.sourceRunStatus !== "chosen" && m.sourceRunStatus !== "standalone")) {
+    return false;
+  }
+
+  if (s.intake || s.subStep) return true;
+  if (s.activeStatus !== null) return true;
+  return own.some((m) => !m.superseded && m.kind === "generation" && m.savePhase !== "saved");
+}
+
+/** The stage `stopStage` would act on, or undefined. Read from what is actually happening rather
+ * than from `currentIndex` alone: a retry or a refine streams into a card for an *earlier* stage,
+ * and the button has to name and stop that one rather than whatever the cursor sits on. */
+export function selectStoppableStage(s: PipelineState): { assetId: string; label: string } | undefined {
+  const own = messagesInPhase(s.messages, s.phase);
+  const streaming = own.find((m) => m.streaming && m.assetId);
+  const assetId =
+    streaming?.assetId ??
+    s.intake?.asset.asset_id ??
+    own.filter((m) => !m.superseded && m.kind === "generation" && m.savePhase !== "saved").pop()?.assetId ??
+    stageAt(s.phase, Math.min(s.currentIndex, totalStagesFor(s.phase) - 1)).asset.asset_id;
+  if (!assetId) return undefined;
+  // Phase 2's opening sub-service question belongs to the run, not to a stage — there is no asset
+  // to abandon there, and the stage list has no entry to name.
+  const stage = stagesFor(s.phase).find((st) => st.asset.asset_id === assetId);
+  return stage ? { assetId, label: stage.asset.label } : undefined;
+}
+
 /** One chip per field, first mention wins — the same field can be auto-filled on more than one
  * pass through the walk. */
 function dedupeFields(fields: EditableFieldRef[]): EditableFieldRef[] {
@@ -1083,19 +1221,25 @@ async function streamIntoMessage(
   get: () => PipelineState,
   set: (partial: Partial<PipelineState>) => void,
   messageId: string,
-  run: (onChunk: (chunk: string) => void) => Promise<void>,
+  run: (onChunk: (chunk: string) => void, signal: AbortSignal) => Promise<void>,
 ): Promise<void> {
   set({ activeStatus: "running", navStatus: "Generating…" });
   const stop = startCreepingProgress(get, set);
+  const controller = new AbortController();
+  generationRequests.set(messageId, controller);
 
   try {
     await run((chunk) => {
       const current = get().messages.find((m) => m.id === messageId);
       patchMessage(get, set, messageId, { text: (current?.text ?? "") + chunk });
-    });
+    }, controller.signal);
     patchMessage(get, set, messageId, { streaming: false });
     set({ activeStatus: "hitl", progress: 100, navStatus: "Awaiting Review" });
   } catch (err) {
+    // A stop the operator asked for is not a failure and not a truncated draft. `stopStage` has
+    // already superseded this card and put the run back to Ready, so anything set here would
+    // overwrite that with "Awaiting Review" of a card that is no longer on offer.
+    if (controller.signal.aborted) return;
     // A stream cut after the first tokens leaves a real, partial draft. It gets the same treatment
     // as one interrupted by the tab closing — kept, flagged incomplete, regenerable — rather than
     // being replaced by an error card that hides the text it did produce.
@@ -1109,6 +1253,7 @@ async function streamIntoMessage(
     set({ activeStatus: "hitl", progress: 100, navStatus: "Awaiting Review" });
   } finally {
     stop();
+    if (generationRequests.get(messageId) === controller) generationRequests.delete(messageId);
   }
 }
 
@@ -1268,13 +1413,11 @@ async function runStage(
     answers,
   });
 
-  await streamIntoMessage(get, set, message.id, (onChunk) =>
-    streamGenerateStage(
-      stage.asset.asset_id,
-      answers,
-      onChunk,
-      prepassOptions(get, set, message.id, stage.asset.asset_id),
-    ),
+  await streamIntoMessage(get, set, message.id, (onChunk, signal) =>
+    streamGenerateStage(stage.asset.asset_id, answers, onChunk, {
+      ...prepassOptions(get, set, message.id, stage.asset.asset_id),
+      signal,
+    }),
   );
 }
 
@@ -1415,6 +1558,28 @@ function stringAnswers(answers: Record<string, unknown> | undefined): Record<str
  * and overwrite the batch the operator asked for.
  */
 const headlineRequests = new Map<string, AbortController>();
+
+/** In-flight generation streams, by the id of the message being streamed into.
+ *
+ * Kept outside the store for the same reason as `headlineRequests`: a controller is not state to
+ * render or persist. It exists so `stopStage` can actually stop the request — a "Stop" that only
+ * cleared the UI would leave the stream running to completion, still writing tokens the operator
+ * has decided they do not want and still being billed for them. The entry is deleted in the
+ * `finally` of the call that created it, so an abandoned controller cannot accumulate. */
+const generationRequests = new Map<string, AbortController>();
+
+/** Abort every generation stream belonging to `messageIds`, and report whether any was live. */
+function abortGenerations(messageIds: Iterable<string>): boolean {
+  let stopped = false;
+  for (const id of messageIds) {
+    const controller = generationRequests.get(id);
+    if (!controller) continue;
+    controller.abort(new DOMException("Stopped by the operator", "AbortError"));
+    generationRequests.delete(id);
+    stopped = true;
+  }
+  return stopped;
+}
 
 /** The rows a new batch adds to the ones already on screen: new topics only, re-keyed so no two
  * rows in the merged list share an id.
@@ -1659,6 +1824,22 @@ async function settleHeadlineChoice(
   advanceIntake(get, set, get().currentIndex, intake.asset, intake.answers, fromIndex);
 }
 
+/** What the page in question would be *for*, read off an answer given earlier in the same intake.
+ *
+ * Blank rather than guessed when the field has not been answered — the offer reads "a page for this
+ * service" instead of naming the wrong one, and a service named wrongly here is worse than not
+ * naming it, because it is the thing the operator is being asked to confirm does not exist. */
+function subjectOf(
+  intake: { asset: AssetDefinition; answers: Record<string, unknown> },
+  option: { subjectFieldId: string },
+): string | undefined {
+  const raw = intake.answers[option.subjectFieldId];
+  if (typeof raw !== "string") return undefined;
+  const value = raw.trim();
+  if (!value || value.startsWith("[[context:") || /^(n\/a|none|unknown)$/i.test(value)) return undefined;
+  return value;
+}
+
 function advanceIntake(
   get: () => PipelineState,
   set: (partial: Partial<PipelineState>) => void,
@@ -1739,7 +1920,22 @@ function advanceIntake(
       return;
     }
 
-    push(get, set, { role: "assistant", kind: "question", assetId: asset.asset_id, field: result.field });
+    // A stage whose page-source field has a real "there is no such page" answer offers it on the
+    // question itself rather than as a card in front of it. The common path — the client does have
+    // a page — stays exactly one action: type the URL. See `NEW_PAGE_OPTIONS`.
+    const newPage = NEW_PAGE_OPTIONS[asset.asset_id];
+    const pageSource =
+      newPage && result.field.field_id === newPage.urlFieldId
+        ? { assetId: asset.asset_id, subject: subjectOf({ asset, answers }, newPage) }
+        : undefined;
+
+    push(get, set, {
+      role: "assistant",
+      kind: "question",
+      assetId: asset.asset_id,
+      field: result.field,
+      pageSource,
+    });
     return;
   }
 
@@ -1757,6 +1953,14 @@ function advanceIntake(
 
   const finalAnswers = resolveFinalAnswers(asset, get().context, answers);
   void runStage(get, set, index, finalAnswers);
+}
+
+/** A readable name for a context key no asset owns — a document the operator supplied by hand.
+ * `email_sequence_copy` reads as "Email sequence copy" wherever a producing asset's label would
+ * otherwise go. */
+function humaniseContextKey(key: string): string {
+  const words = key.replace(/_/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : key;
 }
 
 /** Pull any context this asset reads that the in-session store is missing back out of the database.
@@ -1777,29 +1981,37 @@ async function hydrateContextFromDb(
   // every stage that writes more than one key, which is most of them: `cro_rewritten_copy` and
   // `cro_terminology_map` both live in the single row written by `cro`. Requesting the field's own
   // key would 404 on exactly the documents Phase 2 exists to inherit.
-  const wanted = new Map<string, string>();
+  //
+  // The key itself is asked for as well, and takes precedence, because there is a second way a
+  // document gets into the store: `POST /runs/{id}/context` files one the operator supplied by
+  // hand, under the key the field asks for. Producer-only, a run that skipped the CRO stage and
+  // pasted the rewrite instead would be asked for it again on every later stage — and
+  // `email_sequence_copy`, which no asset writes, could never be read back at all.
+  const wanted = new Map<string, string | null>();
   for (const field of asset.fields) {
     if (resolveContext(field, get().context)) continue;
     const keys = field.context_keys?.length ? field.context_keys : [field.context_key ?? ""];
     for (const key of keys) {
-      const producer = producerAssetIdFor(key);
-      if (producer) wanted.set(key, producer);
+      if (!key || key === "unresolved_context_key") continue;
+      wanted.set(key, producerAssetIdFor(key) ?? null);
     }
   }
   if (!wanted.size) return;
 
-  const producers = [...new Set(wanted.values())];
+  const lookups = [...new Set([...wanted.keys(), ...wanted.values()].filter((k): k is string => !!k))];
   const fetched = new Map(
-    await Promise.all(producers.map(async (id) => [id, await fetchRunContext(runId, id)] as const)),
+    await Promise.all(lookups.map(async (id) => [id, await fetchRunContext(runId, id)] as const)),
   );
 
   const additions: ContextStore = {};
   for (const [key, producer] of wanted) {
-    const entry = fetched.get(producer);
+    const own = fetched.get(key);
+    const entry = own ?? (producer ? fetched.get(producer) : null);
     if (!entry) continue;
+    const from = own ? producer ?? key : (producer as string);
     additions[key] = {
-      assetId: producer,
-      label: ASSET_BY_ID[producer]?.label ?? producer,
+      assetId: from,
+      label: ASSET_BY_ID[from]?.label ?? humaniseContextKey(key),
       text: entry.content,
     };
   }
@@ -2082,6 +2294,99 @@ async function runCompetitorBriefing(
 
 /** Enter stage `index`. Stages with a gated competitor sub-step run that first and pause for its
  * own approval; everything else goes straight to its own intake. */
+/** Patch one gate card's state, leaving the rest of the message alone. */
+function patchGate(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  messageId: string,
+  patch: Partial<StageGateState>,
+) {
+  const message = liveMessage(get(), messageId);
+  if (!message?.gate) return;
+  patchMessage(get, set, messageId, { gate: { ...message.gate, ...patch } });
+}
+
+/** Ask the server what the stage on this gate still needs, and put the answer on the card.
+ *
+ * Read-only and free, so it is called again after every paste rather than the card patching its own
+ * copy: the two numbers that matter — whether the stage is blocked, and which assets are still
+ * worth running — are computed against the whole run, and a document pasted for one field routinely
+ * clears a branch of three stages behind it. Recomputing that here would be a second implementation
+ * of the walk in `dependencies.py`, and the one that was wrong would be this one.
+ */
+async function loadStageReadiness(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  messageId: string,
+): Promise<void> {
+  const gate = liveMessage(get(), messageId)?.gate;
+  if (!gate) return;
+  patchGate(get, set, messageId, { status: gate.readiness ? gate.status : "loading", error: undefined });
+  try {
+    const runId = await ensureRun(get, set);
+    const readiness = await fetchAssetReadiness(runId, gate.assetId, get().phase);
+    patchGate(get, set, messageId, { status: "pending", readiness, error: undefined });
+  } catch (err) {
+    console.error("Could not read stage readiness", err);
+    patchGate(get, set, messageId, {
+      status: "error",
+      error: err instanceof Error ? err.message : "Could not check what this stage needs.",
+    });
+  }
+}
+
+/** Push the gate for `assetId` and park the run on it.
+ *
+ * `intake` is cleared and `activeStatus` dropped because the operator has just moved the run
+ * somewhere else: a question left standing from wherever they were would still be the field the
+ * answer bar submits into, and their next keystroke would answer a stage they are no longer in.
+ */
+async function openStageGate(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  assetId: string,
+): Promise<void> {
+  const stages = stagesFor(get().phase);
+  const index = stages.findIndex((s) => s.asset.asset_id === assetId);
+  if (index < 0) return;
+
+  set({
+    currentIndex: index,
+    subStep: null,
+    intake: null,
+    activeStatus: null,
+    progress: 0,
+    navStatus: "Awaiting Input",
+    editSeed: null,
+  });
+
+  const card = push(get, set, {
+    role: "assistant",
+    kind: "stage-gate",
+    assetId,
+    gate: { assetId, index, status: "loading" },
+  });
+  await loadStageReadiness(get, set, card.id);
+}
+
+/** Stage 01, or the stage the operator asked to start at instead.
+ *
+ * Both of the run's opening paths land here, which is what makes "start at Blog" work on a Phase 2
+ * chat: the request survives the two run-level questions that have to be answered before any stage
+ * can be opened at all. */
+function beginRequestedStage(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+) {
+  const requested = get().pendingStartAssetId;
+  if (!requested) {
+    beginStage(get, set, 0);
+    return;
+  }
+  set({ pendingStartAssetId: null });
+  void openStageGate(get, set, requested);
+}
+
 function beginStage(get: () => PipelineState, set: (partial: Partial<PipelineState>) => void, index: number) {
   const stage = stagesFor(get().phase)[index];
   const competitor = competitorStageFor(get().phase, stage.asset.asset_id);
@@ -2133,6 +2438,8 @@ function resurfacePendingCard(
     if (m.kind === "question") return !m.answered;
     if (m.kind === "headline-choice") return m.headlines?.status !== "chosen";
     if (m.kind === "context-choice") return m.contextChoiceStatus === "pending";
+    if (m.kind === "stage-gate") return !!m.gate && m.gate.status !== "entered";
+    if (m.kind === "stage-stopped") return true;
     if (m.kind === "competitor-consent") return m.consent?.status === "pending";
     return false;
   };
@@ -2154,6 +2461,24 @@ function resurfacePendingCard(
   push(get, set, { ...content, superseded: false });
 }
 
+/** The asset ids this leg has actually approved output for.
+ *
+ * The authority on "is this stage done", and deliberately not `currentIndex`. The two used to be
+ * treated as the same thing, which was true only while the run was strictly sequential: now that a
+ * stage can be started out of order or skipped, every stage the cursor passed over would otherwise
+ * report as "✓ Saved" — jump from stage 02 to stage 09 and seven stages the run never built would
+ * claim to be finished, and the progress bar would agree.
+ *
+ * Superseded cards count. A superseded *saved* generation is a real Context Store version that a
+ * later re-run replaced, and the stage it belongs to has certainly been executed. */
+export function approvedAssetIds(messages: PipelineMessage[], phase: PipelinePhase): Set<string> {
+  return new Set(
+    messagesInPhase(messages, phase)
+      .filter((m) => m.kind === "generation" && m.savePhase === "saved" && m.assetId)
+      .map((m) => m.assetId as string),
+  );
+}
+
 /** The next stage in execution sequence: the first one this leg has no approved output for.
  *
  * Read off the transcript rather than off `context`, and scoped to the current phase, because
@@ -2167,11 +2492,7 @@ function resurfacePendingCard(
  * executed.
  */
 function nextUnexecutedIndex(state: PipelineState): number {
-  const approved = new Set(
-    messagesInPhase(state.messages, state.phase)
-      .filter((m) => m.kind === "generation" && m.savePhase === "saved" && m.assetId)
-      .map((m) => m.assetId as string),
-  );
+  const approved = approvedAssetIds(state.messages, state.phase);
   const stages = stagesFor(state.phase);
   for (let i = 0; i < stages.length; i++) {
     if (!approved.has(stages[i].asset.asset_id)) return i;
@@ -2223,6 +2544,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   loadingSessionId: null,
   editSeed: null,
   fault: null,
+  pendingStartAssetId: null,
 
   start: () => {
     if (get().started) return;
@@ -2235,7 +2557,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       void beginPhase2(get, set);
       return;
     }
-    beginStage(get, set, 0);
+    beginRequestedStage(get, set);
   },
 
   chooseSourceRun: async (messageId, runId) => {
@@ -2346,7 +2668,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       // so anything triggered off a stage save would arrive after the gate that needed it. Not
       // awaited — `beginStage` has several questions to ask before the gate is reached.
       void runKeywordPrepass(get, set);
-      beginStage(get, set, 0);
+      beginRequestedStage(get, set);
       return;
     }
 
@@ -2419,8 +2741,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
 
     const assetId = message.assetId;
     const previousDraft = message.text;
-    await streamIntoMessage(get, set, newMessage.id, (onChunk) =>
-      streamRefineStage(assetId, previousDraft, trimmed, onChunk, undefined, get().phase, attribution(get)),
+    await streamIntoMessage(get, set, newMessage.id, (onChunk, signal) =>
+      streamRefineStage(assetId, previousDraft, trimmed, onChunk, signal, get().phase, attribution(get)),
     );
   },
 
@@ -2509,8 +2831,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       text: "",
       prepass: undefined,
     });
-    await streamIntoMessage(get, set, messageId, (onChunk) =>
-      streamGenerateStage(assetId, answers, onChunk, prepassOptions(get, set, messageId, assetId)),
+    await streamIntoMessage(get, set, messageId, (onChunk, signal) =>
+      streamGenerateStage(assetId, answers, onChunk, {
+        ...prepassOptions(get, set, messageId, assetId),
+        signal,
+      }),
     );
   },
 
@@ -3111,6 +3436,9 @@ chooseHeadlines: async (messageId, ids) => {
         intake: null,
         subStep: null,
         navStatus: "Ready",
+        // A "start at this stage" request belongs to the phase it was made in — index 4 is Offers
+        // in Phase 1 and Blog in Phase 2, and several ids exist in both sequences.
+        pendingStartAssetId: null,
       });
       return;
     }
@@ -3153,6 +3481,7 @@ chooseHeadlines: async (messageId, ids) => {
       progress: resuming?.progress ?? 0,
       activeStatus: null,
       navStatus: "Ready",
+      pendingStartAssetId: null,
     });
 
     if (resuming) {
@@ -3213,6 +3542,7 @@ chooseHeadlines: async (messageId, ids) => {
       intake: null,
       clientProfile: {},
       subStep: null,
+      pendingStartAssetId: null,
     });
   },
 
@@ -3258,6 +3588,9 @@ chooseHeadlines: async (messageId, ids) => {
         clientProfile: snap.clientProfile ?? {},
         subStep: snap.subStep ?? null,
         phaseSlots: snap.phaseSlots ?? {},
+        // Never restored: it is a request in flight, not a property of the chat. A gate that was
+        // actually opened is a card in the transcript and comes back with the messages.
+        pendingStartAssetId: null,
       });
       useChatSessionsStore.setState({ error: null });
       // After the state is set, not before: it reads the messages it is about to patch.
@@ -3286,4 +3619,265 @@ chooseHeadlines: async (messageId, ids) => {
 
     enterStage(get, set, index);
   },
+
+  startAtStage: (assetId) => {
+    const state = get();
+    const stages = stagesFor(state.phase);
+    if (!stages.some((s) => s.asset.asset_id === assetId)) return;
+
+    // Phase 2 cannot open any stage until its two run-level questions are answered — the run row
+    // itself is created from the first of them. So the request is parked and the preamble runs; see
+    // `beginRequestedStage`.
+    if (!state.started) {
+      set({ started: true, pendingStartAssetId: state.phase === "phase2" ? assetId : null });
+      if (state.phase === "phase2") {
+        void beginPhase2(get, set);
+        return;
+      }
+    }
+    void openStageGate(get, set, assetId);
+  },
+
+  retryStageGate: async (messageId) => {
+    await loadStageReadiness(get, set, messageId);
+  },
+
+  provideDependency: (messageId, contextKey) => {
+    patchGate(get, set, messageId, { providing: contextKey, seedError: undefined });
+  },
+
+  cancelProvideDependency: (messageId) => {
+    patchGate(get, set, messageId, { providing: null, seedError: undefined });
+  },
+
+  submitProvidedDependency: async (messageId, contextKey, content) => {
+    const text = content.trim();
+    if (!text) return;
+    const gate = liveMessage(get(), messageId)?.gate;
+    if (!gate || gate.seeding) return;
+
+    patchGate(get, set, messageId, { seeding: contextKey, seedError: undefined });
+    try {
+      const runId = await ensureRun(get, set);
+      const saved = await seedRunContext(runId, contextKey, text, "Supplied by the operator");
+
+      // Into the session store as well as the database. The stage's intake resolves its fields
+      // against this, not against the readiness report — without it the document would be filed
+      // and the very next question would ask for it anyway.
+      const producer = saved.producer ?? contextKey;
+      const label = ASSET_BY_ID[producer]?.label ?? contextKey;
+      set({
+        context: {
+          ...get().context,
+          [contextKey]: { assetId: producer, label, text },
+        },
+      });
+      patchGate(get, set, messageId, { seeding: null, providing: null });
+      await loadStageReadiness(get, set, messageId);
+    } catch (err) {
+      console.error("Could not file the supplied document", err);
+      patchGate(get, set, messageId, {
+        seeding: null,
+        seedError: err instanceof Error ? err.message : "Could not save that document.",
+      });
+    }
+  },
+
+  enterGatedStage: async (messageId) => {
+    const message = liveMessage(get(), messageId);
+    const gate = message?.gate;
+    if (!gate || gate.status === "entered") return;
+
+    const stages = stagesFor(get().phase);
+    const stage = stages[gate.index];
+    if (!stage || stage.asset.asset_id !== gate.assetId) return;
+
+    patchGate(get, set, messageId, { status: "entered", providing: null });
+
+    // A competitor scan this run has already paid for. `enterStage` decides whether to run the
+    // prepass from the *session* context, which a reopened chat does not have — so on a resumed run
+    // it would search and be charged again for a listing already in the store. Readiness has just
+    // said whether there is one; this is the only place that knows both.
+    const prepassId = gate.readiness?.prepass;
+    const prepassReady = gate.readiness?.prepass_fields.some((f) => f.ready) ?? false;
+    if (prepassId && prepassReady && !get().context[prepassId]) {
+      const runId = get().runId;
+      const stored = runId ? await fetchRunContext(runId, prepassId) : null;
+      if (stored?.content) {
+        set({
+          context: {
+            ...get().context,
+            [prepassId]: {
+              assetId: prepassId,
+              label: competitorStageFor(get().phase, gate.assetId)?.label ?? prepassId,
+              text: stored.content,
+            },
+          },
+        });
+      }
+    }
+
+    enterStage(get, set, gate.index);
+  },
+
+  declareNewPage: (messageId) => {
+    const state = get();
+    const message = liveMessage(state, messageId);
+    const intake = state.intake;
+    if (!message?.pageSource || message.answered || message.superseded || !intake) return;
+
+    const option = NEW_PAGE_OPTIONS[intake.asset.asset_id];
+    if (!option || intake.awaitingFieldId !== option.urlFieldId) return;
+
+    // Both fields at once. "What is the URL of the page" and "paste that page's copy" are the same
+    // question when there is no page, and answering only the first leaves the walk asking the
+    // second — which is where an operator, having just said there is no page, types "N/A" and the
+    // prompt reads it as a page whose copy is the letters N/A.
+    intake.answers[option.urlFieldId] = option.urlAnswer;
+    intake.answers[option.contentFieldId] = option.contentAnswer;
+    markQuestionAnswered(get, set, option.urlFieldId);
+    push(get, set, { role: "user", kind: "text", text: "No existing page — build it from scratch." });
+
+    const subject = subjectOf(intake, option);
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text: `Building ${subject ? `the ${subject} page` : "the page"} from scratch. The rewrite switches to build-from-scratch mode — no before/after comparison, everything else the same — and still produces the page copy, the locked sections and the terminology map that ${ASSET_BY_ID[option.insteadAssetId]?.label ?? "the page build"} reads.`,
+      editableFields: [{ fieldId: option.urlFieldId, label: message.field?.label ?? option.urlFieldId }],
+    });
+
+    const fields = intake.asset.fields;
+    const after =
+      Math.max(
+        fields.findIndex((f) => f.field_id === option.urlFieldId),
+        fields.findIndex((f) => f.field_id === option.contentFieldId),
+      ) + 1;
+    set({ intake: { ...intake, awaitingFieldId: null } });
+    advanceIntake(get, set, get().currentIndex, intake.asset, intake.answers, after);
+  },
+
+  skipStageForNewPage: (messageId) => {
+    const state = get();
+    const message = liveMessage(state, messageId);
+    const intake = state.intake;
+    if (!message?.pageSource || message.answered || message.superseded || !intake) return;
+
+    const option = NEW_PAGE_OPTIONS[intake.asset.asset_id];
+    if (!option) return;
+
+    const target = ASSET_BY_ID[option.insteadAssetId]?.label ?? option.insteadAssetId;
+    const abandoned = intake.asset.label;
+
+    // The question is left in the transcript as history, not as something still being asked: the
+    // stage it belonged to is being abandoned, and `startAtStage` clears the intake behind it.
+    patchMessage(get, set, messageId, { superseded: true });
+    push(get, set, { role: "user", kind: "text", text: `Skip ${abandoned} — go straight to ${target}.` });
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text: `Leaving ${abandoned}. ${target} is what builds a page, so it can be run on its own — but ${abandoned} is what would have written the copy it builds from, so it will ask for the page copy, the locked sections and the terminology words instead. The next card lists exactly what it needs and lets you paste each one, run ${abandoned} after all, or start anyway and answer as it asks. Nothing here is lost: ${abandoned} is still in the pipeline to run later.`,
+    });
+
+    get().startAtStage(option.insteadAssetId);
+  },
+
+  stopStage: () => {
+    const state = get();
+    if (!selectCanStop(state)) return;
+    const target = selectStoppableStage(state);
+    if (!target) return;
+
+    // The stage's competitor sub-step is a separate asset id on the same stage, so abandoning the
+    // stage has to abandon its unsaved prepass too — otherwise a half-reviewed competitor card is
+    // left offering Save for a stage nobody is working on.
+    const competitor = competitorStageFor(state.phase, target.assetId);
+    const own = (m: PipelineMessage) =>
+      (m.phase ?? state.phase) === state.phase &&
+      (m.assetId === target.assetId || (!!competitor && m.assetId === competitor.assetId));
+
+    const wasGenerating = abortGenerations(
+      state.messages.filter((m) => own(m) && m.streaming).map((m) => m.id),
+    );
+    // A suggestion batch still in flight for this stage is the same waste as the stream: nothing
+    // will read its result, because the gate that asked for it is about to become history.
+    for (const m of state.messages) {
+      if (!own(m) || m.kind !== "headline-choice") continue;
+      const pending = headlineRequests.get(m.id);
+      if (pending) {
+        pending.abort(new DOMException("Stopped by the operator", "AbortError"));
+        headlineRequests.delete(m.id);
+      }
+    }
+
+    set({
+      messages: state.messages.map((m) => {
+        if (!own(m) || m.superseded) return m;
+        // An approved generation is a real Context Store version, not a stale draft — see the same
+        // carve-out in `rerunStage`. Superseding it would hide its own Download and Share buttons.
+        if (m.kind === "generation") {
+          return m.savePhase === "saved" ? m : { ...m, superseded: true, streaming: false, refining: false };
+        }
+        if (m.kind === "competitor") {
+          return m.savePhase === "saved" ? m : { ...m, superseded: true };
+        }
+        if (
+          m.kind === "question" ||
+          m.kind === "headline-choice" ||
+          m.kind === "context-choice" ||
+          m.kind === "competitor-consent" ||
+          m.kind === "scrape" ||
+          m.kind === "briefing" ||
+          m.kind === "stage-gate"
+        ) {
+          return { ...m, superseded: true };
+        }
+        return m;
+      }),
+      intake: null,
+      subStep: null,
+      editSeed: null,
+      // A re-run's parked return point belongs to the stage being abandoned. Left set, the next
+      // stage to finish would send the operator back to a stage they walked out of.
+      rerunReturnIndex: null,
+      rerunReturnIntake: null,
+      activeStatus: null,
+      progress: 0,
+      navStatus: "Ready",
+    });
+
+    push(get, set, { role: "user", kind: "text", text: `Stop ${target.label}.` });
+    push(get, set, {
+      role: "assistant",
+      kind: "stage-stopped",
+      assetId: target.assetId,
+      stopped: { assetId: target.assetId, label: target.label, wasGenerating },
+    });
+  },
+
+  runProducerFirst: (messageId, assetId) => {
+    const gate = liveMessage(get(), messageId)?.gate;
+    if (!gate || gate.status === "entered") return;
+
+    const label = ASSET_BY_ID[assetId]?.label ?? assetId;
+    if (!stagesFor(get().phase).some((s) => s.asset.asset_id === assetId)) {
+      // A Phase 1 asset asked for from inside Phase 2, which is the normal shape of this: Phase 2
+      // inherits those documents rather than rebuilding them. Nothing to run here, so say which of
+      // the two remaining options applies rather than silently doing nothing.
+      push(get, set, {
+        role: "assistant",
+        kind: "text",
+        text: `${label} is not one of ${PHASE_META[get().phase].label}'s stages — it comes from the Phase 1 run this one builds on. Either switch phase to build it there, or paste it above.`,
+      });
+      return;
+    }
+
+    patchGate(get, set, messageId, { status: "entered", providing: null });
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text: `Running ${label} first. ${ASSET_BY_ID[gate.assetId]?.label ?? gate.assetId} is still there to start once it is approved.`,
+    });
+    void openStageGate(get, set, assetId);
+  },
+
 }));

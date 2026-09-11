@@ -22,8 +22,15 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Anchored to the repo root, unlike the rest of this block. A bare `lib/` matches a directory
+# named `lib` at *any* depth, which silently ignored `application/frontend/src/lib/` — the
+# frontend's own library folder, holding htmlBlocks.ts, streaming.ts, exportAsset.ts and the
+# rest. Those files are in git only because they were committed before this rule arrived;
+# anything added to that folder afterwards was invisible to `git status` and would have been
+# missing from a fresh clone. Python's own `lib/` artifacts only ever appear at the root (a
+# venv's is already covered by `.venv/`), so anchoring loses nothing.
+/lib/
+/lib64/
 parts/
 sdist/
 var/

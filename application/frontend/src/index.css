@@ -226,6 +226,27 @@ body {
   animation: shimmer-sweep 1.35s cubic-bezier(0.33, 1, 0.68, 1) infinite;
 }
 
+/*
+  The Plan of Action map's data-flow animation: a dash travelling from the root towards the
+  selected node. Applied only to the branch leading to that node (see PlanMindMap) — animating
+  every connector at once is decoration competing with the content, while animating the one path
+  the operator just asked about shows the plan flowing to it.
+
+  `stroke-dasharray` is set here rather than inline so the dash pattern and the distance it
+  travels per cycle stay in step; changing one without the other makes the dashes stutter.
+*/
+@keyframes plan-flow-dash {
+  from { stroke-dashoffset: 22; }
+  to { stroke-dashoffset: 0; }
+}
+.plan-flow {
+  stroke-dasharray: 6 5;
+  animation: plan-flow-dash 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-flow { animation: none; stroke-dasharray: none; }
+}
+
 @keyframes signal-travel {
   0% { top: -15%; opacity: 0; }
   15% { opacity: 1; }
@@ -333,11 +354,15 @@ body {
     The mechanism: the two cover gradients are `local`, so they travel with the content and sit over
     the shadow at whichever end is fully scrolled; the two shadows are `scroll`, pinned to the box.
     A shadow is therefore visible on exactly the sides that have content hidden beyond them, with no
-    JavaScript and nothing to keep in sync. The covers must match the card behind the table.
+    JavaScript and nothing to keep in sync. The covers must match the surface behind the table, which is why the colour comes from a
+    variable rather than being hardcoded. It was `--bg-raised` — right on a generation card and
+    wrong everywhere else Markdown is rendered: the document reader is on `--bg` and an open
+    outline row is on `--bg-sunken`, so a 1.75rem band of the wrong colour painted over the
+    first and last column and read as the table's text being cut off.
   */
   background:
-    linear-gradient(to right, var(--bg-raised), transparent) 0 0 / 1.75rem 100% no-repeat,
-    linear-gradient(to left, var(--bg-raised), transparent) 100% 0 / 1.75rem 100% no-repeat,
+    linear-gradient(to right, var(--md-cover, var(--bg-raised)), transparent) 0 0 / 1.75rem 100% no-repeat,
+    linear-gradient(to left, var(--md-cover, var(--bg-raised)), transparent) 100% 0 / 1.75rem 100% no-repeat,
     radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--fg) 18%, transparent), transparent) 0 0 /
       0.6rem 100% no-repeat,
     radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--fg) 18%, transparent), transparent) 100% 0 /
@@ -362,6 +387,23 @@ body {
 .md-scroll th,
 .md-scroll td {
   min-width: 5.5rem;
+}
+
+/*
+  The reading measure, for surfaces that render a whole document (the reader sheet, the plan's
+  detail panel).
+
+  A single cap on the container cannot serve both kinds of content in the same document: 44rem
+  is a comfortable line length for prose and far too narrow for a nine-column competitor matrix,
+  which then squeezed every cell to the 5.5rem floor and wrapped it to three words. So the cap
+  moves off the container and onto the elements that actually want it, and everything else —
+  tables in their scroller, rendered page previews, fenced code — takes the width of the pane.
+
+  Applied by class rather than globally: a generation card's Markdown is narrow by design and
+  should not start behaving like a document.
+*/
+.doc-measure :is(p, ul, ol, dl, blockquote, h1, h2, h3, h4, h5, h6) {
+  max-width: var(--doc-measure, 46rem);
 }
 
 .prose-block pre {
