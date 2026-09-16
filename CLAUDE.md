@@ -365,6 +365,83 @@ served HTML is a JS shell. Cached once per run under the `page_replica_template`
 
 ---
 
+## Slide decks — the webinar's Step 5, as a file
+
+`universal-webinar-prompt.md` Step 5 writes a slide-by-slide brief "for the designer or presenter",
+and that is where it stopped: the operator read a description of fourteen slides and then built
+fourteen slides by hand. `app/services/slide_deck.py` does that transcription — parse the brief,
+emit a real `.pptx` with speaker notes, on the client's palette.
+
+It is **not** a designer. Title, body and notes on the run's colours, and nothing else. The brief's
+`Visual Direction` ("split-screen symptom vs cause", "4-icon row") describes artwork nothing here
+can draw, so it is carried into the **speaker notes verbatim** rather than approximated — a slide
+that says what it should look like helps whoever opens the file; a slide that guesses is one they
+have to undo.
+
+### Two input formats, both real
+
+The prompt specifies a key/value block per slide. What real runs actually produced is a Markdown
+**table** — see `manual_execution/Webinar-Package_TrafficRadius_CompetitorSynthesis.md`, one wide
+table with a row per slide. A parser written only to the spec returns nothing on the output the
+pipeline has actually been generating, so `find_slide_decks` tries the table first and falls back to
+blocks, and `tests/test_slide_deck.py` pins each against a real sample rather than a fixture written
+to match the parser.
+
+Other things the parser must not get wrong, each with a test:
+
+- **The section ends at the next heading of the same level or shallower.** Step 6's registration
+  copy is not slides.
+- **The heading is matched on the phrase, not the number.** Real outputs have called it both
+  `STEP 5 — SLIDE DECK BRIEF` and `PART 4 — SLIDE DECK BRIEF`.
+- **`(none — single line only)` is an instruction, not a bullet.** A slide reading "(none)" is worse
+  than an empty one.
+- **Body splits on line breaks, `<br>`, bullet glyphs and semicolons — never on commas or full
+  stops.** "9-day approval, 2-day news cycle." is one line on one slide; splitting it invents two.
+- **The deck is named from its enclosing heading**, skipping `PART`/`STEP`/`OUTPUT` headings, which
+  name a step rather than a webinar.
+- **One document can hold several decks.** `webinar.json`'s first field is a *programme* — the
+  prompt builds one package per topic, so Steps 3-8 repeat. That is why the route offers a zip.
+
+### Brand
+
+`brand_from_design_md` reads `colors.primary` / `surface` / `on-surface` and the first
+`fontFamily` out of the run's DESIGN.md front matter — hand-parsed, like everything else that reads
+that block, so nothing in the runtime gains a YAML dependency. Colours are quoted there (a bare
+`#a4d36b` opens a YAML comment), so the quotes come off here.
+
+Defaults are **neutral greys, never an invented brand colour** — the failure `design_tokens.py`
+documents for generated pages applies identically to a deck. A webinar is a `BRAND_THEME_STAGES`
+member and may legitimately have no captured design at all, so a missing or malformed palette never
+blocks the download: withholding the deliverable to protect a colour is the wrong trade.
+
+### Routes
+
+- `POST /pipeline/slides` — what decks this document holds. **Free, builds nothing.** The UI asks
+  before offering the button, so a webinar whose Step 5 never ran shows no row rather than a row
+  that 422s when pressed.
+- `POST /pipeline/slides/pptx` — the bytes. A `.pptx`, or a `.zip` when the document holds several
+  and no `index` was named. Stores nothing: a deck is cheap to rebuild, so caching it would only add
+  something to invalidate.
+
+Both take the document `text` in the body rather than reading it off the run, so the button works on
+an **unsaved draft** exactly as `Download` does — an operator who wants the deck is as likely to
+want it before approving the stage as after. `run_id` is optional and only ever used to look up the
+palette.
+
+### Rules
+
+- **The UI never decides for itself whether a brief exists.** `SlideDeckMenuItem` probes the route
+  and renders nothing until decks come back. Grepping the text in the browser would put the
+  detection rule in two places, and the one that matters — can it be *parsed* into slides — is the
+  server's. The probe costs one request per menu-open, because `OverflowMenu` only renders its
+  children while open.
+- **`python-pptx` pulls `lxml`.** That is for OOXML only. The HTML rule still stands: `html_dom.py`
+  stays on stdlib `html.parser`, and nothing may start parsing HTML with lxml because it is now
+  installed.
+- Pinned in both `requirements.txt` and `pyproject.toml`, like every other runtime dependency.
+
+---
+
 ## Running a stage out of order
 
 The pipeline runs fifteen stages in sequence and that is the right default, not a constraint. Only

@@ -25,6 +25,10 @@ dependencies = [
     # Context.dev: one key for scraping, web search, and brand intelligence.
     # Every call goes through app/services/context_dev.py.
     "context.dev>=2.14",
+    # The webinar stage's Step 5 slide brief, written out as a real .pptx
+    # (app/services/slide_deck.py). It pulls lxml, which is for OOXML only - the HTML rule in
+    # CLAUDE.md still stands: html_dom.py stays on stdlib html.parser.
+    "python-pptx>=1.0",
 ]
 
 [project.optional-dependencies]

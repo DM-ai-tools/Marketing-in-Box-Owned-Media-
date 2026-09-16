@@ -52,7 +52,7 @@ from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,6 +88,7 @@ from app.services import (
     insights,
     keywords as keywords_service,
     page_replica as page_replica_service,
+    slide_deck as slide_deck_service,
     usage as usage_service,
 )
 from app.services.api_errors import classify as classify_api_error
@@ -2069,6 +2070,146 @@ async def capture_page_design_route(payload: PageDesignRequest) -> PageDesignRes
         ],
         sources=list(design.sources),
         notes=list(design.notes),
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# Slide decks — the webinar stage's Step 5 brief as a file somebody can open
+# --------------------------------------------------------------------------------------------
+
+
+class SlideDeckSummary(BaseModel):
+    index: int
+    title: str
+    slide_count: int
+    filename: str
+
+
+class SlideDecksResponse(BaseModel):
+    decks: list[SlideDeckSummary]
+    #: Filename the "download everything" button would produce. A zip once there is more than one.
+    bundle_filename: str
+
+
+class SlideDeckRequest(BaseModel):
+    #: The generated webinar document. Sent by the client rather than read from the run, so the
+    #: button works on an unsaved draft exactly as `Download` does — an operator who wants the deck
+    #: is as likely to want it before approving the stage as after.
+    text: str
+    #: Optional. Only used to look up the run's captured palette, so a deck built from a draft on a
+    #: run with no design yet is plain rather than refused.
+    run_id: str | None = None
+
+
+def _decks_or_422(text: str) -> list[slide_deck_service.SlideDeck]:
+    decks = slide_deck_service.find_slide_decks(text)
+    if not decks:
+        raise HTTPException(
+            status_code=422,
+            detail="No SLIDE DECK BRIEF section was found in this document. The webinar prompt "
+            "writes one at Step 5 — re-run the stage if the brief is missing.",
+        )
+    return decks
+
+
+async def _deck_brand(run_id: str | None) -> slide_deck_service.DeckBrand:
+    """The run's palette, or neutral greys.
+
+    Never an error: a webinar run is in `BRAND_THEME_STAGES`, so it may legitimately have no
+    captured design at all, and refusing the download over a missing palette would withhold the
+    deliverable to protect a colour.
+    """
+    if not run_id:
+        return slide_deck_service.DeckBrand()
+    try:
+        run_uuid = uuid.UUID(run_id)
+    except ValueError:
+        return slide_deck_service.DeckBrand()
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        stored = await _stored_design_tokens(session, run_uuid)
+    if stored is None:
+        return slide_deck_service.DeckBrand()
+
+    value, _on_run = stored
+    return slide_deck_service.brand_from_design_md(
+        value.get("design_md") or value.get("theme_brief") or value.get("content") or ""
+    )
+
+
+@router.post("/slides", response_model=SlideDecksResponse)
+async def list_slide_decks(payload: SlideDeckRequest) -> SlideDecksResponse:
+    """What decks this webinar document contains. Free, and builds nothing.
+
+    The UI asks this before offering the button, so a webinar whose Step 5 never ran shows no
+    download rather than a button that 422s when pressed.
+    """
+    decks = _decks_or_422(payload.text)
+    summaries = [
+        SlideDeckSummary(
+            index=index,
+            title=deck.title,
+            slide_count=len(deck.slides),
+            filename=f"{slide_deck_service.slug(deck.title)}-slides.pptx",
+        )
+        for index, deck in enumerate(decks)
+    ]
+    bundle = (
+        summaries[0].filename if len(summaries) == 1 else "webinar-slide-decks.zip"
+    )
+    return SlideDecksResponse(decks=summaries, bundle_filename=bundle)
+
+
+@router.post("/slides/pptx")
+async def download_slide_deck(payload: SlideDeckRequest, index: int | None = None) -> Response:
+    """The deck itself. A `.pptx`, or a `.zip` when the document holds several and none was named.
+
+    Returns the bytes rather than a URL: nothing is stored, so there is no file to point at later,
+    and a deck is cheap enough to rebuild that caching it would only add a thing to invalidate.
+    """
+    decks = _decks_or_422(payload.text)
+    brand = await _deck_brand(payload.run_id)
+
+    if index is not None:
+        if not 0 <= index < len(decks):
+            raise HTTPException(
+                status_code=422,
+                detail=f"This document has {len(decks)} slide deck brief(s); there is no deck {index}.",
+            )
+        deck = decks[index]
+        return Response(
+            content=slide_deck_service.build_pptx(deck, brand),
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{slide_deck_service.slug(deck.title)}-slides.pptx"'
+                )
+            },
+        )
+
+    if len(decks) == 1:
+        deck = decks[0]
+        return Response(
+            content=slide_deck_service.build_pptx(deck, brand),
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{slide_deck_service.slug(deck.title)}-slides.pptx"'
+                )
+            },
+        )
+
+    bundle = slide_deck_service.build_zip(
+        [
+            (f"{slide_deck_service.slug(deck.title)}-slides.pptx", slide_deck_service.build_pptx(deck, brand))
+            for deck in decks
+        ]
+    )
+    return Response(
+        content=bundle,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="webinar-slide-decks.zip"'},
     )
 
 

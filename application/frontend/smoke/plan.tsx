@@ -1,4 +1,7 @@
 /* The Plan of Action tree and its diagram. Not shipped — see smoke/README.md. */
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PlanMindMap } from "../src/pipeline/PlanMindMap";
 import { buildPlanMindMapHtml } from "../src/lib/planMindMapHtml";
@@ -272,6 +275,47 @@ ok("totals: assets counted", tree.totals.assets > 5, String(tree.totals.assets))
   // A plan containing `</script>` must not be able to break out of the data block.
   const hostile = buildPlanMindMapHtml(DEMO_PLAN.replace("Executive Summary", "Exec </script><script>alert(1)</script>"), "X");
   ok("export: a script tag in the plan cannot escape the data block", !!hostile && !/<script>alert/.test(hostile.html), "escaped!");
+}
+
+/* Fullscreen must escape the transcript's containing blocks.
+ *
+ * `position: fixed` resolves against the viewport only while no ancestor establishes a containing
+ * block, and two ancestors here do: the transcript pane is a Tailwind `@container`
+ * (`container-type: inline-size`), and every card carries `.msg-rise`, whose
+ * `animation-fill-mode: both` leaves `transform: translateY(0)` applied permanently. With the layer
+ * rendered in place, `inset-0` pinned it to the card and Fullscreen made the tree SMALLER.
+ *
+ * Server rendering cannot show that - there is no layout and no containing block off-browser, and
+ * the component deliberately renders in place when there is no `document`. So this is a source
+ * check: it pins that the fullscreen layer goes through `createPortal` into `document.body`, which
+ * is the one line that fixes it and an easy one to "simplify" away.
+ */
+{
+  let dir = fileURLToPath(new URL(".", import.meta.url));
+  let srcPath = "";
+  for (let i = 0; i < 5 && !srcPath; i++) {
+    const candidate = join(dir, "src", "pipeline", "PlanMindMap.tsx");
+    if (existsSync(candidate)) srcPath = candidate;
+    dir = dirname(dir);
+  }
+  ok("fullscreen: located PlanMindMap.tsx to check", srcPath !== "");
+  const src = srcPath ? readFileSync(srcPath, "utf8") : "";
+
+  ok(
+    "fullscreen: the layer is portalled into document.body, not rendered in place",
+    /createPortal\(\s*layer\s*,\s*document\.body\s*\)/.test(src),
+  );
+  ok(
+    "fullscreen: and still renders inline when there is no document (smoke runs in node)",
+    /typeof document === "undefined" \? layer/.test(src),
+  );
+  // The layer has to actually fill the viewport once it is out of the card.
+  ok("fullscreen: the layer is a full-viewport fixed box", /fixed inset-0 z-50/.test(src));
+  // Escape and the scroll lock are the obligations any full-viewport layer carries.
+  ok("fullscreen: Escape exits", /e\.key === "Escape"/.test(src) && /setFullscreen\(false\)/.test(src));
+  ok("fullscreen: the page behind is scroll-locked", /document\.body\.style\.overflow = "hidden"/.test(src));
+  // Without a re-fit the map keeps the zoom it was given for a 22-40rem card.
+  ok("fullscreen: the tree is re-fitted to the new box", /\[fullscreen, fit\]/.test(src));
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);

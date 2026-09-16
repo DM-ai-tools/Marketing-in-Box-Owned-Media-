@@ -13,3 +13,4 @@ python-multipart>=0.0.9
 networkx>=3.3
 httpx>=0.27
 context.dev>=2.14
+python-pptx>=1.0

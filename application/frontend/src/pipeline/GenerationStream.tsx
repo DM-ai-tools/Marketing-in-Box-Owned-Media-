@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useShallow } from "zustand/react/shallow";
 import { ASSET_BY_ID } from "../data/assetCatalog";
 import { AssetExportMenuItems } from "../components/AssetExportButtons";
+import { SlideDeckMenuItem } from "../components/SlideDeckMenuItem";
 import { DocumentMeta, DocumentOutline, PreviewStrip, SummaryChips } from "../components/AssetDocumentView";
 import { Hint } from "../components/Hint";
 import { FieldHint } from "../components/FieldHint";
@@ -120,6 +121,9 @@ function RerunConfirm({ messageId, onCancel }: { messageId: string; onCancel: ()
 /** The asset whose deliverable is a structure. See `PlanSwitch`. */
 const PLAN_ASSET_ID = "plan_of_action";
 
+/** The asset whose Step 5 writes a slide-by-slide brief. See `SlideDeckMenuItem`. */
+const WEBINAR_ASSET_ID = "webinar";
+
 function MapIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -224,6 +228,9 @@ function ActionRow({ message, label, stageNumber }: { message: PipelineMessage; 
   const saveStage = usePipelineStore((s) => s.saveStage);
   const requestRefine = usePipelineStore((s) => s.requestRefine);
   const canRerun = usePipelineStore(selectCanRerun);
+  // Only used to look up the run's captured palette for a slide deck, so a deck built on a run
+  // with no design yet comes out in neutral greys rather than being refused.
+  const runId = usePipelineStore((s) => s.runId);
   const [confirmingRerun, setConfirmingRerun] = useState(false);
 
   // The refine form takes over the row entirely — the operator is mid-sentence, and a Download
@@ -286,6 +293,11 @@ function ActionRow({ message, label, stageNumber }: { message: PipelineMessage; 
                   <MapIcon />
                   Download plan map (.html)
                 </OverflowItem>
+              )}
+              {/* Only on the webinar, and only once the server confirms the document holds a
+                  parsable Step 5 brief — the row hides itself otherwise. */}
+              {message.assetId === WEBINAR_ASSET_ID && (
+                <SlideDeckMenuItem text={message.text} runId={runId} onDone={close} />
               )}
               <AssetExportMenuItems
                 text={message.text}

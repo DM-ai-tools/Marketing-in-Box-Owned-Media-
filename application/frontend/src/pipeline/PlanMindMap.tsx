@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useReducedMotion } from "framer-motion";
 import { Markdown } from "../components/Markdown";
 import {
@@ -119,6 +120,34 @@ export function PlanMindMap({ text, label }: { text: string; label: string }) {
     setZoom(Math.max(ZOOM_MIN, scale));
     setPan({ x: 16, y: 16 });
   }, [layout.width, layout.height]);
+
+  /* Entering or leaving fullscreen changes how much room the tree has, so re-fit it to the new
+   * box. Without this the map keeps the zoom it was given for a 22-40rem card and opens full-screen
+   * as a small tree marooned in a large empty area — which reads as the button not having worked.
+   *
+   * On the frame after the layer is painted, because `fit` measures `viewport.clientHeight` and the
+   * portalled node has no size until the browser has laid it out. */
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => fit());
+    return () => window.cancelAnimationFrame(frame);
+  }, [fullscreen, fit]);
+
+  /* Escape closes it, and the page behind must not scroll while a full-viewport layer is over it —
+   * the same two obligations `HtmlPreview` carries for its pop-out. Both are wired only while
+   * fullscreen is actually open, so the plain card leaves no listener behind. */
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [fullscreen]);
 
   const expandAll = () => setExpanded(new Set(all.filter((n) => n.children.length).map((n) => n.id)));
   const collapseAll = () => setExpanded(new Set([tree.root.id]));
@@ -389,12 +418,31 @@ export function PlanMindMap({ text, label }: { text: string; label: string }) {
   );
 
   if (fullscreen) {
-    return (
+    const layer = (
       <div className="fixed inset-0 z-50 flex flex-col gap-2 bg-[var(--bg)] p-3">
         <p className="shrink-0 text-[0.8rem] font-semibold">{label} — plan map</p>
         {canvas}
       </div>
     );
+
+    // Portalled to `<body>`, and that is the whole fix rather than a tidiness preference.
+    //
+    // `position: fixed` resolves against the viewport *only* while no ancestor establishes a
+    // containing block, and in this transcript two separate ancestors do:
+    //
+    //   * the transcript pane is a Tailwind `@container` (`container-type: inline-size`), which
+    //     applies containment;
+    //   * every card carries `.msg-rise`, whose `animation-fill-mode: both` leaves the final
+    //     keyframe's `transform: translateY(0)` applied for good — a transform, therefore a
+    //     containing block, permanently and not just for the 0.28s the animation runs.
+    //
+    // So `inset-0` pinned the "fullscreen" map to the *card*, and since the transcript column is
+    // narrower than the map's normal `clamp(22rem,58vh,40rem)` box, pressing Fullscreen made the
+    // tree smaller — which is exactly what it looked like. Rendering into `<body>` escapes both
+    // ancestors, and is the same treatment `HtmlPreview` already needed for its pop-out.
+    //
+    // Rendered in place when there is no document to portal into, which is where `smoke/` runs.
+    return typeof document === "undefined" ? layer : createPortal(layer, document.body);
   }
 
   return <div className="mt-2 flex h-[clamp(22rem,58vh,40rem)] flex-col">{canvas}</div>;

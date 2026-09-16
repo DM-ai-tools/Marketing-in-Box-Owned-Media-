@@ -676,6 +676,62 @@ export async function saveHeadlineSelection(
 }
 
 
+// --------------------------------------------------------------------------------------
+// Slide decks - the webinar stage's Step 5 brief as a .pptx
+// --------------------------------------------------------------------------------------
+
+export interface SlideDeckSummary {
+  index: number;
+  title: string;
+  slide_count: number;
+  filename: string;
+}
+
+export interface SlideDecksResponse {
+  decks: SlideDeckSummary[];
+  bundle_filename: string;
+}
+
+/** What decks this webinar document contains. Free, and builds nothing.
+ *
+ * Asked before the button is offered, so a webinar whose Step 5 never ran shows no download rather
+ * than a button that 422s when pressed. A 422 here is the ordinary "no brief" answer, so the caller
+ * treats it as "nothing to offer" rather than surfacing it as a failure. */
+export async function listSlideDecks(text: string, runId?: string | null): Promise<SlideDecksResponse | null> {
+  const res = await fetch("/api/pipeline/slides", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, run_id: runId ?? null }),
+  });
+  if (res.status === 422) return null;
+  return unwrap(res, "List slide decks");
+}
+
+/** The deck itself. A `.pptx`, or a `.zip` when the document holds several and none was named.
+ *
+ * The response is binary, so this returns the blob and its filename rather than going through
+ * `unwrap`. The filename comes off `Content-Disposition` - the server decided whether this is one
+ * deck or a bundle, and re-deriving that here would be a second place to get it wrong. */
+export async function fetchSlideDeck(
+  text: string,
+  runId?: string | null,
+  index?: number,
+): Promise<{ blob: Blob; filename: string }> {
+  const query = typeof index === "number" ? `?index=${index}` : "";
+  const res = await fetch(`/api/pipeline/slides/pptx${query}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, run_id: runId ?? null }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Slide deck download failed (${res.status}): ${detail || res.statusText}`);
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { blob: await res.blob(), filename: match?.[1] ?? "webinar-slides.pptx" };
+}
+
 export async function listChatSessions(): Promise<ChatSessionSummary[]> {
   const res = await fetch("/api/chat-sessions");
   return unwrap(res, "List chat sessions");
