@@ -215,6 +215,18 @@ const file = (field_id: string, label: string, opts: Partial<FieldDef> = {}): Fi
   placeholder: opts.placeholder,
 });
 
+/** Context keys the *server* composes at save time, rather than the model writing them.
+ *
+ * Only `cro_client_settings` so far: `app/services/cro_settings.py` builds it from the CRO stage's
+ * own intake answers when the stage is approved. It is declared on the producing asset like any
+ * other write key — a reader should not have to care where a document came from — but the one place
+ * the difference bites is the in-session context fan-out after a save, which points every declared
+ * key at the document the stage just produced. That is right for the four keys the rewrite really
+ * does state and wrong for this one, so `saveStage` skips these and lets them be read back from the
+ * database when a stage actually wants one.
+ */
+export const SERVER_COMPOSED_CONTEXT_KEYS: ReadonlySet<string> = new Set(["cro_client_settings"]);
+
 export const ASSET_CATALOG: AssetDefinition[] = [
   // ---------------------------------------------------------------- Foundation
   {
@@ -298,7 +310,16 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     category: "Pages & Conversion",
     description: "Conversion-rate-optimised rewrite of an existing (or new) page: audit findings, rewritten copy, locked sections, and a locked terminology map downstream assets reuse.",
     live: false,
-    writesContextKeys: ["cro_audit_findings", "cro_rewritten_copy", "cro_locked_sections", "cro_terminology_map"],
+    // `cro_client_settings` is the one key here the model does not write: the server composes it
+    // from this stage's own intake answers when the stage is approved (`app/services/cro_settings.py`),
+    // so a later run for another service inherits how this client sells instead of re-asking.
+    writesContextKeys: [
+      "cro_audit_findings",
+      "cro_rewritten_copy",
+      "cro_locked_sections",
+      "cro_terminology_map",
+      "cro_client_settings",
+    ],
     pairedCompetitorAssetId: "competitor_analysis_cro",
     fields: [
       txt("client_name", "Client Name"),

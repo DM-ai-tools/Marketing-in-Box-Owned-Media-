@@ -675,12 +675,34 @@ class ChatSession(Base):
     `run_id` links to the pipeline Run once the first stage is actually saved (see
     `pipeline.py`'s `create_run`), but stays NULL until then since a chat can exist — and be
     listed in history — before any stage has been approved.
+
+    `user_id` is the owner, and every route in `app/routers/chat_sessions.py` filters on it. It is
+    what makes the history sidebar per-account rather than per-installation: without it `GET
+    /chat-sessions` returned the whole table, so anybody who signed in read — and could open,
+    overwrite or delete — every other operator's conversations.
+
+    It is **nullable, and a NULL is invisible to everyone**. That is deliberate rather than an
+    unfinished constraint. Rows predating this column have no owner that can be inferred from the
+    data (`state` carries no identity), so the choice is between a default owner and a default of
+    nobody, and only one of those fails closed. The migration backfills to the oldest account so an
+    existing single-operator install keeps its history; on an install where that guess is wrong, or
+    where there was no account at all, the rows stay NULL and simply stop being listed. They are
+    still in the table and can be reassigned by hand — which is recoverable, whereas having shown
+    one operator's client work to another is not.
     """
 
     __tablename__ = "chat_sessions"
-    __table_args__ = (Index("ix_chat_sessions_updated_at", "updated_at"),)
+    __table_args__ = (
+        Index("ix_chat_sessions_updated_at", "updated_at"),
+        # The history sidebar's only query is "my sessions, newest first", so the index carries the
+        # sort column too and it is answered without a per-user sort.
+        Index("ix_chat_sessions_user_updated", "user_id", "updated_at"),
+    )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
     run_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), nullable=True, unique=True
     )

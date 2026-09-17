@@ -442,6 +442,141 @@ palette.
 
 ---
 
+## Phase 2 — a sub-service, and why it writes its own copy
+
+Phase 2 builds the same stack one level down, for a single *sub-service* (Google Ads, Meta Ads,
+LinkedIn) of the headline service Phase 1 covered. It is expressed as a **delta** over the Phase 1
+definitions rather than as a second set of tables — `PHASE2_OVERRIDES` in
+`app/services/generation.py` on the server, `DELTAS` in `data/phase2Catalog.ts` in the UI — because
+seven near-identical field registries kept in step by hand is how a field added later silently fails
+to reach its Phase 2 twin. `tests/test_phase2.py` pins the delta landing.
+
+### The CRO stage is stage 01, and that is the point
+
+The Phase 2 Pillar Page prompt (`Master_Prompt_Universal_Page_Design_v1_phase2.md`) is a **design
+replicator with no service input of any kind**. Read its INPUTS: there is no service field, no topic
+field, no keyword field. It lays out whatever copy it is handed — so **the copy handed to it is the
+subject of the page**, and nothing else on that stage decides what the page is about.
+
+While Phase 2 had no CRO stage, that copy could only come from two places, and both were wrong:
+
+- the parent Phase 1 run's `cro_rewritten_copy`, which is the rewrite of the client's *headline*
+  service — so a run carefully pointed at "Meta Ads" came back a Social Media Marketing page; or
+- the operator, who was asked to write the page copy themselves and paste it in (an `askOutright`
+  on `improved_page_content`, since an inherited document that is always wrong must not sit under a
+  "use it" button).
+
+So Phase 2 runs `cro` first. It starts from the Phase 1 prompt — that file already opens "works for
+any industry, any sub-service, any page scope" — and drops nothing, and it writes the four keys the
+rest of the phase reads: `cro_rewritten_copy`, `cro_locked_sections`, `cro_terminology_map` and
+`cro_audit_findings`. Pillar Page's copy field then fills from the Context Store like any other
+document approved two stages ago.
+
+**It always runs in NEW PAGE mode**, which is not a limitation but the actual situation: this phase
+exists precisely because the client has no page for the sub-service yet. `PHASE2_CONSTANT_ANSWERS`
+in `pipeline/pipelineData.ts` seeds both sentinels off `NEW_PAGE_OPTIONS` rather than restating
+them, so the strings stay the ones the prompt switches build-from-scratch mode on, plus
+`page_scope: "SUB-SERVICE"`.
+
+### The SCOPE LOCK — why the prompt file is no longer a copy
+
+Naming the sub-service is not the same as writing about it. `target_service_or_sub_service` is one
+line of an INPUTS block whose strategy half arrives at the *parent's* scope by construction: the ICP
+document is inherited from the parent Phase 1 run, and Proof Assets Available, the outcome words and
+the tone of voice come from that run's `cro_client_settings`. Handed a parent-scope ICP and a
+one-line sub-service name, a model writes the page most of its input describes — which is the Social
+Media Marketing page this stage exists to prevent, arriving by a different route.
+
+So `Master_Prompt_Universal_Page_Rewrite_v1_phase2.md` carries a **SCOPE LOCK** section, immediately
+after ROLE, that Phase 1's file does not. It names the input that decides the subject; bars the
+parent's term from the H1, title tag, meta description, URL, primary keyword, offer name and CTA
+while keeping it reachable as the internal link up and as the term not to compete for; and splits
+each inherited input into what to **keep** (properties of the client and the buyer), what to
+**re-point** at the sub-service (the outcome, objections, proof and decision criteria) and what to
+**discard**. Step 0 makes the model state the subject and every re-pointing before it writes, Step
+1B re-reads the ICP at sub-service scope, Rule 8 says what "keep the existing H1 intent" means in a
+mode where there is no existing H1, and Part 0 reports the lot back to the operator.
+
+This is the same fix `design_tokens.py` documents for colours: an instruction that cannot be
+followed gets filled in by the model, so measure and constrain rather than exhort. The two files
+were **byte-identical** before the lock landed, which is the risk worth naming — re-copying Phase
+1's over Phase 2's still builds, still renders INPUTS, still produces a polished page, and the page
+is about the wrong service. `tests/test_phase2_cro_scope.py` is the only thing that notices.
+
+**The ICP is the parent run's, and there is no other.** Phase 2 runs no ICP stage, so `icp_*`
+resolves down `source_run_id` to the Phase 1 document or to nothing at all. It stays `overridable`
+— an accept-or-replace card, so an operator who commissioned research for the sub-service can put it
+in — and the scope lock is what corrects its scope rather than a second ICP being generated. What
+Phase 2 changes is only the wording: Phase 1's help text says the ICP was "generated in this run",
+which is the one false claim on a card whose entire purpose is to let the operator weigh where the
+document came from. `rewordHelp` in the `cro` delta is that, and nothing else — the narrowest of the
+field deltas, changing no behaviour at all. `smoke/phase2cro.tsx` pins the card, its document and
+its wording together.
+
+### `cro_client_settings` — asking once per client, not once per service
+
+A stage that asks thirty-seven questions has not solved the copy problem, it has moved it. Most of
+CRO's intake is not about the page at all: buyer type, sales motion, geo mode, claim substantiation
+tier, pricing disclosure mode, whether testimonials are permitted, and the five resolved vocabulary
+words are properties of **the client**, settled once during Phase 1.
+
+They used to be thrown away. `field_sessions.resolved_fields` exists in the schema for exactly this
+and nothing has ever written to it; what actually crosses from a parent run into its Phase 2
+children is `context_entries`, resolved down `source_run_id`. So `app/services/cro_settings.py`
+composes those answers into a document and `save_stage` files it under `cro_client_settings` —
+a `ContextEntry` like any other, read through the inheritance every other document already uses.
+No new table, no new resolver.
+
+- **The server composes it, not the model.** That is why it is in `SERVER_COMPOSED_CONTEXT_KEYS`
+  (`data/assetCatalog.ts`) and excluded from the post-save context fan-out: pointing the key at the
+  80KB rewrite would hand the sub-key extractor a haystack instead of the one-line-per-setting sheet
+  it is written against, and whatever it dug out of the prose would then be believed over the real
+  row in the database.
+- **`capture()` returns None rather than an empty document.** `_latest_context_entry` takes the
+  highest version, not the fullest, so an empty row written by a stage approved from a pasted draft
+  would shadow the real one a later re-run produces.
+- **Page-specific answers are deliberately not captured.** The four `locked_*` fields are the
+  sharpest case: a locked heading is locked on *that page*, and carrying one across would pin a
+  section the sub-service page has no reason to carry.
+- **The fields are patched, not rebuilt.** `planField` takes the context route on
+  `kind === "context_reference"` *or* `source === "auto_from_context"`, so moving the source alone is
+  enough — and the original `kind` survives, which matters because seven of these are `enum_choice`
+  and `QuestionWidget` renders its pills on `kind`. Rebuilt, a parent run with no settings document
+  would ask the operator to hand-type "2 PROFESSIONALLY REGULATED".
+- **Absent settings fall back to asking, never to blank.** A parent run approved before this key
+  existed has no settings row, so the lookup falls through to the producing stage's own document and
+  usually finds nothing — and asking is the right answer there. The legal guardrails are in this set;
+  an unanswered claim tier is not a default.
+- **Four files have to agree** — the captured list, `CRO_CLIENT_SETTINGS` in `data/phase2Catalog.ts`,
+  the `cro_client_settings` block in `lib/contextSubKeys.ts`, and the rendered shape itself.
+  `tests/test_cro_settings.py` parses all of them; `smoke/phase2cro.tsx` runs the real extractor over
+  the real rendered shape from the other side. Drift here has no symptom: the extractor finds
+  nothing, the field falls back to asking, and Phase 2 quietly goes back to asking twenty questions
+  nobody noticed it had stopped asking.
+
+The net: **Phase 2's CRO stage asks 9 of its 37 fields**, and all nine are page- or run-specific —
+the parent pillar URL, sibling pages, existing ranking keywords, the four locked blocks, the CRO
+framework and free-text notes. Two more (the inherited ICP and the run's own competitor listing) stop
+as accept-or-replace cards rather than questions, which is `overridable: true` behaviour Phase 1 has
+too. `smoke/phase2cro.tsx` walks the intake end to end and names that list, so a field joining it
+fails a test rather than landing on an operator.
+
+### Competitor research
+
+Four of the eight stages research competitors and **all of it is gated** — reviewed on its own card
+before the stage it feeds, never folded invisibly into a generation call
+(`PREPASS_BY_MAIN_ASSET_BY_PHASE["phase2"]` is empty and stays empty). `{SERVICE}` resolves from the
+run-level `sub_service` fact rather than from any stage's intake, which is the whole point of the
+phase split: the search returns competitors doing *Google Ads* lead magnets, not marketing ones.
+
+`01_CRO_phase2.md` searches for competitors' **pages for the sub-service** — a real page with its own
+proposition, process and proof — rather than for a CRO offering the way Phase 1's file does, because
+what the rewrite is benchmarked against is the page, not the vendor. Its target-URL tuple omits
+`existing_page_url`, which Phase 1 has second: in Phase 2 that field is the NEW PAGE sentinel, so
+reading it would search the market for the phrase "NEW PAGE — no existing URL".
+
+---
+
 ## Running a stage out of order
 
 The pipeline runs fifteen stages in sequence and that is the right default, not a constraint. Only
@@ -512,6 +647,59 @@ it would stop. `selectCanStop` / `selectStoppableStage` decide both.
 - **The `stage-stopped` card counts as the operator's turn** in `deriveResumeActivity` and
   `selectNeedsResume`. Without that the resume banner appears underneath it offering to continue the
   stage they just stopped.
+
+### Clearing a leg, and the warning in front of every deletion
+
+"Clear chat" sits in the nav, beside the run's status, and it clears **the phase on screen and
+nothing else** (`clearPhase`). It is not "New chat": that one keeps the chat it leaves and opens a
+second row beside it, which is right for a new client and wrong for a run that went wrong — the
+wrong client name three stages back, a Phase 2 leg built on the wrong parent.
+
+**The scope is the whole point.** A chat carries both legs (see `setPhase`), and the ordinary shape
+of the work is a finished Phase 1 run with a Phase 2 leg on top of it. An operator restarting the
+sub-service is not asking for the fifteen assets it inherits from to be thrown away, so the other
+leg's cards, its parked `phaseSlot`, its run and its approved documents are all left where they are.
+
+- **The button names what it would clear.** `selectOtherPhaseHasWork` decides: with work in the
+  other leg it reads "Clear Phase 2" and the dialog says Phase 1 stays; only when this leg is the
+  whole of the chat does it read "Clear chat", because only then is that what it does. A control
+  labelled "Clear chat" that clears one phase is the mislabel `smoke/clear.tsx` exists to prevent —
+  and the first version of this feature shipped the opposite bug, clearing both.
+- **`selectCanClearPhase` is read per phase.** A chat whose Phase 1 is complete offers nothing to
+  clear the moment the operator switches to a Phase 2 leg that has not started. Offered there, the
+  control would warn about destroying nothing — and what it would have destroyed was Phase 1.
+- **The leg's own stale slot is dropped too.** `setPhase` parks the outgoing leg without removing
+  the incoming one, so the phase on screen can still hold a slot from an earlier visit; left behind,
+  it restores the pre-clear cursor the moment the operator switches away and back.
+- **A cleared leg restarts immediately**, at Stage 01 — `beginStage(0)`, or `beginPhase2` for Phase
+  2, which relinks to this chat's Phase 1 run and copies its context exactly as a freshly entered
+  Phase 2 leg does. It cannot go back to the welcome screen while the other leg holds work:
+  `started` is chat-level, and `setPhase`'s `!started` branch does not consult `phaseSlots`, so
+  blanking it would strand the parked leg.
+- **The client survives, the sub-service does not.** The client is a property of the chat and the
+  other leg is still working on it; `sub_service` is Phase 2's own fact. Clearing the *last* leg
+  drops the profile as well — "the client name was wrong" is one of the reasons to clear, and
+  keeping it would auto-answer the next run with it.
+- **In-flight requests are aborted first**, while `messages` still holds the ids the controllers are
+  keyed by, and only this leg's. Same reasoning as `stopStage`, one level up: a clear that only
+  emptied the pane would leave the stream running, still billing.
+- **Nothing is deleted from the database**, and the chat's history row is never removed — deleting a
+  chat is the sidebar's job, behind its own warning. `persistNow` therefore writes a chat that
+  already has a row even once it is no longer `started`, so an emptied chat does not come back on
+  the next reload.
+- **Withdrawn while the sample transcript is up.** What is on screen then is fixtures and the run it
+  would clear is the operator's real one — the one confusion `demoMode` exists to prevent.
+
+Deleting is always a modal — `ConfirmDialog`, used by the nav's clear and by the sidebar's trash
+icon, which used to delete on the first click. It names the chat or the phase, says what stays, and
+focuses **Cancel**, so Enter on a dialog that appeared under the operator's fingers backs out. The
+inline confirm on "Stop this asset" stays inline on purpose: that one abandons work in flight and
+touches nothing approved.
+
+`ChatDeleteDialog` is mounted at the app root rather than inside `ChatHistorySidebar`, and
+`pendingChatDelete` lives in `uiStore` for that reason: below `xl` the sidebar is a drawer animating
+on `transform`, which makes it the containing block for any `position: fixed` descendant — the
+warning would be laid out inside an 85vw panel instead of over the app.
 
 - **"Done" in the pipeline diagram comes from the transcript, not from `currentIndex`.** The two
   were the same thing only while the run was strictly sequential; `approvedAssetIds` is the

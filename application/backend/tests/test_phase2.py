@@ -40,6 +40,7 @@ from app.services.generation import _config as stage_config
 # here rather than imported (it lives in TypeScript) — which is exactly why it is worth asserting:
 # the two must agree or a stage the UI runs has no prompt behind it.
 PHASE2_ASSET_IDS = [
+    "cro",
     "pillar_page",
     "funnel",
     "lead_magnet",
@@ -209,6 +210,7 @@ def test_phase2_has_no_invisible_competitor_prepass():
     into a generation call as well would run — and bill — the same search twice."""
     assert PREPASS_BY_MAIN_ASSET_BY_PHASE["phase2"] == {}
     assert set(GATED_COMPETITOR_BY_MAIN_ASSET_BY_PHASE["phase2"]) == {
+        "cro",
         "lead_magnet",
         "blog",
         "content_marketing_strategy",

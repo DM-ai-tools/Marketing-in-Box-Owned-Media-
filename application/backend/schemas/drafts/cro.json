@@ -2,7 +2,7 @@
   "asset_id": "cro",
   "version": 1,
   "source_prompt_file": "application/backend/assets/Prompts/Master_Prompt_Universal_Page_Rewrite_v1.md",
-  "writes_context_keys": ["cro_audit_findings", "cro_rewritten_copy", "cro_locked_sections", "cro_terminology_map"],
+  "writes_context_keys": ["cro_audit_findings", "cro_rewritten_copy", "cro_locked_sections", "cro_terminology_map", "cro_client_settings"],
   "notes": "cro_terminology_map (added per REVIEW_NEEDED_V2.md item 4 resolution) is a new declared write-key composed from this stage's word_for_the_reader / word_for_the_thing_being_chosen_between / word_for_the_first_commitment_step / word_for_the_business / words_the_buyer_uses_for_the_outcome fields below, resolved once here and consumed as a context_reference by pillar_page and offers (v2) downstream (also by seo_pillar_page until that asset was merged into pillar_page) instead of being re-entered as text on each of those schemas.",
   "fields": [
     { "field_id": "client_name", "label": "Client Name", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "YOUR ANSWER" },

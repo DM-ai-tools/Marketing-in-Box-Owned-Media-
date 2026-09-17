@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AuthPage } from "./AuthPage";
 import { useAuthStore } from "./authStore";
+import { usePipelineStore } from "../pipeline/pipelineStore";
+import { useChatSessionsStore } from "../store/chatSessionsStore";
 
 /** First paint, before `GET /auth/me` has answered.
  *
@@ -143,16 +145,17 @@ function WelcomeToast() {
  * fetching on mount, and mounting them behind a login form would fire a burst of requests whose
  * results nobody will ever see.
  *
- * Note what this gate does *not* claim: it decides what to render, not what the API will allow. The
- * session cookie is what the backend checks (`current_user` in app/routers/auth.py), and the
- * pipeline routes are still unscoped today — making them per-user is a data-model change, since
- * `chat_sessions`, `runs`, and `context_entries` have no owner column. This component is the front
- * half of that work; the hook the back half attaches to already exists.
+ * Note what this gate does *not* claim: it decides what to render, not what the API will allow.
+ * The session cookie is what the backend checks — `chat_sessions` now carries a `user_id` and
+ * every route in `app/routers/chat_sessions.py` filters on it, so the history a signed-in account
+ * can reach is enforced server-side rather than here. This component's own contribution to that is
+ * the wipe below.
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const status = useAuthStore((s) => s.status);
   const notice = useAuthStore((s) => s.notice);
   const boot = useAuthStore((s) => s.boot);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
 
   useEffect(() => {
     void boot();
@@ -160,6 +163,27 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     // double-invoke, where the second call is idempotent (it re-reads an already-cleared URL and
     // re-asks a cheap endpoint).
   }, [boot]);
+
+  // Drop the previous account's work when the signed-in identity changes.
+  //
+  // The server scoping alone does not cover this: `pipelineStore` and `chatSessionsStore` are
+  // module singletons that outlive any component, and `signOut` only ever cleared the auth store.
+  // So signing out and signing in as somebody else *in the same tab* — no reload — left the first
+  // user's open transcript in the pane and their chat titles in the sidebar. Nothing would have
+  // re-fetched them, because the store already had them.
+  //
+  // Keyed on a transition away from a *known* id rather than on every change, so the ordinary
+  // null -> signed-in boot does not wipe stores that are already empty and may be mid-hydration.
+  // `discardUnsaved` is the right flavour of reset here: the departing user's autosave must not be
+  // allowed to land, and it has already been flushed by their own sign-out.
+  const lastUserId = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastUserId.current !== null && lastUserId.current !== userId) {
+      usePipelineStore.getState().startNewChat({ discardUnsaved: true });
+      useChatSessionsStore.getState().clear();
+    }
+    lastUserId.current = userId;
+  }, [userId]);
 
   if (status === "checking") return <BootScreen />;
   if (status === "unreachable") return <UnreachableScreen message={notice} />;

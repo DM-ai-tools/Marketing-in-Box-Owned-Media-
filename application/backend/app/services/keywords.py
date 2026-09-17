@@ -54,11 +54,11 @@ _PROMPT_PATH = _BACKEND_ROOT / "assets" / "word_fetching_prompt" / "key_word_clu
 # The prompt's Step 4 preserves each seed's exact / phrase / related / broad keywords. Those are
 # Google-Ads match classes, and DataForTopicClusttering Labs has one endpoint per class — this is the mapping.
 MATCH_CLASS_ENDPOINTS = {
-    "phrase": "DataForTopicClusttering_labs/google/keyword_suggestions/live",
-    "related": "DataForTopicClusttering_labs/google/related_keywords/live",
-    "broad": "DataForTopicClusttering_labs/google/keyword_ideas/live",
+    "phrase": "dataforseo_labs/google/keyword_suggestions/live",
+    "related": "dataforseo_labs/google/related_keywords/live",
+    "broad": "dataforseo_labs/google/keyword_ideas/live",
 }
-DataForTopicClusttering_BASE = "https://api.DataForTopicClusttering.com/v3/"
+DataForTopicClusttering_BASE = "https://api.dataforseo.com/v3/"
 
 MODEL = "claude-sonnet-5"
 _MAX_TOKENS = 64000
@@ -323,7 +323,7 @@ class DataForTopicClustteringClient:
     ) -> dict[str, tuple[int | None, int | None]]:
         """Volume/difficulty for the seeds themselves — the `exact` match class."""
         items = await self._post(
-            "DataForTopicClusttering_labs/google/keyword_overview/live",
+            "dataforseo_labs/google/keyword_overview/live",
             {
                 "keywords": keywords,
                 "location_name": config.location_name,
@@ -361,7 +361,7 @@ class DataForTopicClustteringClient:
 # matching against the real list is a guess at nothing.
 # ======================================================================================
 
-_LOCATIONS_ENDPOINT = "DataForTopicClusttering_labs/locations_and_languages"
+_LOCATIONS_ENDPOINT = "dataforseo_labs/locations_and_languages"
 
 # Cached for the process. The list is 94 country names and changes about never, so re-fetching it
 # per run would spend a request to learn the same thing.

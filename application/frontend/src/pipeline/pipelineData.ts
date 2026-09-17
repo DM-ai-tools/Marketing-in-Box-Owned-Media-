@@ -56,6 +56,7 @@ export type PipelinePhase = "phase1" | "phase2";
  * before Blog, Funnel Hub last as the piece that assembles the designs), so the order here IS the
  * specification and must not be re-derived from `ASSET_CATALOG`. */
 const PHASE2_ASSET_IDS = [
+  "cro",
   "pillar_page",
   "funnel",
   "lead_magnet",
@@ -413,10 +414,59 @@ export const PHASE2_FIELD_TO_FACT: Record<string, string> = PHASE2_FIELD_TO_SUB_
  * in sync with `GATED_COMPETITOR_BY_MAIN_ASSET_BY_PHASE["phase2"]` in the backend's
  * `app/services/competitor.py`, which is what keeps these out of the invisible prepass. */
 export const PHASE2_GATED_COMPETITOR_MAIN_ASSET_IDS = new Set<string>([
+  "cro",
   "lead_magnet",
   "blog",
   "content_marketing_strategy",
 ]);
+
+/** Answers a Phase 2 stage gives itself, so the walk never asks the question.
+ *
+ * Stronger than a `default`, which the walk only reaches on a field it decided to skip: these are
+ * seeded into the intake before the walk starts, so `planField` sees an answer already present and
+ * passes the field over as `already-answered`. Still ordinary answers, though — `editField` can
+ * change one, which is what keeps this from being a hard-coded value the operator cannot reach.
+ *
+ * Phase 2's CRO stage is the only user, and the two sentinels are the interesting half. This phase
+ * exists *because* the client has no page for the sub-service yet, so "is there an existing page to
+ * audit?" has one answer for every run there will ever be, and asking it is asking a question whose
+ * answer the run already knows. They are read off `NEW_PAGE_OPTIONS` rather than retyped, because
+ * the exact strings are what `Master_Prompt_Universal_Page_Rewrite_v1.md` switches build-from-
+ * scratch mode on, and `backend/tests/test_new_page_mode.py` is what holds the prompt, the schema
+ * and that table to the same wording.
+ *
+ * `page_scope` is the same kind of fact one level down: a Phase 2 run builds the page for one
+ * sub-service, which is what the prompt's SUB-SERVICE scope means. */
+export const PHASE2_CONSTANT_ANSWERS: Record<string, Readonly<Record<string, string>>> = {
+  cro: {
+    page_scope: "SUB-SERVICE",
+    [NEW_PAGE_OPTIONS.cro.urlFieldId]: NEW_PAGE_OPTIONS.cro.urlAnswer,
+    [NEW_PAGE_OPTIONS.cro.contentFieldId]: NEW_PAGE_OPTIONS.cro.contentAnswer,
+  },
+};
+
+const CONSTANT_ANSWERS_BY_PHASE: Record<PipelinePhase, Record<string, Readonly<Record<string, string>>>> = {
+  phase1: {},
+  phase2: PHASE2_CONSTANT_ANSWERS,
+};
+
+/** The answers this stage starts its intake already holding, as a fresh mutable object. */
+export function constantAnswersFor(phase: PipelinePhase, assetId: string): Record<string, string> {
+  return { ...(CONSTANT_ANSWERS_BY_PHASE[phase][assetId] ?? {}) };
+}
+
+// A constant naming a field the stage does not have is the one failure here with no symptom: the
+// answer is seeded, no question is skipped because none matched, and the stage asks the operator for
+// a page that does not exist — which is the exact bug this table was added to prevent.
+for (const [assetId, answers] of Object.entries(PHASE2_CONSTANT_ANSWERS)) {
+  const asset = PHASE2_ASSETS[assetId];
+  if (!asset) throw new Error(`Phase 2 constant answers name unknown asset_id "${assetId}"`);
+  for (const fieldId of Object.keys(answers)) {
+    if (!asset.fields.some((f) => f.field_id === fieldId)) {
+      throw new Error(`Phase 2 constant answer for "${assetId}" names unknown field "${fieldId}"`);
+    }
+  }
+}
 
 /** Stages whose approved competitor listing is summarised for the operator before their own intake
  * starts, and what that briefing is about.

@@ -4,8 +4,8 @@ import type { AssetDefinition, FieldDef } from "./types";
 /** The Phase 2 asset definitions, derived from the Phase 1 ones.
  *
  * Phase 2 builds the same kinds of asset one level down, for a single *sub-service* — Google Ads,
- * LinkedIn, Meta Ads — of the headline service Phase 1 covered. Its prompt files are, with one
- * exception, the Phase 1 prompt re-pointed at a sub-service: three are byte-identical to their
+ * LinkedIn, Meta Ads — of the headline service Phase 1 covered. Its prompt files are, with two
+ * exceptions, the Phase 1 prompt re-pointed at a sub-service: three are byte-identical to their
  * Phase 1 counterparts and three differ by a single INPUTS label. So the intake is derived from
  * Phase 1's with a declared delta rather than written out a second time. Hand-writing seven more
  * definitions would mean seven more field lists to keep in step with the prompts, and a field added
@@ -22,6 +22,8 @@ import type { AssetDefinition, FieldDef } from "./types";
  *   - `fromSubService` — inputs the sub-service itself answers, so they are not asked at all.
  *   - `gatherContext` — inputs that ask for a set of documents, not one.
  *   - `askOutright` — inputs Phase 2 must collect from the operator, never inherit.
+ *   - `rewordHelp` — inputs that behave as they do in Phase 1 but must explain themselves
+ *     differently, because the document behind them comes from somewhere else here.
  *   - which carried-over inputs stop to ask before being reused — see `askBeforeReusing` below.
  */
 
@@ -35,7 +37,7 @@ import type { AssetDefinition, FieldDef } from "./types";
  * rather than this sub-service.
  */
 const PHASE2_PRODUCED_KEYS: ReadonlySet<string> = new Set(
-  ["pillar_page", "funnel", "lead_magnet", "blog", "sms_sequence", "content_marketing_strategy", "funnel_hub_media"]
+  ["cro", "pillar_page", "funnel", "lead_magnet", "blog", "sms_sequence", "content_marketing_strategy", "funnel_hub_media"]
     .flatMap((assetId) => {
       const asset = ASSET_CATALOG.find((a) => a.asset_id === assetId);
       if (!asset) throw new Error(`Phase 2 references unknown asset_id "${assetId}"`);
@@ -56,6 +58,16 @@ interface Phase2Delta {
    * are plain questions, because nothing upstream of them has been built when they are asked; in
    * Phase 2 they sit at stages 06 and 07, after the documents they are asking about exist. */
   gatherContext?: Readonly<Record<string, readonly string[]>>;
+  /** field_id -> the Phase 2 helpText for an input that keeps its Phase 1 behaviour but not its
+   * Phase 1 explanation.
+   *
+   * The narrowest of the field deltas, and the only one that changes nothing but what the operator
+   * reads. It exists because a carried-over `overridable` field announces where its document came
+   * from, and in Phase 2 the answer is different: "the ICP generated in this run" is true of Phase
+   * 1 and false here, where the run has no ICP stage and the document is the parent engagement's.
+   * An operator deciding whether to accept or replace it is deciding on that provenance, so a card
+   * that misstates it is worse than one that says nothing. */
+  rewordHelp?: Readonly<Record<string, string>>;
   /** field_id -> the Phase 2 wording for an input that must be *asked*, never resolved from
    * context — with the Phase 2 helpText, since the reason it is asked is Phase 2's alone.
    *
@@ -66,10 +78,101 @@ interface Phase2Delta {
    * default, which is the wrong default when the answer is always no.
    */
   askOutright?: Readonly<Record<string, { helpText: string; placeholder?: string }>>;
+  /** Inputs answered from the parent Phase 1 run's `cro_client_settings` document rather than asked.
+   *
+   * The mirror image of `askOutright`, and for the mirror-image reason. `askOutright` marks an
+   * inherited document that is *always the wrong document* for a sub-service. These are the answers
+   * that are always the *right* ones: how the client sells, who buys, which claim tier they sit in,
+   * how they may talk about price, and the words they use for a buyer and a first appointment. None
+   * of that is a property of the service — it is a property of the client — so a Phase 2 run that
+   * asked for it again would be asking the operator to re-derive an answer the engagement settled
+   * during Phase 1, with nothing to check it against and every chance of answering differently.
+   *
+   * Each id names both the field and the `sub_key` it reads, because `cro_settings.py` keys the
+   * document by field_id for exactly this. The field becomes an ordinary `context_reference`, so it
+   * travels the normal auto-fill path: found -> filled in and announced with everything else the
+   * walk resolved, absent -> asked. Absent is the expected case for a parent run approved before
+   * that document existed, and asking is the right answer there rather than a guess. */
+  fromParentSettings?: readonly string[];
   description?: string;
 }
 
+/** The client-level settings the CRO stage resolves once and every later run inherits.
+ *
+ * Mirrors `CLIENT_SETTING_FIELD_IDS` in `app/services/cro_settings.py`, which composes the document
+ * these read out of, and `cro_client_settings` in `lib/contextSubKeys.ts`, which knows how to find
+ * one entry in it. `tests/test_cro_settings.py` parses this file to prove the three agree — a field
+ * listed here and not captured there is a question that silently goes back to being asked, which is
+ * the failure mode with no symptom.
+ *
+ * `client_name` and `client_website_url` are absent because they are already run-level facts, and
+ * the four `locked_*` fields because a locked heading is locked on *that page* — carrying one across
+ * would pin a section the sub-service page has no reason to carry. */
+/** The context key `app/services/cro_settings.py` writes the document under. */
+export const CRO_CLIENT_SETTINGS_KEY = "cro_client_settings";
+
+export const CRO_CLIENT_SETTINGS = [
+  "client_industry",
+  "sub_vertical_niche",
+  "buyer_type",
+  "sales_motion",
+  "geo_mode",
+  "region_location",
+  "claim_substantiation_tier",
+  "pricing_disclosure_mode",
+  "pricing_facts",
+  "testimonials_before_after_permitted",
+  "word_for_the_reader",
+  "word_for_the_thing_being_chosen_between",
+  "word_for_the_first_commitment_step",
+  "word_for_the_business",
+  "words_the_buyer_uses_for_the_outcome",
+  "words_to_avoid",
+  "tone_of_voice",
+  "proof_assets_available",
+  "primary_conversion_goal",
+  "secondary_conversion_goal",
+] as const;
+
 const DELTAS: Record<string, Phase2Delta> = {
+  // Phase 2's stage 01, and the stage that makes the rest of the phase self-sufficient.
+  //
+  // It is here because of what the Pillar Page prompt is: a design replicator with no service input
+  // of any kind, which lays out whatever copy it is handed. The copy therefore *is* the subject of
+  // the page — so with no CRO stage in this phase, a run carefully pointed at "Meta Ads" could only
+  // be handed the parent run's rewrite of the client's headline service, and came back a Social
+  // Media Marketing page. The alternative on offer before this was for the operator to write the
+  // page copy themselves and paste it in.
+  //
+  // It always runs in NEW PAGE mode, and that is not a limitation but the actual situation: this
+  // phase exists precisely because the client has no page for the sub-service yet. The two
+  // sentinels are filled from `NEW_PAGE_OPTIONS` in `pipeline/pipelineData.ts` rather than asked —
+  // see `PHASE2_CONSTANT_ANSWERS` there, which also seeds `page_scope: "SUB-SERVICE"`.
+  //
+  // Seeding the sub-service into `target_service_or_sub_service` is what *names* the subject; what
+  // holds the output to it is the SCOPE LOCK section in the Phase 2 prompt file. It is needed
+  // because most of this stage's strategy material arrives at the parent's scope: the ICP is
+  // inherited from the parent run, and `fromParentSettings` below deliberately carries over the
+  // outcome vocabulary and proof assets that run settled. All of that is right about the *client*
+  // and wrong about the *service*, and the lock is what says so — keep the buyer-level content,
+  // re-point the service-level content at the sub-service, and never let the parent's term reach the
+  // H1, title, keyword target or offer name. Pinned in `tests/test_phase2_cro_scope.py`.
+  cro: {
+    fromSubService: ["target_service_or_sub_service"],
+    fromParentSettings: CRO_CLIENT_SETTINGS,
+    // The parent run's ICP is the ICP this phase uses, and the only one: Phase 2 has no ICP stage,
+    // so `icp_*` resolves down `source_run_id` to the Phase 1 document and nothing competes with it.
+    // It stays `overridable` — an operator who has commissioned real research for the sub-service
+    // should be able to put it in — but the Phase 1 wording claimed the document was generated in
+    // this run, which is the one thing about it that is not true here. The card exists so the
+    // operator can weigh the document's provenance; it has to state it correctly.
+    rewordHelp: {
+      icp_document:
+        "Uses the ICP approved in the parent Phase 1 run — it describes this client's buyer, and the prompt re-points its service-level detail at this sub-service. Paste or attach a different one to override it.",
+    },
+    description:
+      "Writes the page copy for one sub-service from scratch, in this client's own vocabulary and claim rules — the document every HTML stage in this phase is then built from.",
+  },
   pillar_page: {
     // Phase 2 uses the standalone v1.0 design prompt. It designs the page from approved copy and
     // nothing else: there is no keyword block, no cluster terms, no competitor pillar-page
@@ -82,27 +185,20 @@ const DELTAS: Record<string, Phase2Delta> = {
       "competitor_analysis_pillar_page",
       "cro_locked_sections",
     ],
-    // The one input that decides what this page is *about*, and the reason a Phase 2 run for
-    // "Meta Ads" was producing a Social Media Marketing page. Nothing else on this stage names a
-    // service: the sub-service reaches four of Phase 2's seven stages through `fromSubService`, and
-    // this is not one of them — the design prompt has no service input at all, by design ("design
-    // replicator, not design inventor"; all vocabulary comes from the content file). So the copy
-    // handed to it *is* the subject. Inherited, that copy is the parent Phase 1 run's CRO rewrite of
-    // the client's headline service, and the page comes back about the headline service however
-    // carefully the sub-service was chosen.
+    // `improved_page_content` is not listed here, and the reason is the whole point of this phase's
+    // stage 01. It is the one input that decides what this page is *about*: nothing else on this
+    // stage names a service — the sub-service reaches four of Phase 2's seven stages through
+    // `fromSubService`, and this is not one of them, because the design prompt has no service input
+    // at all, by design ("design replicator, not design inventor"; all vocabulary comes from the
+    // content file). So the copy handed to it *is* the subject.
     //
-    // Phase 2 has no CRO stage of its own, so there is nowhere in-run for sub-service copy to come
-    // from and the operator has to supply it. Asked rather than offered: an inherited document that
-    // is always wrong should not be sitting under a "use it" button.
-    askOutright: {
-      improved_page_content: {
-        helpText:
-          "The finished page copy for this sub-service — paste it in full. This stage designs " +
-          "whatever copy it is given and nothing else, so this is what decides what the page is " +
-          "about. The parent Phase 1 run's copy is for the headline service and won't do.",
-        placeholder: "Paste the full rewritten page copy for this sub-service",
-      },
-    },
+    // While Phase 2 had no CRO stage, that copy could only be the parent Phase 1 run's rewrite of
+    // the client's *headline* service — so a run carefully pointed at "Meta Ads" came back a Social
+    // Media Marketing page — or something the operator wrote and pasted in themselves, which is what
+    // this delta used to demand with an `askOutright`. Now Phase 2 runs its own CRO stage first, the
+    // copy is produced in-run for this sub-service, `cro` is in `PHASE2_PRODUCED_KEYS`, and the
+    // field fills from the Context Store silently like any other document approved two stages ago.
+    // Re-asking for it would be asking the operator to replace something they had just approved.
     description:
       "Full page design brief/build for one sub-service, replicating a reference visual style around the sub-service's approved copy, and delivered with a reusable design-token set.",
   },
@@ -171,6 +267,8 @@ function applyDelta(asset: AssetDefinition, delta: Phase2Delta): AssetDefinition
 
   const gather = delta.gatherContext ?? {};
   const askOutright = delta.askOutright ?? {};
+  const fromSettings = new Set(delta.fromParentSettings ?? []);
+  const rewordHelp = delta.rewordHelp ?? {};
 
   for (const fieldId of [
     ...dropped,
@@ -178,11 +276,23 @@ function applyDelta(asset: AssetDefinition, delta: Phase2Delta): AssetDefinition
     ...(delta.fromSubService ?? []),
     ...Object.keys(gather),
     ...Object.keys(askOutright),
+    ...Object.keys(rewordHelp),
+    ...fromSettings,
   ]) {
     // A delta naming a field the asset does not have is a no-op that reads as deliberate — it would
     // sit there looking like Phase 2 handles a field it silently does not.
     if (!asset.fields.some((f) => f.field_id === fieldId)) {
       throw new Error(`Phase 2 delta for "${asset.asset_id}" names unknown field "${fieldId}"`);
+    }
+  }
+
+  for (const fieldId of Object.keys(rewordHelp)) {
+    // Both would write the field's helpText, and the loser would be silent. `askOutright` already
+    // carries its own Phase 2 wording, and a dropped field has no card to read anything on.
+    if (dropped.has(fieldId) || askOutright[fieldId]) {
+      throw new Error(
+        `Phase 2 delta for "${asset.asset_id}" rewords the help of field "${fieldId}", which it also drops or re-asks`,
+      );
     }
   }
 
@@ -192,6 +302,21 @@ function applyDelta(asset: AssetDefinition, delta: Phase2Delta): AssetDefinition
     if (dropped.has(fieldId) || gather[fieldId]) {
       throw new Error(
         `Phase 2 delta for "${asset.asset_id}" both asks for and auto-fills field "${fieldId}"`,
+      );
+    }
+    if (fromSettings.has(fieldId)) {
+      throw new Error(
+        `Phase 2 delta for "${asset.asset_id}" both asks for and inherits field "${fieldId}"`,
+      );
+    }
+  }
+
+  for (const fieldId of fromSettings) {
+    // A field cannot be answered from two places. `fromSubService` wins silently if both were set,
+    // and the settings document would simply never be consulted for it — so say so instead.
+    if (dropped.has(fieldId) || gather[fieldId] || (delta.fromSubService ?? []).includes(fieldId)) {
+      throw new Error(
+        `Phase 2 delta for "${asset.asset_id}" inherits field "${fieldId}" from two sources`,
       );
     }
   }
@@ -228,13 +353,37 @@ function applyDelta(asset: AssetDefinition, delta: Phase2Delta): AssetDefinition
           } satisfies FieldDef;
         }
 
+        // Patched, not rebuilt — the opposite of `askOutright` above, and deliberately so.
+        // `planField` takes the context route on `kind === "context_reference"` *or*
+        // `source === "auto_from_context"`, so moving the source alone is enough to make the field
+        // resolve from the settings document, while the original `kind` survives. That matters:
+        // seven of these are `enum_choice`, and `QuestionWidget` renders its one-click pills on
+        // `kind`. Rebuilt as a `context_reference`, a parent run with no settings document would
+        // drop the operator into a free-text box and ask them to hand-type
+        // "2 PROFESSIONALLY REGULATED" — for the three fields where an approximate answer changes
+        // what the copy is legally allowed to say.
+        //
+        // `fallback: "ask_user_if_missing"` is the other half of that: absent settings degrade to
+        // the Phase 1 behaviour of asking, never to submitting the stage with the field blank.
+        if (fromSettings.has(f.field_id)) {
+          return {
+            ...f,
+            label,
+            source: "auto_from_context",
+            context_key: CRO_CLIENT_SETTINGS_KEY,
+            sub_key: f.field_id,
+            fallback: "ask_user_if_missing",
+          } satisfies FieldDef;
+        }
+
         const keys = gather[f.field_id];
         // A gathered input is always offered rather than filled silently: it is several documents at
         // once, and the operator is the one who knows whether that set is what the prompt should be
         // folding in.
         const overridable = f.overridable || askBeforeReusing(f) || Boolean(keys);
-        if (label === f.label && overridable === f.overridable && !keys) return f;
-        return { ...f, label, overridable, ...(keys ? { context_keys: [...keys] } : {}) };
+        const helpText = rewordHelp[f.field_id] ?? f.helpText;
+        if (label === f.label && overridable === f.overridable && helpText === f.helpText && !keys) return f;
+        return { ...f, label, overridable, helpText, ...(keys ? { context_keys: [...keys] } : {}) };
       }),
   };
 }

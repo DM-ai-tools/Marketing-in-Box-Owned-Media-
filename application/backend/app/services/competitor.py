@@ -357,6 +357,25 @@ def _phase2_sources(
 
 
 PHASE2_COMPETITOR_CONFIGS: dict[str, CompetitorConfig] = {
+    # Phase 2's CRO stage audits and rewrites the page for one sub-service, so what it has to be
+    # benchmarked against is competitors' pages *for that sub-service* — not their CRO offering,
+    # which is what Phase 1's file searches for. Hence its own prompt file rather than the Phase-1
+    # one: `01_CRO_phase2.md` looks for a dedicated {SERVICE} page with its own proposition, process
+    # and proof, and rejects a company that sells {SERVICE} only as a line item on a combined
+    # services page — such a company has no page for this one to be measured against.
+    #
+    # `existing_page_url` is deliberately absent from the target-URL tuple, where Phase 1 has it
+    # second. In Phase 2 that field is the NEW PAGE sentinel rather than a URL (there is no existing
+    # page — that is the whole reason this stage runs here), so reading it would search the market
+    # for the phrase "NEW PAGE — no existing URL".
+    "competitor_analysis_cro": CompetitorConfig(
+        "competitor_analysis_cro",
+        "cro",
+        f"{_PHASE2_PROMPT_SUBDIR}/01_CRO_phase2.md",
+        "competitor_analysis_cro.json",
+        "competitor_analysis",
+        _phase2_sources(("client_website_url",), ("sub_vertical_niche", "client_industry"), ("region_location",)),
+    ),
     "competitor_analysis_lead_magnet": CompetitorConfig(
         "competitor_analysis_lead_magnet",
         "lead_magnet",

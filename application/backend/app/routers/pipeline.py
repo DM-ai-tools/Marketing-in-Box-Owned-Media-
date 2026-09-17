@@ -51,7 +51,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy import select
@@ -70,8 +70,10 @@ from app.db.models import (
     Run,
     RunStage,
     StageStatus,
+    User,
     VerificationConfidence,
 )
+from app.routers.auth import current_user
 from app.services.competitor import (
     CONFIGS_BY_PHASE as COMPETITOR_CONFIGS_BY_PHASE,
     PREPASS_BY_MAIN_ASSET_BY_PHASE,
@@ -82,6 +84,7 @@ from app.services.competitor import (
     to_prompt_text,
 )
 from app.services import (
+    cro_settings,
     design_md as design_md_service,
     design_tokens as design_tokens_service,
     headlines as headlines_service,
@@ -133,6 +136,10 @@ class CreateRunResponse(BaseModel):
 
 class SaveStageRequest(BaseModel):
     content: NonBlankStr
+    # The intake answers behind this output, for the stages that publish something from them rather
+    # than from the document. Optional, and absent is a real case rather than a client that forgot:
+    # a stage approved from a pasted draft has no intake behind it. See `cro_settings.capture`.
+    answers: dict[str, str] | None = None
 
 
 class SaveStageResponse(BaseModel):
@@ -233,6 +240,25 @@ async def save_stage(run_id: str, asset_id: str, payload: SaveStageRequest) -> S
                 written_by_asset_id=asset_id,
             )
         )
+
+        # The CRO stage publishes a second row: the half of its intake that describes the client
+        # rather than this page. It is what lets a Phase 2 run for a sub-service inherit the buyer
+        # type, sales motion, claim tier, pricing mode and resolved vocabulary instead of asking the
+        # operator to settle all of it a second time. Versioned on its own key rather than folded
+        # into the document, so re-approving a corrected CRO stage supersedes the settings with it
+        # and a run that reads them gets the newest either way.
+        if asset_id == cro_settings.PRODUCER_ASSET_ID and payload.answers:
+            captured = cro_settings.capture(payload.answers)
+            if captured is not None:
+                session.add(
+                    ContextEntry(
+                        run_id=run_uuid,
+                        context_key=cro_settings.CONTEXT_KEY,
+                        version=await _next_version(session, run_uuid, cro_settings.CONTEXT_KEY),
+                        value=captured,
+                        written_by_asset_id=asset_id,
+                    )
+                )
 
         result = await session.execute(
             select(RunStage).where(RunStage.run_id == run_uuid, RunStage.asset_id == asset_id)
@@ -2843,20 +2869,34 @@ class SourceRunSummary(BaseModel):
 
 
 @router.get("/source-runs", response_model=list[SourceRunSummary])
-async def list_source_runs() -> list[SourceRunSummary]:
+async def list_source_runs(
+    user: Annotated[User, Depends(current_user)],
+) -> list[SourceRunSummary]:
     """Runs that a Phase 2 sub-service run can inherit context from, newest first.
 
-    A run qualifies when it is a root run (nothing above it) and has at least one approved asset —
-    there is nothing to inherit from an empty one, and offering it would only invite the operator to
-    pick a run that answers no question. Each row carries the keys it actually holds, so the picker
-    can say what Phase 2 would get rather than just naming a run.
+    A run qualifies when it is a root run (nothing above it), has at least one approved asset, and
+    **belongs to the caller**. There is nothing to inherit from an empty one, and offering it would
+    only invite the operator to pick a run that answers no question. Each row carries the keys it
+    actually holds, so the picker can say what Phase 2 would get rather than just naming a run.
+
+    Ownership is read through `chat_sessions.run_id` rather than off the run itself, because `runs`
+    has no owner column: a run is created by a chat, and that chat has one. The inner join is what
+    scopes the list — a run no chat of this user's claims is not selected at all. Before this, the
+    picker named every run in the installation, so one operator chose from another's client list by
+    company name and could then inherit their ICP and page copy into a new run.
+
+    The consequence worth knowing: a run whose chat was deleted, or one seeded directly through
+    `POST /pipeline/runs`, has no chat pointing at it and so appears for nobody. That is the same
+    fail-closed default as an unowned chat session — recoverable by reattaching the chat, where
+    listing it for everyone would not be.
     """
     session_factory = get_sessionmaker()
     async with session_factory() as session:
         result = await session.execute(
             select(Run, Client.company_name)
             .join(Client, Client.id == Run.client_id)
-            .where(Run.source_run_id.is_(None))
+            .join(ChatSession, ChatSession.run_id == Run.id)
+            .where(Run.source_run_id.is_(None), ChatSession.user_id == user.id)
             .order_by(Run.updated_at.desc())
         )
         rows = result.all()

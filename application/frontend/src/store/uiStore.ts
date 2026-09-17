@@ -61,6 +61,14 @@ interface UiState {
    * reload landing back in it would be indistinguishable from the real transcript having lost its
    * contents. See `DemoTranscript` for why it reads fixtures instead of the store. */
   demoMode: boolean;
+  /** The chat the delete confirmation is currently asking about, or null.
+   *
+   * Here rather than as component state in `ChatHistorySidebar` for the same reason `AssetReader`
+   * is mounted at the root: below `xl` that sidebar is a drawer, and the drawer animates on
+   * `transform` — which makes it the containing block for anything `position: fixed` inside it, so
+   * a warning rendered there would be laid out inside a 85vw-wide panel instead of over the app.
+   * The sidebar raises the question, `ChatDeleteDialog` at the root asks it. */
+  pendingChatDelete: { id: string; title: string } | null;
   openSidebar: () => void;
   closeSidebar: () => void;
   toggleSidebar: () => void;
@@ -75,6 +83,8 @@ interface UiState {
   toggleHints: () => void;
   setWorkTab: (tab: WorkTab) => void;
   toggleDemoMode: () => void;
+  askDeleteChat: (target: { id: string; title: string }) => void;
+  cancelDeleteChat: () => void;
 }
 
 /**
@@ -92,6 +102,7 @@ export const useUiStore = create<UiState>((set) => ({
   hintsOn: readFlag("hints", true),
   workTab: "transcript",
   demoMode: false,
+  pendingChatDelete: null,
   openSidebar: () => set({ sidebarOpen: true }),
   closeSidebar: () => set({ sidebarOpen: false }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
@@ -125,4 +136,6 @@ export const useUiStore = create<UiState>((set) => ({
   // Closes the reader with it: the reader is pointed at a real message id, and a sample transcript
   // behind an open sheet showing a real document reads as the two being related.
   toggleDemoMode: () => set((s) => ({ demoMode: !s.demoMode, readerMessageId: null })),
+  askDeleteChat: (pendingChatDelete) => set({ pendingChatDelete }),
+  cancelDeleteChat: () => set({ pendingChatDelete: null }),
 }));

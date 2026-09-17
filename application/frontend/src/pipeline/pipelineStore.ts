@@ -52,6 +52,7 @@ import {
 } from "./pipelineData";
 import type { PipelinePhase } from "./pipelineData";
 import { SUB_SERVICE_FACT } from "../data/phase2Catalog";
+import { SERVER_COMPOSED_CONTEXT_KEYS } from "../data/assetCatalog";
 
 export type NavStatus = "Ready" | "Awaiting Input" | "Generating…" | "Awaiting Review";
 export type ActiveStatus = "running" | "hitl" | null;
@@ -470,6 +471,24 @@ interface PipelineState {
   /** `discardUnsaved` skips the final write for the chat being left — used when that chat is
    * being deleted, where flushing would either resurrect it or 404 against a deleted row. */
   startNewChat: (opts?: { discardUnsaved?: boolean }) => void;
+  /** Empty **the phase on screen** and start that phase again at Stage 01.
+   *
+   * Scoped to one leg on purpose. A chat carries both (see `setPhase`), and the usual shape of the
+   * work is a finished Phase 1 run with a Phase 2 leg under way on top of it — so an operator who
+   * wants the sub-service started over is not asking for the fifteen assets it inherits from to be
+   * thrown away. The other phase's cards, its parked `phaseSlot` and its run are left exactly as
+   * they were, and `TopNav` names the phase it would clear so the button cannot mislead.
+   *
+   * What goes is this leg's transcript, its intake, its context copy, its cursor and its `runs`
+   * link. What survives everywhere is what was approved: those are `context_entries` rows against a
+   * `runs` row, and nothing here touches the database.
+   *
+   * The chat's history row is never deleted — deleting a chat is the sidebar's job, behind its own
+   * warning. A cleared leg is written back over the row like any other change.
+   *
+   * Not undoable, which is why `TopNav` puts a modal in front of it rather than the inline confirm
+   * `stopStage` uses. */
+  clearPhase: () => void;
   loadSession: (sessionId: string) => Promise<void>;
   /** Re-enter the current stage on a resumed chat that came back with nothing to act on — see
    * `selectNeedsResume`. */
@@ -904,7 +923,13 @@ async function persistNow(): Promise<void> {
   }
 
   const state = usePipelineStore.getState();
-  if (!state.started || state.isLoadingSession) return;
+  if (state.isLoadingSession) return;
+  // `started` gates *creating* a row, so a chat nobody has begun never appears in the history. A
+  // chat that already has one is written whatever state it is in — including the empty state
+  // `clearPhase` leaves when it takes the last leg out of a chat. Skipped there, the row would keep
+  // the old transcript and hand it back on the next reload: cleared on screen, intact in the
+  // database.
+  if (!state.started && !state.sessionId) return;
 
   persistInFlight = true;
   try {
@@ -1092,6 +1117,30 @@ export function selectCanRerun(s: PipelineState): boolean {
   // A suggestion gate mid-flight owns the input bar; re-entering a stage under it would strand it.
   if (s.messages.some((m) => m.kind === "headline-choice" && m.headlines?.status === "loading")) return false;
   return s.started;
+}
+
+/** True when **the leg on screen** holds something to clear.
+ *
+ * Read per phase, not per chat, because that is the scope `clearPhase` acts at: a Phase 2 leg one
+ * stage in is clearable while the Phase 1 run above it is untouched, and — the case that matters —
+ * a chat whose Phase 1 is complete offers nothing to clear the moment the operator switches to a
+ * Phase 2 leg that has not started. Offered there, the control would warn about destroying nothing,
+ * and a warning that turns out to be empty is how an operator learns to click through the next one
+ * without reading it. */
+export function selectCanClearPhase(s: PipelineState): boolean {
+  if (s.isLoadingSession) return false;
+  if (messagesInPhase(s.messages, s.phase).length > 0) return true;
+  return s.intake !== null || s.subStep !== null || s.currentIndex > 0 || s.runId !== null;
+}
+
+/** True when the *other* leg of this chat holds something — which decides whether clearing empties
+ * the chat or only one phase of it, and so what the button is allowed to call itself.
+ *
+ * Strict on the stamp, unlike `messagesInPhase`: an unstamped card belongs to the leg on screen, and
+ * counting it here would claim work for a phase that never ran. */
+export function selectOtherPhaseHasWork(s: PipelineState): boolean {
+  const other: PipelinePhase = s.phase === "phase1" ? "phase2" : "phase1";
+  return s.messages.some((m) => m.phase === other) || s.phaseSlots[other] !== undefined;
 }
 
 /** True when there is a stage in progress to stop.
@@ -1579,6 +1628,17 @@ function abortGenerations(messageIds: Iterable<string>): boolean {
     stopped = true;
   }
   return stopped;
+}
+
+/** The same for a suggestion batch still in flight. Abandoning the gate that asked for one is the
+ * same waste as abandoning a stream: nothing will read the result, and it is still being paid for. */
+function abortHeadlineBatches(messageIds: Iterable<string>): void {
+  for (const id of messageIds) {
+    const controller = headlineRequests.get(id);
+    if (!controller) continue;
+    controller.abort(new DOMException("Stopped by the operator", "AbortError"));
+    headlineRequests.delete(id);
+  }
 }
 
 /** The rows a new batch adds to the ones already on screen: new topics only, re-keyed so no two
@@ -2869,7 +2929,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         }
       }
 
-      await saveStageOutput(runId, message.assetId, message.text);
+      await saveStageOutput(runId, message.assetId, message.text, message.answers);
       patchMessage(get, set, messageId, { savePhase: "saved", interrupted: false });
 
       const entry: ContextEntry = { assetId: stage.asset.asset_id, label: stage.asset.label, text: message.text };
@@ -2877,7 +2937,17 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         context: {
           ...get().context,
           ...extraContext,
-          ...Object.fromEntries(stage.asset.writesContextKeys.map((key) => [key, entry])),
+          // Every key this stage publishes points at the document it just produced — except the ones
+          // the *server* composes, which are a different document entirely. Pointing
+          // `cro_client_settings` at the 80KB rewrite would hand the sub-key extractor a haystack
+          // instead of the one-line-per-setting sheet it is written against, and whatever it dug out
+          // of the prose would then be believed over the real row sitting in the database. Left out,
+          // the next stage that wants one reads it back through `hydrateContextFromDb`.
+          ...Object.fromEntries(
+            stage.asset.writesContextKeys
+              .filter((key) => !SERVER_COMPOSED_CONTEXT_KEYS.has(key))
+              .map((key) => [key, entry]),
+          ),
           [stage.asset.asset_id]: entry,
         },
       });
@@ -3546,6 +3616,83 @@ chooseHeadlines: async (messageId, ids) => {
     });
   },
 
+  clearPhase: () => {
+    const state = get();
+    const phase = state.phase;
+    const other: PipelinePhase = phase === "phase1" ? "phase2" : "phase1";
+    // An unstamped card predates per-phase stamping and can only have come from the leg on screen —
+    // the same reading `messagesInPhase` and `setPhase` take.
+    const own = (m: PipelineMessage) => (m.phase ?? phase) === phase;
+
+    // Abort first, while `messages` still holds the ids the controllers are keyed by: a clear that
+    // only emptied the pane would leave the stream running to completion, still writing tokens
+    // nobody will read and still being billed for. This leg's requests only.
+    abortGenerations(state.messages.filter(own).map((m) => m.id));
+    abortHeadlineBatches(state.messages.filter(own).map((m) => m.id));
+
+    const kept = state.messages.filter((m) => !own(m));
+    // Dropping this phase's *own* slot matters as much as keeping the other's: a stale entry from an
+    // earlier visit to this phase is still in `phaseSlots` (see `setPhase`, which parks the outgoing
+    // leg without removing the incoming one), and leaving it there would restore the pre-clear
+    // cursor the moment the operator switched away and back.
+    const phaseSlots: PhaseSlots = { ...state.phaseSlots };
+    delete phaseSlots[phase];
+    const otherHasWork = kept.length > 0 || phaseSlots[other] !== undefined;
+
+    // Phase 2 is the continuation of the Phase 1 leg in the same chat, so a cleared Phase 2 restarts
+    // where a freshly entered one would: linked to that run, holding a copy of its context. Clearing
+    // Phase 1 starts from nothing, which is what a Phase 1 leg starts from.
+    const parent = phase === "phase2" ? phaseSlots.phase1 : undefined;
+
+    // The client is a property of the chat, not of a leg, so it survives while the other leg is
+    // still working on it. The sub-service is Phase 2's own and goes with Phase 2. An emptied chat
+    // keeps neither: "the client name was wrong" is one of the reasons to clear in the first place.
+    const profile = { ...state.clientProfile };
+    if (phase === "phase2") delete profile[SUB_SERVICE_FACT];
+
+    set({
+      messages: kept,
+      phaseSlots,
+      runId: null,
+      sourceRunId: parent?.runId ?? null,
+      context: parent ? { ...parent.context } : {},
+      clientProfile: otherHasWork ? profile : {},
+      currentIndex: 0,
+      rerunReturnIndex: null,
+      rerunReturnIntake: null,
+      intake: null,
+      subStep: null,
+      editSeed: null,
+      activeStatus: null,
+      progress: 0,
+      navStatus: "Ready",
+      pendingStartAssetId: null,
+      // The chat carries on while the other leg holds something; with nothing left it goes back to
+      // the welcome screen, where the phase and the stage to start at are chosen.
+      started: otherHasWork,
+    });
+
+    if (!otherHasWork) {
+      // Written back over the history row rather than deleted — see `persistNow`, which writes a
+      // chat that already has a row even once it is no longer `started`, so an emptied chat does
+      // not come back on the next reload.
+      schedulePersist();
+      return;
+    }
+
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text: `${PHASE_META[phase].label} cleared — starting again at Stage 01. ${PHASE_META[other].label} is untouched: its cards, its approved assets and its run are all still here, and the toggle brings them back.`,
+    });
+
+    if (phase === "phase2") {
+      void beginPhase2(get, set);
+      return;
+    }
+    beginStage(get, set, 0);
+  },
+
   loadSession: async (sessionId) => {
     if (get().isLoadingSession) return;
     // Opening the chat that is already open would only discard unsaved in-flight edits for it.
@@ -3800,14 +3947,9 @@ chooseHeadlines: async (messageId, ids) => {
     );
     // A suggestion batch still in flight for this stage is the same waste as the stream: nothing
     // will read its result, because the gate that asked for it is about to become history.
-    for (const m of state.messages) {
-      if (!own(m) || m.kind !== "headline-choice") continue;
-      const pending = headlineRequests.get(m.id);
-      if (pending) {
-        pending.abort(new DOMException("Stopped by the operator", "AbortError"));
-        headlineRequests.delete(m.id);
-      }
-    }
+    abortHeadlineBatches(
+      state.messages.filter((m) => own(m) && m.kind === "headline-choice").map((m) => m.id),
+    );
 
     set({
       messages: state.messages.map((m) => {

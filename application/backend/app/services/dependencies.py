@@ -49,7 +49,13 @@ from app.services.generation import CONFIGS_BY_PHASE, DEFAULT_PHASE, _SCHEMAS_DI
 # --------------------------------------------------------------------------------------
 WRITES: dict[str, tuple[str, ...]] = {
     "icp": ("icp",),
-    "cro": ("cro_audit_findings", "cro_rewritten_copy", "cro_locked_sections", "cro_terminology_map"),
+    "cro": (
+        "cro_audit_findings",
+        "cro_rewritten_copy",
+        "cro_locked_sections",
+        "cro_terminology_map",
+        "cro_client_settings",
+    ),
     "pillar_page": ("pillar_page_html", "design_tokens", "seo_pillar_page_copy"),
     "funnel": ("funnel_stages",),
     "funnel_hub_media": ("funnel_hub_media",),

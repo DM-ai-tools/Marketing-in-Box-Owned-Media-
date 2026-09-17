@@ -39,12 +39,68 @@ const SUB_KEY_LABELS: Record<string, Record<string, string[]>> = {
       "word for the first commitment step",
     ],
   },
+
+  /** How the client sells, resolved once on the CRO stage so a later run for another service does
+   * not have to settle it again. See `app/services/cro_settings.py`, which writes the document.
+   *
+   * Unlike the terminology map, this document is not the model's prose — the server composes it,
+   * one setting per line as `- field_id = **value**`, so the field_id spelling below is an exact
+   * match rather than a hopeful one. The human spellings after it are the retrofit path: a CRO
+   * stage approved *before* this key existed has no settings row, so the lookup falls back to the
+   * producing stage's own document, and a rewrite that restates its INPUTS block states these under
+   * their labels. Finding nothing there is fine and expected — the field is then asked, which is
+   * exactly what every run did before this. */
+  cro_client_settings: {
+    client_industry: ["client_industry", "client industry"],
+    sub_vertical_niche: ["sub_vertical_niche", "sub-vertical / niche", "sub-vertical"],
+    buyer_type: ["buyer_type", "buyer type"],
+    sales_motion: ["sales_motion", "sales motion"],
+    geo_mode: ["geo_mode", "geo mode"],
+    region_location: ["region_location", "region / location(s)", "region / location"],
+    claim_substantiation_tier: ["claim_substantiation_tier", "claim substantiation tier"],
+    pricing_disclosure_mode: ["pricing_disclosure_mode", "pricing disclosure mode"],
+    pricing_facts: ["pricing_facts", "pricing facts"],
+    testimonials_before_after_permitted: [
+      "testimonials_before_after_permitted",
+      "testimonials & before/after permitted in this jurisdiction",
+      "testimonials & before/after permitted",
+    ],
+    word_for_the_reader: ["word_for_the_reader", "word for the reader"],
+    word_for_the_thing_being_chosen_between: [
+      "word_for_the_thing_being_chosen_between",
+      "word for the thing being chosen between",
+    ],
+    word_for_the_first_commitment_step: [
+      "word_for_the_first_commitment_step",
+      "word for the first commitment step",
+    ],
+    word_for_the_business: ["word_for_the_business", "word for the business"],
+    words_the_buyer_uses_for_the_outcome: [
+      "words_the_buyer_uses_for_the_outcome",
+      "words the buyer uses for the outcome",
+    ],
+    words_to_avoid: ["words_to_avoid", "words to avoid (internal jargon, banned phrases)", "words to avoid"],
+    tone_of_voice: ["tone_of_voice", "tone of voice"],
+    proof_assets_available: ["proof_assets_available", "proof assets available"],
+    primary_conversion_goal: ["primary_conversion_goal", "primary conversion goal"],
+    secondary_conversion_goal: ["secondary_conversion_goal", "secondary conversion goal"],
+  },
 };
 
-/** A terminology entry is a word or short phrase. Anything longer than this is the extractor having
- * matched a sentence *about* the term rather than the term, and is discarded — falling back to
- * asking the operator beats filling the field with prose. */
-const MAX_ENTRY_LENGTH = 120;
+/** The longest an extracted entry may be, per map-shaped key.
+ *
+ * A terminology entry is a word or short phrase, and anything longer is the extractor having matched
+ * a sentence *about* the term rather than the term. It is discarded — falling back to asking the
+ * operator beats filling the field with prose.
+ *
+ * Client settings get a higher ceiling because they hold different sized things: still short (an
+ * enum choice, a region, a conversion goal), but "Book a free 30-minute strategy call, routed to the
+ * contact form" is a legitimate answer that 120 would throw away. What the limit is really there to
+ * catch is a whole pasted paragraph — a pricing schedule, a proof-asset inventory — and both
+ * ceilings still catch that, which is the intended outcome: those are the two settings that
+ * genuinely might not carry from one service to the next, so asking is right. */
+const MAX_ENTRY_LENGTH: Record<string, number> = { cro_client_settings: 400 };
+const DEFAULT_MAX_ENTRY_LENGTH = 120;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -72,7 +128,7 @@ function normalize(text: string): string {
  * fallback for a row written as plain prose. Either way an explicit `=`/`:` after the label is
  * required — that, rather than the label alone, is what distinguishes the map's own statement of a
  * term from the thousands of later sentences that merely use the word. */
-function valueForLabel(text: string, labels: string[]): string | undefined {
+function valueForLabel(text: string, labels: string[], maxLength: number): string | undefined {
   const haystack = normalize(text);
   const boundary = "(?:^|[|.·•;\\-\\s])\\s*";
   const assignment = "\\s*[=:]\\s*";
@@ -82,7 +138,7 @@ function valueForLabel(text: string, labels: string[]): string | undefined {
       const match = new RegExp(`${boundary}${escapeRegExp(label)}${assignment}${pattern}`, "i").exec(haystack);
       if (!match) continue;
       const value = clean(match[1]);
-      if (value && value.length <= MAX_ENTRY_LENGTH) return value;
+      if (value && value.length <= maxLength) return value;
     }
   }
   return undefined;
@@ -107,5 +163,6 @@ export function extractSubKey(contextKey: string, subKey: string, text: string):
   // The map lives in one row/section of a long document, so that row is searched first: "Reader ="
   // is specific inside the terminology row and merely likely everywhere else in an 80KB rewrite.
   const row = text.split("\n").find((line) => /terminolog/i.test(line));
-  return (row && valueForLabel(row, labels)) || valueForLabel(text, labels);
+  const max = MAX_ENTRY_LENGTH[contextKey] ?? DEFAULT_MAX_ENTRY_LENGTH;
+  return (row && valueForLabel(row, labels, max)) || valueForLabel(text, labels, max);
 }

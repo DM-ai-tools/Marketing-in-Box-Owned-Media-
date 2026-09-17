@@ -43,15 +43,20 @@ export interface SaveStageResponse {
   saved_at: string;
 }
 
+/** `answers` is the intake behind this output, sent so the server can publish what it composes from
+ * the answers rather than from the document — today, the CRO stage's client-level settings (see
+ * `app/services/cro_settings.py`). Optional because a stage approved from a pasted draft genuinely
+ * has none, which the server treats as "nothing to publish" rather than as an empty answer set. */
 export async function saveStageOutput(
   runId: string,
   assetId: string,
   content: string,
+  answers?: Record<string, string>,
 ): Promise<SaveStageResponse> {
   const res = await fetch(`/api/pipeline/runs/${runId}/stages/${assetId}/save`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(answers ? { content, answers } : { content }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -732,13 +737,23 @@ export async function fetchSlideDeck(
   return { blob: await res.blob(), filename: match?.[1] ?? "webinar-slides.pptx" };
 }
 
+// Chat sessions are per-account: every route below resolves the owner from the session cookie
+// (`app/routers/chat_sessions.py`), so these are the calls that must actually carry it.
+// `credentials: "include"` is stated rather than left to the default for the same reason
+// `authApi.ts` states it: same-origin's implicit default is correct only while the app and the API
+// share an origin, and a deployment that splits them would otherwise turn every one of these into
+// a silent 401 — a sidebar that is empty because the cookie never arrived looks exactly like a
+// sidebar that is empty because the account is new.
+const withSession: RequestInit = { credentials: "include" };
+
 export async function listChatSessions(): Promise<ChatSessionSummary[]> {
-  const res = await fetch("/api/chat-sessions");
+  const res = await fetch("/api/chat-sessions", withSession);
   return unwrap(res, "List chat sessions");
 }
 
 export async function createChatSession(title = "New chat"): Promise<ChatSessionDetail> {
   const res = await fetch("/api/chat-sessions", {
+    ...withSession,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
@@ -747,7 +762,7 @@ export async function createChatSession(title = "New chat"): Promise<ChatSession
 }
 
 export async function getChatSession(sessionId: string): Promise<ChatSessionDetail> {
-  const res = await fetch(`/api/chat-sessions/${sessionId}`);
+  const res = await fetch(`/api/chat-sessions/${sessionId}`, withSession);
   return unwrap(res, "Load chat session");
 }
 
@@ -756,6 +771,7 @@ export async function updateChatSession(
   payload: { title?: string; state: Record<string, unknown> },
 ): Promise<ChatSessionDetail> {
   const res = await fetch(`/api/chat-sessions/${sessionId}`, {
+    ...withSession,
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -764,7 +780,7 @@ export async function updateChatSession(
 }
 
 export async function deleteChatSession(sessionId: string): Promise<void> {
-  const res = await fetch(`/api/chat-sessions/${sessionId}`, { method: "DELETE" });
+  const res = await fetch(`/api/chat-sessions/${sessionId}`, { ...withSession, method: "DELETE" });
   if (!res.ok && res.status !== 204) {
     const detail = await res.text().catch(() => "");
     throw new Error(`Delete chat session failed (${res.status}): ${detail || res.statusText}`);
@@ -803,7 +819,8 @@ export interface SourceRunSummary {
  * than blocking the run from starting at all.
  */
 export async function listSourceRuns(): Promise<SourceRunSummary[]> {
-  const res = await fetch("/api/pipeline/source-runs");
+  // Signed-in only, and scoped to this account's own runs — see `list_source_runs`.
+  const res = await fetch("/api/pipeline/source-runs", withSession);
   if (!res.ok) {
     console.warn(`Could not list source runs (${res.status})`);
     return [];

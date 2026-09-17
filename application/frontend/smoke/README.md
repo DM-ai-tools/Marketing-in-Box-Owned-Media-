@@ -14,6 +14,9 @@ superseded, interrupted, failed, refining — without a browser or a new depende
 - `shell.tsx` — the view bar, the sample transcript, the deliverables grid and the nav pills,
   plus the assertions that the sample fixtures really do drive the live extractors (the palette
   swatches must come from the document's prose, never from a fenced stylesheet).
+- `clear.tsx` — "Clear chat" and the delete warning. Mostly about scope: clearing Phase 2 must
+  leave Phase 1's cards, its parked slot and its run exactly where they are, and the button has to
+  name the leg it would clear rather than claiming the chat.
 - `plan.tsx` — the Plan of Action tree, its layout, the diagram and the standalone HTML export.
   The losslessness check there is word-multiset containment rather than line matching, and the
   comment above it records why: two weaker versions of that check each let a real data-loss bug

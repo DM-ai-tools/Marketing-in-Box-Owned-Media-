@@ -1,8 +1,15 @@
+import { useEffect, useState } from "react";
 import { AccountMenu } from "../auth/AccountMenu";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { UsagePill } from "../components/UsagePill";
 import { useUiStore } from "../store/uiStore";
 import { PHASE_META, totalStagesFor } from "./pipelineData";
-import { messagesInPhase, usePipelineStore } from "./pipelineStore";
+import {
+  messagesInPhase,
+  selectCanClearPhase,
+  selectOtherPhaseHasWork,
+  usePipelineStore,
+} from "./pipelineStore";
 import type { NavStatus } from "./pipelineStore";
 
 const STATUS_STYLE: Record<NavStatus, { dot: string; text: string; blink?: boolean }> = {
@@ -94,6 +101,109 @@ function PaneSwitch() {
   );
 }
 
+function BroomIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 20l5-5M9 15l-2-2 7-7 2 2-7 7zM14 6l4-4M15 15l5 5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** "Clear chat" — empty the leg on screen and start that phase again at Stage 01.
+ *
+ * Distinct from "New chat" in the history sidebar, which *keeps* the chat it leaves and opens a
+ * second row beside it: this is what an operator reaches for when the run itself went wrong — the
+ * wrong client name three stages back, a Phase 2 leg built on the wrong parent run — and they want
+ * the pipeline back at the beginning rather than a half-finished twin in their history.
+ *
+ * **It clears one phase, and the button says which.** A chat carries both legs, and the ordinary
+ * shape of the work is a finished Phase 1 run with Phase 2 under way on top of it — so clearing
+ * Phase 2 must not touch the fifteen assets it inherits from. While the other leg holds something
+ * the button reads "Clear Phase 2" and the dialog names what stays; only when this is the whole of
+ * the chat does it read "Clear chat", because only then is that what it does.
+ *
+ * It lives in the nav, not in the sidebar, because the sidebar is a drawer below `xl`: the control
+ * that restarts a run has to be reachable from the run.
+ *
+ * The confirm is a modal, and the difference from "Stop this asset" (an inline one click away) is
+ * the size of the mistake. Stopping abandons work in flight; this takes a whole leg's transcript,
+ * and nothing in this app has an undo. So the dialog says what goes, says what stays, and opens
+ * with Cancel focused.
+ */
+function ClearChatButton() {
+  const canClear = usePipelineStore(selectCanClearPhase);
+  const otherPhaseHasWork = usePipelineStore(selectOtherPhaseHasWork);
+  const clearPhase = usePipelineStore((s) => s.clearPhase);
+  const phase = usePipelineStore((s) => s.phase);
+  const sessionTitle = usePipelineStore((s) => s.sessionTitle);
+  const setMobilePane = useUiStore((s) => s.setMobilePane);
+  // Withdrawn while the sample transcript is up. What is on screen then is fixtures, and the run
+  // this would clear is the operator's real one — the single thing the sample mode exists to keep
+  // separate. The view bar's own "Back to my transcript" is the way back to a screen where the
+  // button means what it says.
+  const demoMode = useUiStore((s) => s.demoMode);
+  const [confirming, setConfirming] = useState(false);
+
+  const other = phase === "phase1" ? "phase2" : "phase1";
+  const label = otherPhaseHasWork ? `Clear ${PHASE_META[phase].label}` : "Clear chat";
+
+  // A leg that empties itself under the dialog — cleared in another tab, or a session that finished
+  // loading into a blank one — would leave the question up with nothing behind it.
+  useEffect(() => {
+    if (!canClear || demoMode) setConfirming(false);
+  }, [canClear, demoMode]);
+
+  if (!canClear || demoMode) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        title={`Clear ${PHASE_META[phase].label} and start it again from Stage 01`}
+        className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 text-[0.76rem] font-medium text-[var(--fg-muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--fg)] sm:h-8"
+      >
+        <BroomIcon />
+        {/* Icon-only where the nav is already competing for every pixel with the pane switch. */}
+        <span className="hidden md:inline">{label}</span>
+        <span className="sr-only md:hidden">{label}</span>
+      </button>
+
+      <ConfirmDialog
+        open={confirming}
+        title={otherPhaseHasWork ? `Clear ${PHASE_META[phase].label}?` : "Clear this chat?"}
+        message={
+          otherPhaseHasWork
+            ? `${PHASE_META[phase].label} goes back to Stage 01 and starts again from its first question. Its cards, the answers given and any draft nobody saved are gone, and there is no undo.`
+            : `“${sessionTitle}” is emptied and the pipeline goes back to Stage 01. The transcript, the answers given and any draft nobody saved are gone, and there is no undo.`
+        }
+        detail={
+          otherPhaseHasWork
+            ? `${PHASE_META[other].label} is not touched — its cards, its approved assets and its run all stay, and the phase toggle brings them back. Nothing already approved in ${PHASE_META[phase].label} is deleted either: approved assets stay in the Context Store against their run.`
+            : "Assets you already approved are not deleted: they stay in the Context Store against their run, and this chat keeps its place in your history."
+        }
+        confirmLabel={label}
+        cancelLabel="Keep it"
+        footnote="This cannot be undone."
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          clearPhase();
+          // Below `lg` the panes are switched, and the restarted stage's first question is on the
+          // chat pane — the diagram behind it now has nothing to show.
+          setMobilePane("chat");
+        }}
+      />
+    </>
+  );
+}
+
 /** Whose run this is, and how far it has got.
  *
  * Two facts that were only inferable before: the client's name lived in the intake answers and
@@ -177,6 +287,7 @@ export function TopNav() {
 
       <RunPills />
       <UsagePill />
+      <ClearChatButton />
 
       <PaneSwitch />
 

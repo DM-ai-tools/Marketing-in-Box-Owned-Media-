@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AssetReader } from "./pipeline/AssetReader";
+import { ChatDeleteDialog } from "./pipeline/ChatDeleteDialog";
 import { ChatHistorySidebar } from "./pipeline/ChatHistorySidebar";
 import { FaultDialog } from "./pipeline/FaultDialog";
 import { GenerationStream } from "./pipeline/GenerationStream";
@@ -110,6 +111,9 @@ function App() {
     <div className="flex h-[100dvh] w-full overflow-hidden bg-[var(--bg)] text-[var(--fg)]">
       {/* Mounted at the root so an account-level failure covers the whole app, not one pane. */}
       <FaultDialog />
+      {/* Root-mounted for a different reason: the sidebar that raises it is a drawer below `xl`,
+          and a transformed ancestor would become the containing block for the fixed overlay. */}
+      <ChatDeleteDialog />
 
       {/* Docked from `xl` up, where a third column still leaves the transcript a workable width;
           below that the same sidebar is reachable from the nav as a drawer. */}

@@ -208,9 +208,10 @@ STAGE_CONFIGS: dict[str, StageConfig] = {
 #
 # Those files are overwhelmingly the Phase-1 prompt re-pointed at a sub-service: Lead Magnet, Blog
 # and SMS are byte-identical to their Phase-1 counterparts, Funnel differs by one INPUTS label,
-# Funnel Hub by one label, Content Marketing by one label. Only Pillar Page genuinely differs —
-# Phase 2 uses the standalone v1.0 design prompt, which has no keyword/competitor-benchmark block,
-# where Phase 1 uses the merged v2.0 that does.
+# Funnel Hub by one label, Content Marketing by one label. Two genuinely differ — Pillar Page, where
+# Phase 2 uses the standalone v1.0 design prompt with no keyword/competitor-benchmark block where
+# Phase 1 uses the merged v2.0 that has one, and CRO, which carries the SCOPE LOCK section that
+# holds the page to the sub-service (see that override, and `tests/test_phase2_cro_scope.py`).
 #
 # So a phase is expressed as a *delta* over the Phase-1 config rather than as a second full table.
 # The alternative — a duplicate `<asset>_phase2.json` field registry per stage — would mean seven
@@ -240,6 +241,29 @@ class Phase2Override:
 _PHASE2_PROMPT_SUBDIR = "Phase2"
 
 PHASE2_OVERRIDES: dict[str, Phase2Override] = {
+    # Phase 2's own CRO stage, and the reason it exists: the Pillar Page prompt designs the copy it
+    # is handed and has no service input of any kind, so the copy *is* the subject of the page. With
+    # no CRO stage here that copy could only be the parent Phase 1 run's rewrite of the client's
+    # headline service — which produced a Social Media Marketing page from a run the operator had
+    # carefully pointed at Meta Ads — or a document pasted in by hand.
+    #
+    # Nothing is dropped: the file opens "works for any industry, any sub-service, any page scope"
+    # and every one of its inputs is one this stage still asks. What the run answers for itself is
+    # the sub-service, the NEW PAGE sentinels, and the client-level settings inherited from the
+    # parent run (see `app/services/cro_settings.py` and the `cro` delta in the frontend's
+    # `data/phase2Catalog.ts`).
+    #
+    # What the file adds is a **SCOPE LOCK** section Phase 1's does not have, and it is load-bearing
+    # rather than decorative. Three of this stage's strategy inputs are written at the *parent's*
+    # scope by construction — the inherited ICP document, plus Proof Assets Available and the outcome
+    # words, which come from the parent run's `cro_client_settings`. Handed a parent-scope ICP and a
+    # one-line sub-service name, a model writes the page most of its input describes, and the result
+    # is the Social Media Marketing page this stage exists to prevent. The lock names the input that
+    # decides the subject, bars the parent's term from the H1, title, keyword target and offer name,
+    # and says what to keep, re-point and discard in each inherited document. The two files were
+    # byte-identical before it landed, so re-copying Phase 1's over this one breaks nothing anything
+    # else would notice — `tests/test_phase2_cro_scope.py` is what notices.
+    "cro": Phase2Override("Master_Prompt_Universal_Page_Rewrite_v1_phase2.md"),
     # The one real divergence. Phase 2's file is the standalone v1.0 design prompt: it designs the
     # page from approved copy and nothing else, so the whole "Search & competitive benchmark" block
     # is absent from its INPUTS — no head term, no cluster terms, no cluster links, no competitor

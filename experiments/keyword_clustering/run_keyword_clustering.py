@@ -54,11 +54,11 @@ DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 # The prompt's Step 4 preserves each seed's exact / phrase / related / broad keywords. Those are
 # Google-Ads match classes, and DataForTopicClusttering Labs has one endpoint per class — this is the mapping.
 MATCH_CLASS_ENDPOINTS = {
-    "phrase": "DataForTopicClusttering_labs/google/keyword_suggestions/live",
-    "related": "DataForTopicClusttering_labs/google/related_keywords/live",
-    "broad": "DataForTopicClusttering_labs/google/keyword_ideas/live",
+    "phrase": "dataforseo_labs/google/keyword_suggestions/live",
+    "related": "dataforseo_labs/google/related_keywords/live",
+    "broad": "dataforseo_labs/google/keyword_ideas/live",
 }
-DataForTopicClusttering_BASE = "https://api.DataForTopicClusttering.com/v3/"
+DataForTopicClusttering_BASE = "https://api.dataforseo.com/v3/"
 AHREFS_BASE = "https://api.ahrefs.com/v3/"
 
 MODEL = "claude-opus-5"
@@ -267,7 +267,7 @@ class DataForTopicClustteringClient:
     def overview(self, keywords: list[str], config: RunConfig) -> dict[str, tuple[int | None, int | None]]:
         """Volume/difficulty for the seeds themselves — the `exact` match class."""
         items = self._post(
-            "DataForTopicClusttering_labs/google/keyword_overview/live",
+            "dataforseo_labs/google/keyword_overview/live",
             {
                 "keywords": keywords,
                 "location_name": config.location_name,

@@ -82,7 +82,6 @@ export function ChatHistorySidebar() {
   const loaded = useChatSessionsStore((s) => s.loaded);
   const error = useChatSessionsStore((s) => s.error);
   const refresh = useChatSessionsStore((s) => s.refresh);
-  const remove = useChatSessionsStore((s) => s.remove);
 
   const activeSessionId = usePipelineStore((s) => s.sessionId);
   const isLoadingSession = usePipelineStore((s) => s.isLoadingSession);
@@ -99,6 +98,13 @@ export function ChatHistorySidebar() {
     closeSidebar();
     setMobilePane("chat");
   };
+
+  /** The trash button asks before it deletes, and asks by name: a deletion takes a whole
+   * engagement's transcript with it, the button sits one mis-aimed tap from the row that *opens*
+   * the chat, and "delete this chat" beside a list of six is not enough to check the aim against.
+   * The dialog itself is mounted at the root — see `pendingChatDelete` in `uiStore` for why it
+   * cannot be rendered from in here. */
+  const askDeleteChat = useUiStore((s) => s.askDeleteChat);
 
   useEffect(() => {
     if (!loaded) void refresh();
@@ -224,13 +230,10 @@ export function ChatHistorySidebar() {
                   </button>
                   <button
                     type="button"
-                    aria-label="Delete chat"
+                    aria-label={`Delete chat: ${s.title}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      // Clear the pane first, discarding the pending autosave: flushing it would
-                      // race the DELETE and either resurrect the row or 404 against it.
-                      if (active) startNewChat({ discardUnsaved: true });
-                      void remove(s.id);
+                      askDeleteChat({ id: s.id, title: s.title });
                     }}
                     className="hover-reveal absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-[var(--fg-faint)] transition-opacity hover:bg-[var(--border)] hover:text-[var(--fg)]"
                   >
@@ -242,6 +245,7 @@ export function ChatHistorySidebar() {
           </ul>
         )}
       </div>
+
     </div>
   );
 }

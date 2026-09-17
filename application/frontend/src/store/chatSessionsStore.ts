@@ -15,6 +15,11 @@ interface ChatSessionsState {
   error: string | null;
   refresh: () => Promise<void>;
   remove: (sessionId: string) => Promise<void>;
+  /** Drop the list back to its pre-fetch state. Called when the signed-in account changes — the
+   * titles here are one user's client names, and they must not survive into another's sidebar
+   * while `refresh()` is still in flight. Resets `loaded` too, so the sidebar shows its loading
+   * state rather than "no previous chats yet" in that window. */
+  clear: () => void;
 }
 
 export const useChatSessionsStore = create<ChatSessionsState>((set, get) => ({
@@ -48,4 +53,6 @@ export const useChatSessionsStore = create<ChatSessionsState>((set, get) => ({
       set({ sessions: prev, error: err instanceof Error ? err.message : String(err) });
     }
   },
+
+  clear: () => set({ sessions: [], loading: false, loaded: false, error: null }),
 }));

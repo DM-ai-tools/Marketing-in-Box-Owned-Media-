@@ -9,7 +9,7 @@ import path from "node:path";
 import { build } from "vite";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const entries = ["smoke.tsx", "card.tsx", "shell.tsx", "plan.tsx", "gate.tsx", "stop.tsx"];
+const entries = ["smoke.tsx", "card.tsx", "shell.tsx", "plan.tsx", "gate.tsx", "stop.tsx", "clear.tsx", "phase2cro.tsx"];
 
 let failed = false;
 
