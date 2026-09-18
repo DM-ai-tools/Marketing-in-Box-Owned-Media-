@@ -701,6 +701,29 @@ touches nothing approved.
 on `transform`, which makes it the containing block for any `position: fixed` descendant — the
 warning would be laid out inside an 85vw panel instead of over the app.
 
+### "Other: specify" is a question, not an answer
+
+Two enum fields offer a choice that asks the operator to name something — ICP's `company_type`
+("Other: specify") and the compliance field every long-form asset carries ("Other regulated field:
+specify"). Clicking either used to answer the question with those literal words: "Other: specify"
+was filed as the client's company type and carried into the prompt's INPUTS block. There was nowhere
+to type the real answer, because the free-text bar is hidden for `enum_choice` — right for a question
+with four buttons under it, wrong for the fourth one.
+
+`lib/specifyChoice.ts` detects them on the trailing word (the prompts own the phrasing, so it is not
+ours to normalise) and `QuestionWidget` opens an inline box under the pills instead of answering.
+
+- **The prefix is kept in the answer** — "Other regulated field: Gambling", not "Gambling". The
+  answer is read by people who cannot see the widget: in the transcript, where the bare words read
+  as a fifth option nobody offered, and in INPUTS, where the compliance field needs "this client is
+  regulated" as much as it needs "under gambling law".
+- **The box is under the pills, not instead of them.** "Other" is a choice operators back out of,
+  and the other three still answer on one click.
+- **`choices` has exactly one consumer**, this widget — nothing validates an answer against the
+  list, on either side of the wire, so a typed value needs no schema change. The sweep in
+  `smoke/smoke.tsx` is what notices a new choice worded "Other — please specify" that the rule
+  misses, since there is no second place to catch it.
+
 - **"Done" in the pipeline diagram comes from the transcript, not from `currentIndex`.** The two
   were the same thing only while the run was strictly sequential; `approvedAssetIds` is the
   authority now. Jumping from stage 02 to stage 09 used to mark seven unbuilt stages "✓ Saved", with

@@ -11,6 +11,9 @@ import { StreamProgress } from "../src/pipeline/StreamProgress";
 import { HtmlPreview, HtmlPreviewDialog } from "../src/components/HtmlPreview";
 import { PreviewStrip } from "../src/components/AssetDocumentView";
 import htmlPreviewSource from "../src/components/HtmlPreview.tsx?raw";
+import { QuestionWidget } from "../src/components/QuestionWidget";
+import { ASSET_BY_ID, ASSET_CATALOG } from "../src/data/assetCatalog";
+import { composeSpecifiedAnswer, specifyPrefix } from "../src/lib/specifyChoice";
 import { parseAssetDocument } from "../src/lib/assetDocument";
 import { summariseAsset } from "../src/lib/assetSummary";
 
@@ -238,6 +241,44 @@ const PAGE = [
   ok("source: the sandbox never grants same-origin", !sandboxLine.includes("allow-same-origin"), sandboxLine);
   ok("source: the reasoning is recorded next to the decision", htmlPreviewSource.includes("own origin"),
     "expected the sandbox rationale to survive edits");
+}
+
+/* ---------- "Other: specify" has to ask, not answer ----------
+ *
+ * Clicking that pill used to file the words "Other: specify" as the client's company type and carry
+ * them into the prompt's INPUTS block. The fix is a box behind the pill, and a box behind a click is
+ * not reachable from a first paint — so what is asserted here is the part that decides *which*
+ * pills get one, plus the answer those pills compose. The catalog sweep is the drift guard: a new
+ * choice worded "Other - please specify" that this rule missed would put the instruction back into
+ * the brief, and nothing else in the app looks at `choices`.
+ */
+{
+  const choices = ASSET_CATALOG.flatMap((a) => a.fields).flatMap((f) => f.choices ?? []);
+  const specify = choices.filter((c) => /specify/i.test(c));
+  const ordinary = choices.filter((c) => !/specify/i.test(c));
+
+  ok("specify: the catalog still has some", specify.length >= 2, JSON.stringify(specify));
+  ok("specify: every one of them opens a box", specify.every((c) => specifyPrefix(c) !== null), JSON.stringify(specify.filter((c) => !specifyPrefix(c))));
+  // The other side of the same rule: an ordinary choice must still answer on one click.
+  ok("specify: ordinary choices answer directly", ordinary.every((c) => specifyPrefix(c) === null), JSON.stringify(ordinary.filter((c) => specifyPrefix(c))));
+
+  ok("specify: ICP's wording", specifyPrefix("Other: specify") === "Other");
+  ok("specify: the compliance wording keeps its own words", specifyPrefix("Other regulated field: specify") === "Other regulated field");
+  ok("specify: a bare one still labels itself", specifyPrefix("Specify") === "Other");
+  ok("specify: an ordinary choice is left alone", specifyPrefix("Product manufacturer") === null);
+
+  // The prefix is kept: "Gambling" alone does not say the client is regulated, and that half of the
+  // answer is the half the compliance field exists for.
+  ok("specify: the answer carries both halves", composeSpecifiedAnswer("Other regulated field: specify", " Gambling ") === "Other regulated field: Gambling");
+  ok("specify: company type reads as an option", composeSpecifiedAnswer("Other: specify", "Non-profit association") === "Other: Non-profit association");
+
+  const field = ASSET_BY_ID.icp.fields.find((f) => f.field_id === "company_type")!;
+  const html = renderToStaticMarkup(<QuestionWidget field={field} onChoose={() => {}} onSkip={() => {}} />);
+  ok("specify: the pill is still offered", html.includes("Other: specify"), html.slice(0, 600));
+  ok("specify: the other options are still there", html.includes("Product manufacturer"));
+  // Behind the click, not beside it — four pills and a text box on screen at once reads as a
+  // question with five answers.
+  ok("specify: the box is not open before it is asked for", !html.includes("Use this"), html.slice(0, 900));
 }
 
 console.log(`\n${pass} passed, ${fails.length} failed`);
