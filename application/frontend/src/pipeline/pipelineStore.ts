@@ -320,13 +320,23 @@ export interface PipelineMessage {
    * has to read only the leg the operator is currently in. Absent on messages written before
    * phases were stamped; those chats only ever had one, so an unstamped card is always current. */
   phase?: PipelinePhase;
+  /** Phase 2 track this card belongs to. Legacy cards without this value belong to the active track. */
+  trackId?: string;
   createdAt: number;
 }
 
 /** The cards belonging to one leg of the chat. Unstamped messages predate per-phase stamping and
  * come from single-phase chats, so they match whichever phase is asked for. */
-export function messagesInPhase(messages: PipelineMessage[], phase: PipelinePhase): PipelineMessage[] {
-  return messages.filter((m) => (m.phase ?? phase) === phase);
+export function messagesInPhase(messages: PipelineMessage[], phase: PipelinePhase, trackId?: string | null): PipelineMessage[] {
+  return messages.filter(
+    (m) =>
+      (m.phase ?? phase) === phase &&
+      (phase !== "phase2" || !trackId || !m.trackId || m.trackId === trackId),
+  );
+}
+
+function messagesInCurrentTrack(state: Pick<PipelineState, "messages" | "phase" | "activePhase2TrackId">): PipelineMessage[] {
+  return messagesInPhase(state.messages, state.phase, state.phase === "phase2" ? state.activePhase2TrackId : null);
 }
 
 /** The field the intake is waiting on, wherever it is defined.
@@ -366,6 +376,10 @@ interface PipelineState {
   /** The other phase's parked cursor, so switching back resumes rather than restarts. Empty until
    * the operator has switched at least once. */
   phaseSlots: PhaseSlots;
+  /** Independent Phase 2 child runs selected in this chat. */
+  phase2Tracks: Record<string, Phase2Track>;
+  activePhase2TrackId: string | null;
+  phase2TrackSlots: Record<string, PhaseSlot>;
   runId: string | null;
   /** Phase 2 only: the Phase 1 run this one builds on, chosen before stage 01.
    *
@@ -466,6 +480,10 @@ interface PipelineState {
   chooseSourceRun: (messageId: string, runId: string | null) => Promise<void>;
   /** Re-list the Phase 1 runs after a failed load. */
   retrySourceRuns: (messageId: string) => Promise<void>;
+  /** Switch the active Phase 2 child run without leaving this chat. */
+  selectPhase2Track: (trackId: string) => void;
+  /** Add one Phase 2 child run to an existing workspace. */
+  addPhase2Track: (label: string) => Promise<void>;
   /** Continue this chat in the other phase, parking the outgoing one in `phaseSlots`. */
   setPhase: (phase: PipelinePhase) => void;
   /** `discardUnsaved` skips the final write for the chat being left — used when that chat is
@@ -564,6 +582,15 @@ interface PhaseSlot {
   progress: number;
 }
 
+export interface Phase2Track {
+  id: string;
+  label: string;
+  runId: string;
+  sourceRunId: string | null;
+  status: "active" | "queued" | "complete" | "error";
+  error?: string;
+}
+
 type PhaseSlots = Partial<Record<PipelinePhase, PhaseSlot>>;
 
 /** What actually gets persisted to `chat_sessions.state` — a plain-data mirror of the store,
@@ -591,6 +618,9 @@ interface PipelineSnapshot {
   intake: SerializedIntake | null;
   /** Absent on chats that never switched phase, and on every chat saved before a chat could. */
   phaseSlots?: PhaseSlots;
+  phase2Tracks?: Record<string, Phase2Track>;
+  activePhase2TrackId?: string | null;
+  phase2TrackSlots?: Record<string, PhaseSlot>;
 }
 
 function serializeSnapshot(state: PipelineState): PipelineSnapshot {
@@ -611,6 +641,9 @@ function serializeSnapshot(state: PipelineState): PipelineSnapshot {
     subStep: state.subStep,
     intake: serializeIntake(state.intake),
     phaseSlots: state.phaseSlots,
+    phase2Tracks: state.phase2Tracks,
+    activePhase2TrackId: state.activePhase2TrackId,
+    phase2TrackSlots: state.phase2TrackSlots,
   };
 }
 
@@ -746,6 +779,7 @@ function deriveResumeActivity(
   currentIndex: number,
   snapshotProgress: number,
   phase: PipelinePhase,
+  trackId?: string | null,
 ): { activeStatus: ActiveStatus; navStatus: NavStatus; progress: number } {
   const awaitingInput = {
     activeStatus: "running" as const,
@@ -767,7 +801,7 @@ function deriveResumeActivity(
   // Only this phase's leg. A chat that walked Phase 1 and moved on to Phase 2 still carries every
   // Phase 1 card, and a draft left unsaved back there is history — not something the reopened chat
   // is waiting on.
-  const own = messagesInPhase(messages, phase);
+  const own = messagesInPhase(messages, phase, trackId);
   for (let i = own.length - 1; i >= 0; i--) {
     const m = own[i];
     // Superseded cards are history, not work. A re-run marks every unsaved draft and every intake
@@ -811,7 +845,7 @@ export function selectNeedsResume(s: PipelineState): boolean {
   if (!s.started || s.isLoadingSession || s.activeStatus === "running") return false;
   if (s.currentIndex >= totalStagesFor(s.phase)) return false;
   if (s.intake?.awaitingFieldId) return false;
-  const own = messagesInPhase(s.messages, s.phase);
+  const own = messagesInCurrentTrack(s);
   if (own.some((m) => m.streaming)) return false;
 
   const actionable = own.some((m) => {
@@ -967,7 +1001,14 @@ function push(
   set: (partial: Partial<PipelineState>) => void,
   message: Omit<PipelineMessage, "id" | "createdAt">,
 ): PipelineMessage {
-  const full: PipelineMessage = { phase: get().phase, ...message, id: nextId(), createdAt: Date.now() };
+  const state = get();
+  const full: PipelineMessage = {
+    phase: state.phase,
+    ...(state.phase === "phase2" && state.activePhase2TrackId ? { trackId: state.activePhase2TrackId } : {}),
+    ...message,
+    id: nextId(),
+    createdAt: Date.now(),
+  };
   set({ messages: [...get().messages, full] });
   schedulePersist();
   return full;
@@ -984,7 +1025,7 @@ function push(
 function liveMessage(state: PipelineState, messageId: string): PipelineMessage | undefined {
   const message = state.messages.find((m) => m.id === messageId);
   if (!message) return undefined;
-  return (message.phase ?? state.phase) === state.phase ? message : undefined;
+  return messagesInCurrentTrack(state).some((candidate) => candidate.id === message.id) ? message : undefined;
 }
 
 function patchMessage(
@@ -1129,7 +1170,7 @@ export function selectCanRerun(s: PipelineState): boolean {
  * without reading it. */
 export function selectCanClearPhase(s: PipelineState): boolean {
   if (s.isLoadingSession) return false;
-  if (messagesInPhase(s.messages, s.phase).length > 0) return true;
+  if (messagesInCurrentTrack(s).length > 0) return true;
   return s.intake !== null || s.subStep !== null || s.currentIndex > 0 || s.runId !== null;
 }
 
@@ -1162,7 +1203,7 @@ export function selectCanStop(s: PipelineState): boolean {
   // with nothing behind it — the sub-service card is pushed without an `assetId`, so the supersede
   // pass does not even reach it.
   if (s.intake?.awaitingFieldId === SUB_SERVICE_FIELD.field_id) return false;
-  const own = messagesInPhase(s.messages, s.phase);
+  const own = messagesInCurrentTrack(s);
   if (own.some((m) => !m.superseded && m.kind === "source-run" && m.sourceRunStatus !== "chosen" && m.sourceRunStatus !== "standalone")) {
     return false;
   }
@@ -1176,7 +1217,7 @@ export function selectCanStop(s: PipelineState): boolean {
  * than from `currentIndex` alone: a retry or a refine streams into a card for an *earlier* stage,
  * and the button has to name and stop that one rather than whatever the cursor sits on. */
 export function selectStoppableStage(s: PipelineState): { assetId: string; label: string } | undefined {
-  const own = messagesInPhase(s.messages, s.phase);
+  const own = messagesInCurrentTrack(s);
   const streaming = own.find((m) => m.streaming && m.assetId);
   const assetId =
     streaming?.assetId ??
@@ -1253,6 +1294,70 @@ async function ensureRun(get: () => PipelineState, set: (partial: Partial<Pipeli
   const { run_id } = await createRun(get().clientProfile.client_name || PLACEHOLDER_CLIENT_NAME, get().sourceRunId);
   set({ runId: run_id });
   return run_id;
+}
+
+async function createPhase2Tracks(
+  get: () => PipelineState,
+  set: (partial: Partial<PipelineState>) => void,
+  labels: string[],
+): Promise<void> {
+  const sourceRunId = get().sourceRunId;
+  const firstRunId = await ensureRun(get, set);
+  const created: Phase2Track[] = [
+    {
+      id: firstRunId,
+      label: labels[0],
+      runId: firstRunId,
+      sourceRunId,
+      status: "active",
+    },
+  ];
+
+  const results = await Promise.allSettled(
+    labels.slice(1).map(async (label) => {
+      const { run_id: runId } = await createRun(
+        get().clientProfile.client_name || PLACEHOLDER_CLIENT_NAME,
+        sourceRunId,
+      );
+      return { id: runId, label, runId, sourceRunId, status: "queued" as const };
+    }),
+  );
+  for (const [index, result] of results.entries()) {
+    if (result.status === "fulfilled") {
+      created.push(result.value);
+      continue;
+    }
+    created.push({
+      id: `failed-${labels[index + 1].toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      label: labels[index + 1],
+      runId: "",
+      sourceRunId,
+      status: "error",
+      error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+    });
+  }
+
+  set({
+    phase2Tracks: Object.fromEntries(created.map((track) => [track.id, track])),
+    activePhase2TrackId: firstRunId,
+  });
+  if (created.length > 1) {
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text:
+        `Created ${created.length} independent Phase 2 tracks: ${created.map((track) => track.label).join(", ")}. ` +
+        "This chat is now working on the first track; use the track switcher to move between them without repeating Phase 1.",
+    });
+  }
+  const failed = created.filter((track) => track.status === "error");
+  if (failed.length) {
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text: `Could not create ${failed.map((track) => track.label).join(", ")} tracks. You can add them again after this run finishes.`,
+    });
+  }
 }
 
 function startCreepingProgress(get: () => PipelineState, set: (partial: Partial<PipelineState>) => void): () => void {
@@ -2507,7 +2612,7 @@ function resurfacePendingCard(
   // `intake.awaitingFieldId` is the authoritative answer to "what is this stage waiting on", so the
   // card for that field wins outright. The newest pending card for the stage is the fallback, for a
   // gate that owns the turn without the intake naming a field (a consent card, say).
-  const own = messagesInPhase(state.messages, state.phase);
+  const own = messagesInCurrentTrack(state);
   const awaiting = state.intake?.awaitingFieldId;
   const pending =
     (awaiting ? [...own].reverse().find((m) => isPending(m) && m.field?.field_id === awaiting) : undefined) ??
@@ -2531,9 +2636,9 @@ function resurfacePendingCard(
  *
  * Superseded cards count. A superseded *saved* generation is a real Context Store version that a
  * later re-run replaced, and the stage it belongs to has certainly been executed. */
-export function approvedAssetIds(messages: PipelineMessage[], phase: PipelinePhase): Set<string> {
+export function approvedAssetIds(messages: PipelineMessage[], phase: PipelinePhase, trackId?: string | null): Set<string> {
   return new Set(
-    messagesInPhase(messages, phase)
+    messagesInPhase(messages, phase, trackId)
       .filter((m) => m.kind === "generation" && m.savePhase === "saved" && m.assetId)
       .map((m) => m.assetId as string),
   );
@@ -2585,6 +2690,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   started: false,
   phase: "phase1",
   phaseSlots: {},
+  phase2Tracks: {},
+  activePhase2TrackId: null,
+  phase2TrackSlots: {},
   sourceRunId: null,
   runId: null,
   navStatus: "Ready",
@@ -2680,6 +2788,102 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     }
   },
 
+  selectPhase2Track: (trackId) => {
+    const state = get();
+    if (state.phase !== "phase2" || state.activePhase2TrackId === trackId) return;
+    const track = state.phase2Tracks[trackId];
+    if (!track) return;
+
+    const parked: PhaseSlot = {
+      started: state.started,
+      runId: state.runId,
+      sourceRunId: state.sourceRunId,
+      currentIndex: state.currentIndex,
+      rerunReturnIndex: state.rerunReturnIndex,
+      rerunReturnIntake: state.rerunReturnIntake,
+      subStep: state.subStep,
+      intake: serializeIntake(state.intake),
+      context: state.context,
+      progress: state.progress,
+    };
+    const next = state.phase2TrackSlots[trackId];
+    const tracks: Record<string, Phase2Track> = Object.fromEntries(
+      Object.values(state.phase2Tracks).map((item) => [
+        item.id,
+        item.id === trackId
+          ? { ...item, status: item.status === "complete" ? "complete" : "active" }
+          : item.id === state.activePhase2TrackId && item.status === "active"
+            ? { ...item, status: "queued" }
+            : item,
+      ]),
+    );
+    set({
+      phase2Tracks: tracks,
+      phase2TrackSlots: { ...state.phase2TrackSlots, [state.activePhase2TrackId ?? trackId]: parked },
+      activePhase2TrackId: trackId,
+      runId: next?.runId ?? track.runId,
+      sourceRunId: next?.sourceRunId ?? track.sourceRunId,
+      currentIndex: next?.currentIndex ?? 0,
+      rerunReturnIndex: next?.rerunReturnIndex ?? null,
+      rerunReturnIntake: next?.rerunReturnIntake ?? null,
+      subStep: next?.subStep ?? null,
+      intake: hydrateIntake(next?.intake ?? null),
+      context: next?.context ?? {},
+      progress: next?.progress ?? 0,
+      activeStatus: null,
+      navStatus: "Ready",
+      clientProfile: { ...state.clientProfile, [SUB_SERVICE_FACT]: track.label },
+    });
+    push(get, set, {
+      role: "assistant",
+      kind: "text",
+      text: `Switched to the ${track.label} track. Its stages, approvals and child run are independent of the other sub-services.`,
+    });
+    const slot = get().phase2TrackSlots[trackId];
+    if (slot) {
+      set(deriveResumeActivity(get().messages, hydrateIntake(slot.intake), slot.currentIndex, slot.progress, "phase2", trackId));
+    } else {
+      beginStage(get, set, 0);
+    }
+  },
+
+  addPhase2Track: async (label) => {
+    const cleanLabel = label.trim();
+    const state = get();
+    if (state.phase !== "phase2" || !cleanLabel) return;
+    if (
+      Object.values(state.phase2Tracks).some(
+        (track) => track.status !== "error" && track.label.toLowerCase() === cleanLabel.toLowerCase(),
+      )
+    ) return;
+
+    try {
+      const { run_id: runId } = await createRun(
+        state.clientProfile.client_name || PLACEHOLDER_CLIENT_NAME,
+        state.sourceRunId,
+      );
+      const track: Phase2Track = {
+        id: runId,
+        label: cleanLabel,
+        runId,
+        sourceRunId: state.sourceRunId,
+        status: "queued",
+      };
+      set({ phase2Tracks: { ...get().phase2Tracks, [track.id]: track } });
+      push(get, set, {
+        role: "assistant",
+        kind: "text",
+        text: `Added a new ${cleanLabel} Phase 2 track. Existing sub-service assets and approvals were left untouched.`,
+      });
+    } catch (err) {
+      push(get, set, {
+        role: "assistant",
+        kind: "text",
+        text: `Could not add the ${cleanLabel} track: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  },
+
   submitAnswer: (value) => {
     const { intake } = get();
     if (!intake?.awaitingFieldId) return;
@@ -2688,17 +2892,19 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     // Filed to the client profile so every stage that asks for it reads it from there, then the run
     // proper begins.
     if (intake.awaitingFieldId === SUB_SERVICE_FIELD.field_id) {
-      const subService = String(value).trim();
-      if (!subService) return;
+      const subServices = String(value)
+        .split(/[,;\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .filter((item, index, items) => items.indexOf(item) === index);
+      if (!subServices.length) return;
+      const subService = subServices[0];
       // Set on the first pass through this branch and never cleared, so its presence is what tells
       // a correction apart from the opening answer — the two have to end differently.
       const previous = get().clientProfile[SUB_SERVICE_FACT];
       markQuestionAnswered(get, set, SUB_SERVICE_FIELD.field_id);
       push(get, set, { role: "user", kind: "text", text: subService });
-      set({
-        clientProfile: { ...get().clientProfile, [SUB_SERVICE_FACT]: subService },
-        editSeed: null,
-      });
+      set({ clientProfile: { ...get().clientProfile, [SUB_SERVICE_FACT]: subService }, editSeed: null });
 
       if (previous) {
         // A correction from `editField`. The walk it interrupted is still standing, so it resumes
@@ -2723,12 +2929,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       }
 
       set({ intake: null });
-      // Phase 2's keyword prepass, and the only moment it can run: the sub-service is the fact the
-      // whole leg's clustering is anchored on, and Phase 2's first stage carries a headline gate,
-      // so anything triggered off a stage save would arrive after the gate that needed it. Not
-      // awaited — `beginStage` has several questions to ask before the gate is reached.
-      void runKeywordPrepass(get, set);
-      beginRequestedStage(get, set);
+      // The child runs must exist before Stage 01 starts. Otherwise its first cards would be
+      // stamped without a track id and the operator could briefly see them in every track.
+      void createPhase2Tracks(get, set, subServices).then(() => {
+        // Phase 2's keyword prepass, and the only moment it can run: the sub-service is the fact the
+        // whole leg's clustering is anchored on, and Phase 2's first stage carries a headline gate,
+        // so anything triggered off a stage save would arrive after the gate that needed it.
+        void runKeywordPrepass(get, set);
+        beginRequestedStage(get, set);
+      });
       return;
     }
 
@@ -2835,7 +3044,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
     // precisely the thing an operator may still want a copy of while judging the replacement.
     set({
       messages: state.messages.map((m) => {
-        if (m.assetId !== assetId || (m.phase ?? state.phase) !== state.phase) return m;
+        if (
+          m.assetId !== assetId ||
+          (m.phase ?? state.phase) !== state.phase ||
+          (state.phase === "phase2" && m.trackId && m.trackId !== state.activePhase2TrackId)
+        ) return m;
         if (m.kind === "generation") {
           return m.savePhase === "saved" ? m : { ...m, superseded: true, refining: false };
         }
@@ -3001,7 +3214,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
         // an unapproved draft, or finished — and `deriveResumeActivity` is the one place that already
         // works that out from the transcript. Setting "Ready" here would leave the input bar disabled
         // over an unanswered question.
-        set(deriveResumeActivity(get().messages, restored, target, done ? 100 : get().progress, phase));
+        set(deriveResumeActivity(get().messages, restored, target, done ? 100 : get().progress, phase, get().activePhase2TrackId));
 
         const stage = done ? null : stageAt(phase, target);
         push(get, set, {
@@ -3052,7 +3265,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
       if (!done) {
         beginStage(get, set, target);
       } else {
-        set({ activeStatus: null, currentIndex: total, navStatus: "Ready" });
+        const activeTrackId = get().activePhase2TrackId;
+        set({
+          activeStatus: null,
+          currentIndex: total,
+          navStatus: "Ready",
+          ...(phase === "phase2" && activeTrackId && get().phase2Tracks[activeTrackId]
+            ? { phase2Tracks: { ...get().phase2Tracks, [activeTrackId]: { ...get().phase2Tracks[activeTrackId], status: "complete" } } }
+            : {}),
+        });
         push(get, set, {
           role: "assistant",
           kind: "text",
@@ -3566,7 +3787,7 @@ chooseHeadlines: async (messageId, ids) => {
       });
       // Re-derived rather than restored from the slot, for the same reason a reopened chat re-derives
       // it: the parked status may name a stream that no longer exists.
-      set(deriveResumeActivity(get().messages, get().intake, resuming.currentIndex, resuming.progress, phase));
+      set(deriveResumeActivity(get().messages, get().intake, resuming.currentIndex, resuming.progress, phase, get().activePhase2TrackId));
       return;
     }
 
@@ -3599,6 +3820,9 @@ chooseHeadlines: async (messageId, ids) => {
       // Phase 1 — "New chat" means a new client, not a change of pipeline.
       phase: get().phase,
       phaseSlots: {},
+      phase2Tracks: {},
+      activePhase2TrackId: null,
+      phase2TrackSlots: {},
       runId: null,
       sourceRunId: null,
       navStatus: "Ready",
@@ -3653,6 +3877,9 @@ chooseHeadlines: async (messageId, ids) => {
     set({
       messages: kept,
       phaseSlots,
+      ...(phase === "phase2"
+        ? { phase2Tracks: {}, activePhase2TrackId: null, phase2TrackSlots: {} }
+        : {}),
       runId: null,
       sourceRunId: parent?.runId ?? null,
       context: parent ? { ...parent.context } : {},
@@ -3714,7 +3941,14 @@ chooseHeadlines: async (messageId, ids) => {
       // Not `snap.navStatus`/`snap.activeStatus`: the snapshot may say "Generating…" for a stream
       // that died with the tab, and a stale status leaves the diagram either frozen or spinning
       // on something that is no longer running.
-      const activity = deriveResumeActivity(messages, intake, currentIndex, snap.progress ?? 0, phase);
+      const activity = deriveResumeActivity(
+        messages,
+        intake,
+        currentIndex,
+        snap.progress ?? 0,
+        phase,
+        snap.activePhase2TrackId ?? null,
+      );
 
       set({
         sessionId: detail.id,
@@ -3735,6 +3969,9 @@ chooseHeadlines: async (messageId, ids) => {
         clientProfile: snap.clientProfile ?? {},
         subStep: snap.subStep ?? null,
         phaseSlots: snap.phaseSlots ?? {},
+        phase2Tracks: snap.phase2Tracks ?? {},
+        activePhase2TrackId: snap.activePhase2TrackId ?? null,
+        phase2TrackSlots: snap.phase2TrackSlots ?? {},
         // Never restored: it is a request in flight, not a property of the chat. A gate that was
         // actually opened is a card in the transcript and comes back with the messages.
         pendingStartAssetId: null,

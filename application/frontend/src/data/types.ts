@@ -2,6 +2,7 @@ export type FieldKind =
   | "text"
   | "number"
   | "enum_choice"
+  | "multi_select"
   | "boolean_flag"
   | "file_attach"
   | "context_reference"

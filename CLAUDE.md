@@ -183,6 +183,35 @@ reason rather than inventing a palette.
 | button and card component styles | palette *usage roles* — which hex is a border, which a surface |
 | webfont families and files per weight | button hover states, the site's own `--custom-property` names |
 
+### The third tier — Firecrawl and Brandfetch, for named gaps only
+
+Context.dev stays primary. `app/services/design_md.py`'s `_brand_gaps` checks, after Context.dev
+and the local CSS parse have both had a turn, whether colours, a type scale, or a logo are still
+missing (a bot-walled page, a JS theme the local parse cannot resolve) — and only for a gap that
+is actually still open, tries `app/services/firecrawl_client.py` (structured extraction, `POST
+/extract`) and then `app/services/brandfetch_client.py` (brand-by-domain, `GET
+/v2/brands/domain/{domain}`), each filling only the keys the one before it left empty.
+
+- **Never a reordering.** Neither module is a peer of Context.dev; both are called from inside
+  `design_md.py`'s own merge logic, exactly the way the local CSS parse already is. A value
+  Context.dev or the local parse found is never replaced. `test_fallback_never_overrides_a_value_
+  context_dev_already_found` pins this.
+- **Skipped entirely when there is no gap, and again when neither key is set.** `FIRECRAWL_API_KEY`
+  / `BRANDFETCH_API_KEY` in the backend `.env`; either may be blank. A run with both unset behaves
+  exactly as it did before this tier existed — `test_fallback_is_never_called_when_context_dev_
+  left_no_gap` is what would fail if a future change made this tier chatty.
+- **Both wrappers are dumb, like `context_dev.py`'s own dataclasses.** They return raw fields
+  (hex strings, a bare URL); validating a colour as a real hex and picking "primary" vs
+  "secondary" happens once, in `design_md.py`'s merge — the same place that already validates
+  Context.dev's own colours. Neither module builds its own opinion of the brand.
+- **Provenance is stated in the document, not silent.** A colour or logo filled by this tier says
+  so in the rendered DESIGN.md ("Context.dev found nothing here; via firecrawl"), because a value
+  with no stated source is indistinguishable from one Context.dev actually measured.
+- **This tier can rescue an otherwise-`NOT AVAILABLE` page.** If Context.dev is unconfigured (or
+  fails) and the local parse also comes back empty, but Firecrawl or Brandfetch answers, the page
+  is `available=True` built from whatever this tier found — still real, measured values, never an
+  invented palette.
+
 ### The two views — which stage gets which
 
 Set in `app/services/generation.py`; `PageDesignInput.sheet_for(asset_id)` picks between them.

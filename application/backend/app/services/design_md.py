@@ -36,6 +36,17 @@ produces a DESIGN.md on its own (thinner, and it says so); when both fail, `avai
 stated reason — never a plausible invented palette, which is the one output that looks correct to
 everybody except the client.
 
+A third tier, for named gaps only
+----------------------------------
+Context.dev stays primary — this is not a reordering. `_brand_gaps` checks, after the two sources
+above have answered, whether colours, a type scale, or a logo are still missing (a bot-walled
+page, a JS theme the local parse cannot resolve). Only for gaps that are actually still open,
+`_capture_brand_fallback` tries Firecrawl's structured extraction (`app/services/firecrawl_client.py`)
+and then Brandfetch's brand-by-domain lookup (`app/services/brandfetch_client.py`), each filling
+only the keys the one before it left empty. Neither ever overrides a value Context.dev or the
+local parse already found — see `BrandFallback` and the `fallback` argument threaded through
+`_color_tokens`, `_typography_tokens` and `_logo_lines` below.
+
 Screenshots
 -----------
 A token sheet describes a palette. It does not describe a layout: section order, hero composition,
@@ -59,8 +70,9 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-from app.services import context_dev
+from app.services import brandfetch_client, context_dev, firecrawl_client
 from app.services.design_tokens import DesignTokens, extract_design_tokens, is_neutral, tokens_to_css
+from app.services.image_briefs import ImageBrief, briefs_markdown, build_image_briefs
 from app.services.page_structure import PageStructure, extract_page_structure, structure_markdown
 
 logger = logging.getLogger(__name__)
@@ -149,7 +161,11 @@ def _yaml_nested(name: str, entries: dict[str, dict[str, object]], indent: str =
 # ----------------------------------------------------------------------------------------------
 
 
-def _color_tokens(guide: context_dev.Styleguide | None, tokens: DesignTokens | None) -> dict[str, str]:
+def _color_tokens(
+    guide: context_dev.Styleguide | None,
+    tokens: DesignTokens | None,
+    fallback: "BrandFallback | None" = None,
+) -> dict[str, str]:
     """The palette, under the spec's recommended names.
 
     The mapping is a judgement and worth stating: the styleguide's `accent` becomes `primary`
@@ -178,11 +194,26 @@ def _color_tokens(guide: context_dev.Styleguide | None, tokens: DesignTokens | N
         for index, color in enumerate(extras[:_MAX_EXTRA_COLORS], start=1):
             colors[f"brand-{color.role}-{index}"] = color.hex
 
+    if fallback is not None:
+        # Third tier — only the names Context.dev and the local parse left unfilled. Never
+        # overrides a value found above.
+        for value, token_name in (
+            (fallback.primary, "primary"),
+            (fallback.secondary, "secondary"),
+            (fallback.background, "surface"),
+            (fallback.on_surface, "on-surface"),
+        ):
+            if token_name not in colors and value and _HEX.match(value):
+                colors[token_name] = value
+
     return colors
 
 
 def _typography_tokens(
-    guide: context_dev.Styleguide | None, fonts: context_dev.Fonts | None, tokens: DesignTokens | None
+    guide: context_dev.Styleguide | None,
+    fonts: context_dev.Fonts | None,
+    tokens: DesignTokens | None,
+    fallback: "BrandFallback | None" = None,
 ) -> dict[str, dict[str, object]]:
     """The type scale, one entry per level the page actually declares.
 
@@ -227,6 +258,14 @@ def _typography_tokens(
     # styleguide reading cannot see. When they disagree, the body face wins for body text.
     if fonts is not None and fonts.body_face and "body-md" in scale:
         scale["body-md"]["fontFamily"] = fonts.body_face.stack
+
+    if not scale and fallback is not None and (fallback.body_font or fallback.heading_font):
+        # Third tier — only reached when neither the styleguide nor the local parse named a
+        # single family. No sizes are known at this tier, only which face to use.
+        if fallback.body_font:
+            scale["body-md"] = {"fontFamily": fallback.body_font}
+        if fallback.heading_font:
+            scale["h1"] = {"fontFamily": fallback.heading_font}
 
     return scale
 
@@ -349,6 +388,114 @@ def _shape_tokens(guide: context_dev.Styleguide | None, tokens: DesignTokens | N
 
 
 # ----------------------------------------------------------------------------------------------
+# The third-tier fallback — Firecrawl, then Brandfetch, for named gaps only
+# ----------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BrandFallback:
+    """The handful of brand values `_capture_brand_fallback` was able to recover, merged from
+    whichever of Firecrawl and Brandfetch answered. Every field here is a value Context.dev and
+    the local CSS parse did not find — never a value that overrides one they did."""
+
+    source: str
+    primary: str | None = None
+    secondary: str | None = None
+    background: str | None = None
+    on_surface: str | None = None
+    heading_font: str | None = None
+    body_font: str | None = None
+    logo_url: str | None = None
+
+
+def _brand_gaps(
+    guide: context_dev.Styleguide | None, fonts: context_dev.Fonts | None, tokens: DesignTokens | None
+) -> set[str]:
+    """Which named fields are still missing after Context.dev and the local CSS parse have both
+    had a turn. Empty when there is nothing for the third tier to do — the common case, and the
+    reason it is checked before spending a Firecrawl or Brandfetch call."""
+    gaps: set[str] = set()
+    if not _color_tokens(guide, tokens):
+        gaps.add("colors")
+    if not _typography_tokens(guide, fonts, tokens):
+        gaps.add("typography")
+    if tokens is None or not tokens.available or tokens.logo is None:
+        gaps.add("logo")
+    return gaps
+
+
+def _host(url: str) -> str:
+    """A bare domain for Brandfetch, which looks up by host rather than by full URL."""
+    return re.sub(r"^https?://", "", url.strip()).split("/")[0].removeprefix("www.")
+
+
+async def _capture_brand_fallback(url: str, needs: set[str]) -> tuple[BrandFallback | None, list[str]]:
+    """Try to fill `needs` and nothing else. Firecrawl first, then Brandfetch for whatever
+    Firecrawl left empty — each is optional, each failure is a note rather than a raised error,
+    because this whole tier is best-effort by design: Context.dev already produced a usable
+    document, and this only tries to make specific named gaps in it a little smaller.
+    """
+    notes: list[str] = []
+    primary = secondary = background = on_surface = None
+    heading_font = body_font = logo_url = None
+    sources: list[str] = []
+
+    if firecrawl_client.is_configured():
+        try:
+            fc = await firecrawl_client.extract_brand_tokens(url)
+            primary = fc.primary_color
+            secondary = fc.secondary_color
+            background = fc.background_color
+            on_surface = fc.text_color
+            heading_font = fc.heading_font
+            body_font = fc.body_font
+            logo_url = fc.logo_url
+            if fc.available:
+                sources.append("firecrawl")
+        except firecrawl_client.FirecrawlError as exc:
+            logger.info("Brand fallback: firecrawl failed for %r: %s", url, exc)
+            notes.append(f"Firecrawl brand fallback could not read {url}: {exc}")
+
+    still_needs_colors = "colors" in needs and not (primary or secondary or background or on_surface)
+    still_needs_fonts = "typography" in needs and not (heading_font or body_font)
+    still_needs_logo = "logo" in needs and not logo_url
+
+    if brandfetch_client.is_configured() and (still_needs_colors or still_needs_fonts or still_needs_logo):
+        try:
+            bf = await brandfetch_client.retrieve_brand(_host(url))
+            if still_needs_colors and bf.colors:
+                primary = primary or (bf.colors[0] if len(bf.colors) > 0 else None)
+                secondary = secondary or (bf.colors[1] if len(bf.colors) > 1 else None)
+            if still_needs_fonts:
+                heading_font = heading_font or bf.heading_font
+                body_font = body_font or bf.body_font
+            if still_needs_logo:
+                logo_url = logo_url or bf.logo_url
+            if bf.available:
+                sources.append("brandfetch")
+        except brandfetch_client.BrandfetchError as exc:
+            logger.info("Brand fallback: brandfetch failed for %r: %s", url, exc)
+            notes.append(f"Brandfetch brand fallback could not read {url}: {exc}")
+
+    if not sources:
+        return None, notes
+
+    return (
+        BrandFallback(
+            source="+".join(sources),
+            primary=primary,
+            secondary=secondary,
+            background=background,
+            on_surface=on_surface,
+            heading_font=heading_font,
+            body_font=body_font,
+            logo_url=logo_url,
+        ),
+        notes,
+    )
+
+
+# ----------------------------------------------------------------------------------------------
 # The document
 # ----------------------------------------------------------------------------------------------
 
@@ -376,6 +523,7 @@ class PageDesign:
     #: Which of the readings actually answered, for the log and the UI.
     sources: tuple[str, ...] = ()
     notes: list[str] = field(default_factory=list)
+    image_briefs: tuple[ImageBrief, ...] = ()
 
     @property
     def model_screenshots(self) -> tuple[context_dev.Screenshot, ...]:
@@ -400,10 +548,11 @@ def _front_matter(
     tokens: DesignTokens | None,
     *,
     theme_only: bool,
+    fallback: "BrandFallback | None" = None,
 ) -> list[str]:
     """The YAML token block. `theme_only` drops layout, elevation and components."""
-    colors = _color_tokens(guide, tokens)
-    typography = _typography_tokens(guide, fonts, tokens)
+    colors = _color_tokens(guide, tokens, fallback)
+    typography = _typography_tokens(guide, fonts, tokens, fallback)
     rounded = _shape_tokens(guide, tokens)
 
     lines = ["---", f"name: {_scalar(name)}"]
@@ -483,11 +632,13 @@ def _webfont_lines(
     return out
 
 
-def _logo_lines(tokens: DesignTokens | None) -> list[str]:
+def _logo_lines(tokens: DesignTokens | None, fallback: "BrandFallback | None" = None) -> list[str]:
     """The client's own logo, in every form that can be pasted into generated HTML.
 
     Only the local CSS parse finds this — `/web/styleguide` has no logo field — which is the main
-    reason that parse is still run alongside Context.dev rather than retired.
+    reason that parse is still run alongside Context.dev rather than retired. When the local parse
+    also finds nothing (a JS theme it cannot resolve) and `fallback.logo_url` was found by
+    Firecrawl or Brandfetch, that URL is offered instead — see the tail of this function.
 
     **Both the absolute URL and the data URI are always given when both exist**, URL first. An
     earlier version of this function offered only the data URI when one was available, and that
@@ -502,6 +653,22 @@ def _logo_lines(tokens: DesignTokens | None) -> list[str]:
     offered second, for when a self-contained file matters more than a short one.
     """
     if tokens is None or not tokens.available or tokens.logo is None:
+        if fallback is not None and fallback.logo_url:
+            return [
+                "## Logo — use THIS, do not recreate it",
+                "",
+                "Use the client's real mark exactly as given below. Do NOT redraw it as an SVG of "
+                "your own, do NOT set the company name as styled text, and do NOT substitute an "
+                "icon. Preserve its aspect ratio: set one dimension and leave the other `auto`.",
+                "",
+                f"Found via {fallback.source} — the local parse and Context.dev's styleguide "
+                "found no logo, so this is the only form available:",
+                "",
+                "```html",
+                f'<img src="{fallback.logo_url}" alt="Company logo">',
+                "```",
+                "",
+            ]
         return []
     logo = tokens.logo
 
@@ -623,6 +790,7 @@ def build_design_md(
     screenshots: tuple[context_dev.Screenshot, ...] = (),
     structure: PageStructure | None = None,
     theme_only: bool = False,
+    fallback: BrandFallback | None = None,
 ) -> str:
     """Render the DESIGN.md. Pure — every argument is already-measured data, so this is the part
     covered by tests without a network.
@@ -632,11 +800,11 @@ def build_design_md(
     band description of that layout is the most effective way to get it reproduced anyway — the
     document would be arguing with the instruction, and the document is longer."""
     name = _site_name(source_url)
-    colors = _color_tokens(guide, tokens)
-    typography = _typography_tokens(guide, fonts, tokens)
+    colors = _color_tokens(guide, tokens, fallback)
+    typography = _typography_tokens(guide, fonts, tokens, fallback)
     components = _component_tokens(guide, tokens)
 
-    out = _front_matter(name, guide, fonts, tokens, theme_only=theme_only)
+    out = _front_matter(name, guide, fonts, tokens, theme_only=theme_only, fallback=fallback)
     out += ["", f"# {name}", "", "## Overview", ""]
     out += [
         f"Measured from the client's own live page at <{source_url}>. Every value in the token block "
@@ -666,8 +834,26 @@ def build_design_md(
             "surface": "The page background.",
             "on-surface": "Body text on that background.",
         }
+        # Only the tokens the third tier actually supplied get the provenance note — most of the
+        # time this dict is empty and every colour reads exactly as it did before that tier existed.
+        via_fallback = (
+            {
+                token
+                for token, val in (
+                    ("primary", fallback.primary),
+                    ("secondary", fallback.secondary),
+                    ("surface", fallback.background),
+                    ("on-surface", fallback.on_surface),
+                )
+                if val and colors.get(token) == val
+            }
+            if fallback is not None
+            else set()
+        )
         for token, value in colors.items():
             note = described.get(token, "A secondary brand colour measured on the page.")
+            if token in via_fallback:
+                note += f" (Context.dev found nothing here; via {fallback.source}.)"
             out.append(f"- **`{token}` ({value})** — {note}")
         out.append("")
         if tokens is not None and tokens.available and tokens.palette:
@@ -690,6 +876,19 @@ def build_design_md(
             bits = ", ".join(f"{k} {_plain(v)}" for k, v in style.items() if k != "fontFamily")
             out.append(f"- **`{level}`** — `{style.get('fontFamily', '?')}`{'; ' + bits if bits else ''}")
         out.append("")
+        typography_from_fallback = (
+            fallback is not None
+            and (fallback.body_font or fallback.heading_font)
+            and not (guide is not None and guide.typography)
+            and not (tokens is not None and tokens.available and tokens.font_families)
+        )
+        if typography_from_fallback:
+            out.append(
+                f"Context.dev's styleguide and the local CSS parse found no type scale for this "
+                f"page; the family names above are via {fallback.source} — no sizes are known at "
+                "this tier."
+            )
+            out.append("")
         webfonts = _webfont_lines(guide, fonts, tokens, _used_weights(typography, components, guide))
         if webfonts:
             out += ["Webfonts to link in the generated `<head>`, verbatim:", "", *webfonts, ""]
@@ -744,7 +943,7 @@ def build_design_md(
                 out.append("")
 
     out += _site_token_lines(tokens)
-    out += _logo_lines(tokens)
+    out += _logo_lines(tokens, fallback)
 
     if not theme_only and screenshots:
         out += ["## Reference screenshots", ""]
@@ -817,6 +1016,12 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
     Every reading is issued concurrently and every one is allowed to fail on its own. A styleguide
     without fonts is still a design system; fonts without a styleguide still name the typefaces; the
     local CSS parse alone still produces something. Only when nothing answers is this unavailable.
+
+    After those two, `_brand_gaps` checks for named holes (colours, a type scale, a logo) and only
+    then — and only for those holes — tries Firecrawl and Brandfetch (`FIRECRAWL_API_KEY` /
+    `BRANDFETCH_API_KEY`; either or both may be unset, in which case this tier is a no-op and costs
+    nothing extra). Their cost is outside the 17-credit figure above and is not fixed, since they
+    run only on a gap.
     """
     use_context_dev = context_dev.is_configured()
 
@@ -890,7 +1095,19 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
         if screenshots:
             sources.append("screenshots")
 
-    readable = guide is not None or (tokens is not None and tokens.available)
+    # Third tier — Firecrawl, then Brandfetch, for whatever named gap Context.dev and the local
+    # parse left open. Skipped entirely when there is no gap, and skipped again when neither is
+    # configured, so a run with no Firecrawl/Brandfetch keys behaves exactly as it did before this
+    # tier existed.
+    gaps = _brand_gaps(guide, fonts_data, tokens)
+    fallback: BrandFallback | None = None
+    if gaps and (firecrawl_client.is_configured() or brandfetch_client.is_configured()):
+        fallback, fallback_notes = await _capture_brand_fallback(url, gaps)
+        notes.extend(fallback_notes)
+        if fallback is not None:
+            sources.append(f"brand fallback ({fallback.source})")
+
+    readable = guide is not None or (tokens is not None and tokens.available) or fallback is not None
     if not readable:
         reason = (
             "; ".join(notes)
@@ -917,12 +1134,15 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
             structure=structure,
             sources=tuple(sources),
             notes=notes,
+            image_briefs=(),
         )
 
     design_md = build_design_md(
-        url, guide, fonts_data, tokens, screenshots=screenshots, structure=structure
+        url, guide, fonts_data, tokens, screenshots=screenshots, structure=structure, fallback=fallback
     )
-    theme_brief = build_design_md(url, guide, fonts_data, tokens, theme_only=True)
+    image_briefs = build_image_briefs(design_md)
+    design_md = f"{design_md.rstrip()}\n\n{briefs_markdown(image_briefs)}\n"
+    theme_brief = build_design_md(url, guide, fonts_data, tokens, theme_only=True, fallback=fallback)
 
     logger.info(
         "Captured page design url=%r sources=%s shots=%s model_safe_shots=%s bands=%s chars=%s",
@@ -942,4 +1162,5 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
         structure=structure,
         sources=tuple(sources),
         notes=notes,
+        image_briefs=image_briefs,
     )

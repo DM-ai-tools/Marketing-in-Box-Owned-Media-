@@ -23,11 +23,12 @@ import { messagesInPhase, usePipelineStore } from "./pipelineStore";
 export function DeliverablesGrid() {
   const allMessages = usePipelineStore((s) => s.messages);
   const phase = usePipelineStore((s) => s.phase);
+  const activePhase2TrackId = usePipelineStore((s) => s.activePhase2TrackId);
   const openReader = useUiStore((s) => s.openReader);
 
   const stages = stagesFor(phase);
   const items = useMemo(() => {
-    return messagesInPhase(allMessages, phase)
+    return messagesInPhase(allMessages, phase, activePhase2TrackId)
       .filter((m) => m.kind === "generation" && m.savePhase === "saved" && !m.superseded && m.text)
       .map((message) => {
         const text = message.text ?? "";
@@ -44,7 +45,7 @@ export function DeliverablesGrid() {
           structured: doc.structured,
         };
       });
-  }, [allMessages, phase, stages]);
+  }, [allMessages, phase, stages, activePhase2TrackId]);
 
   if (!items.length) {
     return (

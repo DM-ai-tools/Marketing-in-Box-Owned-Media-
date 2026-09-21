@@ -722,7 +722,7 @@ function QuestionCard({ message }: { message: PipelineMessage }) {
   if (!field) return null;
 
   const isActive = !message.answered && !message.superseded && intake?.awaitingFieldId === field.field_id;
-  const showWidget = field.kind === "enum_choice" || field.kind === "boolean_flag";
+  const showWidget = field.kind === "enum_choice" || field.kind === "multi_select" || field.kind === "boolean_flag";
 
   return (
     <div
@@ -1145,6 +1145,7 @@ export function GenerationStream() {
   const started = usePipelineStore((s) => s.started);
   const allMessages = usePipelineStore((s) => s.messages);
   const phase = usePipelineStore((s) => s.phase);
+  const activePhase2TrackId = usePipelineStore((s) => s.activePhase2TrackId);
   const isLoadingSession = usePipelineStore((s) => s.isLoadingSession);
   const needsResume = usePipelineStore(selectNeedsResume);
   const awaitingFieldId = usePipelineStore((s) => s.intake?.awaitingFieldId);
@@ -1158,7 +1159,7 @@ export function GenerationStream() {
   // piece of work, and reading its first question at the bottom of fifteen finished Phase 1 assets
   // buries it. So switching phase clears the screen rather than the chat: the other leg is still
   // there, exactly where it was left, one click away on the toggle.
-  const messages = messagesInPhase(allMessages, phase);
+  const messages = messagesInPhase(allMessages, phase, activePhase2TrackId);
 
   const lastText = messages[messages.length - 1]?.text;
   useEffect(() => {

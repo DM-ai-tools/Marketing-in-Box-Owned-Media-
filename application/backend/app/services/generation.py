@@ -603,6 +603,13 @@ _THEME_ONLY_DIRECTIVE = (
     "below."
 )
 
+_IMAGE_BRIEF_DIRECTIVE = (
+    "\n\n===== RUNWAY IMAGE GENERATION BRIEFS =====\n"
+    "Use these prompts when this HTML asset needs imagery. Generate the image with Runway GPT Image 2, "
+    "then place the returned hosted URL in the HTML. Do not invent a different visual direction, embed "
+    "base64 output, or add stock-image URLs.\n"
+)
+
 
 def _brand_token_block(design_markdown: str | None, *, theme_only: bool = False, has_screenshots: bool = False) -> str:
     """The extracted design sheet, fenced and bound, or "" when the stage has none.
@@ -656,6 +663,8 @@ class PageDesignInput:
     theme_brief: str = ""
     #: Public image URLs, already filtered to what the model API will accept.
     screenshot_urls: tuple[str, ...] = ()
+    #: Runway-ready prompts for visual assets in HTML-producing stages.
+    image_briefs: tuple[str, ...] = ()
 
     def sheet_for(self, asset_id: str) -> str:
         """Which view this stage reads. Falls back to whichever one was built, so a caller that
@@ -666,6 +675,9 @@ class PageDesignInput:
 
     def screenshots_for(self, asset_id: str) -> tuple[str, ...]:
         return self.screenshot_urls if asset_id in SCREENSHOT_STAGES else ()
+
+    def image_briefs_for(self, asset_id: str) -> tuple[str, ...]:
+        return self.image_briefs if asset_id in PAGE_REPLICA_STAGES else ()
 
 
 class UnknownStageError(KeyError):
@@ -851,6 +863,11 @@ def build_stage_request(
     and the response.
     """
     library, tail = _prompt_parts(asset_id, answers, phase, page_design)
+
+    if page_design is not None:
+        briefs = page_design.image_briefs_for(asset_id)
+        if briefs:
+            tail += _IMAGE_BRIEF_DIRECTIVE + "\n".join(briefs) + "\n===== END RUNWAY IMAGE GENERATION BRIEFS =====\n"
 
     user_content: str | list[dict[str, object]] = tail
     shots = page_design.screenshots_for(asset_id) if page_design is not None else ()

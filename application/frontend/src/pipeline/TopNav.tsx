@@ -218,6 +218,7 @@ function RunPills() {
   const clientProfile = usePipelineStore((s) => s.clientProfile);
   const messages = usePipelineStore((s) => s.messages);
   const phase = usePipelineStore((s) => s.phase);
+  const activePhase2TrackId = usePipelineStore((s) => s.activePhase2TrackId);
   const total = totalStagesFor(phase);
 
   /* `client_name`, and only that. `clientProfile` is a `Record<string, string>`, so TypeScript
@@ -225,7 +226,7 @@ function RunPills() {
    * *field id*, which `CLIENT_PROFILE_SOURCES` maps onto the `client_name` profile key. Reading
    * `company_name` compiles and is always undefined. */
   const client = clientProfile?.client_name?.trim() ?? "";
-  const saved = messagesInPhase(messages, phase).filter(
+  const saved = messagesInPhase(messages, phase, activePhase2TrackId).filter(
     (m) => m.kind === "generation" && m.savePhase === "saved" && !m.superseded,
   ).length;
 

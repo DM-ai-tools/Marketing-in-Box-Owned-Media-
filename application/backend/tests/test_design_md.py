@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from app.services import context_dev, design_md
+from app.services import brandfetch_client, context_dev, design_md, firecrawl_client
 from app.services.design_tokens import ButtonStyle, ColorUse, DesignTokens, Logo
 from app.services.generation import (
     BRAND_THEME_STAGES,
@@ -336,6 +336,8 @@ async def test_capture_survives_one_reader_failing(monkeypatch):
     monkeypatch.setattr(context_dev, "extract_fonts", boom)
     monkeypatch.setattr(context_dev, "screenshot", a_shot)
     monkeypatch.setattr(design_md, "extract_design_tokens", local_tokens)
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: False)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: False)
 
     design = await design_md.capture_page_design(URL)
 
@@ -359,6 +361,8 @@ async def test_an_oversized_screenshot_is_kept_but_withheld_from_the_model(monke
     monkeypatch.setattr(context_dev, "extract_fonts", lambda url, **_: _async(_fonts()))
     monkeypatch.setattr(context_dev, "screenshot", tall_or_hero)
     monkeypatch.setattr(design_md, "extract_design_tokens", lambda url: _async(_tokens()))
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: False)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: False)
 
     design = await design_md.capture_page_design(URL)
 
@@ -372,6 +376,8 @@ async def test_no_key_means_the_local_parse_carries_it_alone(monkeypatch):
     """A deployment without a Context.dev key degrades to the old behaviour rather than failing."""
     monkeypatch.setattr(context_dev, "is_configured", lambda: False)
     monkeypatch.setattr(design_md, "extract_design_tokens", lambda url: _async(_tokens()))
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: False)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: False)
 
     design = await design_md.capture_page_design(URL)
 
@@ -382,12 +388,15 @@ async def test_no_key_means_the_local_parse_carries_it_alone(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_everything_failing_is_unavailable_not_an_invented_palette(monkeypatch):
+    """No Context.dev, no local parse, and no third-tier keys either — genuinely unavailable."""
     monkeypatch.setattr(context_dev, "is_configured", lambda: False)
     monkeypatch.setattr(
         design_md,
         "extract_design_tokens",
         lambda url: _async(DesignTokens(source_url=url, available=False, reason="bot wall")),
     )
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: False)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: False)
 
     design = await design_md.capture_page_design(URL)
 
@@ -399,6 +408,127 @@ async def test_everything_failing_is_unavailable_not_an_invented_palette(monkeyp
 async def _async(value):
     """Wrap a value as an already-resolved coroutine, for monkeypatching an async function."""
     return value
+
+
+# ----------------------------------------------------------------------------------------------
+# Third-tier fallback — Firecrawl, then Brandfetch, for named gaps only
+# ----------------------------------------------------------------------------------------------
+
+
+def test_fallback_never_overrides_a_value_context_dev_already_found():
+    """The whole point of this tier: it plugs holes, it does not compete with Context.dev."""
+    fallback = design_md.BrandFallback(source="firecrawl", primary="#000000", logo_url="https://evil/logo.png")
+    document = design_md.build_design_md(URL, _guide(), _fonts(), _tokens(), fallback=fallback)
+    fm = _front_matter(document)
+
+    assert fm["colors"]["primary"] == "#a4d36b"  # the guide's colour, not the fallback's
+    assert "https://trafficradius.com.au/logo.svg" in document  # the local parse's logo
+    assert "https://evil/logo.png" not in document
+
+
+def test_fallback_fills_a_named_gap_only():
+    """With no guide and no local parse, the fallback's colour and font are all there is."""
+    fallback = design_md.BrandFallback(source="firecrawl", primary="#123456", body_font="Inter")
+    document = design_md.build_design_md(URL, None, None, None, fallback=fallback)
+    fm = _front_matter(document)
+
+    assert fm["colors"]["primary"] == "#123456"
+    assert fm["typography"]["body-md"]["fontFamily"] == "Inter"
+    assert "via firecrawl" in document
+
+
+def test_fallback_logo_used_only_when_the_local_parse_has_none():
+    fallback = design_md.BrandFallback(source="brandfetch", logo_url="https://client.com/logo.png")
+
+    without_local_logo = design_md.build_design_md(URL, None, None, None, fallback=fallback)
+    assert "https://client.com/logo.png" in without_local_logo
+    assert "found via brandfetch" in without_local_logo.lower()
+
+    with_local_logo = design_md.build_design_md(URL, None, None, _tokens(), fallback=fallback)
+    assert "https://client.com/logo.png" not in with_local_logo
+    assert "https://trafficradius.com.au/logo.svg" in with_local_logo
+
+
+def test_brand_gaps_reports_only_what_is_actually_missing():
+    assert design_md._brand_gaps(_guide(), _fonts(), _tokens()) == set()
+    assert design_md._brand_gaps(None, None, None) == {"colors", "typography", "logo"}
+    assert design_md._brand_gaps(None, None, _tokens()) == set()  # the CSS parse alone covers all three
+
+
+@pytest.mark.asyncio
+async def test_fallback_is_never_called_when_context_dev_left_no_gap(monkeypatch):
+    """Spending a Firecrawl or Brandfetch call when nothing is missing would be the exact mistake
+    the "credits are money" rule elsewhere in this codebase warns against."""
+    monkeypatch.setattr(context_dev, "is_configured", lambda: True)
+    monkeypatch.setattr(context_dev, "extract_styleguide", lambda url, **_: _async(_guide()))
+    monkeypatch.setattr(context_dev, "extract_fonts", lambda url, **_: _async(_fonts()))
+    monkeypatch.setattr(context_dev, "screenshot", lambda url, **kw: _async(
+        context_dev.Screenshot(url, "https://img/x.png", "viewport", 100, 100, kw.get("label", ""))
+    ))
+    monkeypatch.setattr(design_md, "extract_design_tokens", lambda url: _async(_tokens()))
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: True)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: True)
+
+    async def must_not_be_called(*_a, **_kw):
+        raise AssertionError("firecrawl_client.extract_brand_tokens should not run with no gap")
+
+    monkeypatch.setattr(firecrawl_client, "extract_brand_tokens", must_not_be_called)
+
+    design = await design_md.capture_page_design(URL)
+
+    assert design.available
+    assert not any("brand fallback" in s for s in design.sources)
+
+
+@pytest.mark.asyncio
+async def test_brandfetch_fills_what_firecrawl_left_open(monkeypatch):
+    """Firecrawl runs first; Brandfetch only fills what Firecrawl's own answer left empty."""
+    monkeypatch.setattr(context_dev, "is_configured", lambda: False)
+    monkeypatch.setattr(
+        design_md,
+        "extract_design_tokens",
+        lambda url: _async(DesignTokens(source_url=url, available=False, reason="bot wall")),
+    )
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: True)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: True)
+
+    async def fc_extract(url):
+        return firecrawl_client.BrandTokens(source_url=url, primary_color="#123456")  # no logo
+
+    async def bf_retrieve(domain):
+        return brandfetch_client.BrandRecord(domain=domain, logo_url="https://client.com/logo.png")
+
+    monkeypatch.setattr(firecrawl_client, "extract_brand_tokens", fc_extract)
+    monkeypatch.setattr(brandfetch_client, "retrieve_brand", bf_retrieve)
+
+    design = await design_md.capture_page_design(URL)
+
+    assert design.available
+    assert "brand fallback (firecrawl+brandfetch)" in design.sources
+    assert "#123456" in design.design_md
+    assert "https://client.com/logo.png" in design.design_md
+
+
+@pytest.mark.asyncio
+async def test_a_failed_fallback_call_is_a_note_not_a_crash(monkeypatch):
+    monkeypatch.setattr(context_dev, "is_configured", lambda: False)
+    monkeypatch.setattr(
+        design_md,
+        "extract_design_tokens",
+        lambda url: _async(DesignTokens(source_url=url, available=False, reason="bot wall")),
+    )
+    monkeypatch.setattr(firecrawl_client, "is_configured", lambda: True)
+    monkeypatch.setattr(brandfetch_client, "is_configured", lambda: False)
+
+    async def fc_boom(url):
+        raise firecrawl_client.FirecrawlError("job failed")
+
+    monkeypatch.setattr(firecrawl_client, "extract_brand_tokens", fc_boom)
+
+    design = await design_md.capture_page_design(URL)
+
+    assert not design.available  # nothing else answered either
+    assert any("Firecrawl brand fallback" in note for note in design.notes)
 
 
 # ----------------------------------------------------------------------------------------------

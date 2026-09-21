@@ -164,6 +164,7 @@ def _fail(what: str, exc: Exception) -> ContextDevError:
         detail = f"Context.dev answered HTTP {exc.status_code}: {_status_body(exc)}"
     else:
         detail = str(exc) or exc.__class__.__name__
+    logger.error("Context.dev API error operation=%s detail=%s", what, detail)
     return ContextDevError(f"{what}: {detail}")
 
 
@@ -183,6 +184,7 @@ def _log_credits(operation: str, response: Any) -> None:
     """
     meta = getattr(response, "key_metadata", None)
     if meta is None:
+        logger.info("Context.dev API used operation=%s credits=unreported", operation)
         return
     logger.info(
         "Context.dev %s consumed=%s remaining=%s",

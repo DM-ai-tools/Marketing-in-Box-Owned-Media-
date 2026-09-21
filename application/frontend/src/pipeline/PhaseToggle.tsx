@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
+import { useState } from "react";
 import { PHASE_META, PHASE_ORDER, totalStagesFor } from "./pipelineData";
 import { usePipelineStore } from "./pipelineStore";
 
@@ -18,6 +19,11 @@ export function PhaseToggle() {
   const phase = usePipelineStore((s) => s.phase);
   const setPhase = usePipelineStore((s) => s.setPhase);
   const started = usePipelineStore((s) => s.started);
+  const phase2Tracks = usePipelineStore((s) => s.phase2Tracks);
+  const activePhase2TrackId = usePipelineStore((s) => s.activePhase2TrackId);
+  const selectPhase2Track = usePipelineStore((s) => s.selectPhase2Track);
+  const addPhase2Track = usePipelineStore((s) => s.addPhase2Track);
+  const [newTrackLabel, setNewTrackLabel] = useState("");
   const reduceMotion = useReducedMotion();
   const other = PHASE_ORDER.find((id) => id !== phase) ?? phase;
 
@@ -76,6 +82,67 @@ export function PhaseToggle() {
           </span>
         )}
       </p>
+
+      {phase === "phase2" && Object.keys(phase2Tracks).length > 0 && (
+        <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-2.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--fg-faint)]">
+              Sub-service tracks
+            </span>
+            <span className="text-[0.65rem] text-[var(--fg-faint)]">{Object.keys(phase2Tracks).length} total</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.values(phase2Tracks).map((track) => {
+              const active = track.id === activePhase2TrackId;
+              return (
+                <button
+                  key={track.id}
+                  type="button"
+                  disabled={track.status === "error"}
+                  onClick={() => selectPhase2Track(track.id)}
+                  className={`min-h-8 cursor-pointer rounded-full border px-2.5 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                    active
+                      ? "border-[var(--color-electric-blue)] text-[var(--electric-blue-fg)]"
+                      : "border-[var(--border-strong)] text-[var(--fg-muted)] hover:bg-[var(--hover)]"
+                  }`}
+                  title={track.status === "error" ? track.error : `${track.label} Phase 2 track`}
+                >
+                  {track.label}
+                  <span className="ml-1 font-normal opacity-70">
+                    {track.status === "complete" ? "done" : track.status === "error" ? "error" : active ? "active" : "queued"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <form
+            className="mt-2 flex min-w-0 gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const label = newTrackLabel.trim();
+              if (!label) return;
+              void addPhase2Track(label);
+              setNewTrackLabel("");
+            }}
+          >
+            <input
+              value={newTrackLabel}
+              onChange={(event) => setNewTrackLabel(event.target.value)}
+              placeholder="Add another sub-service"
+              aria-label="Add another Phase 2 sub-service"
+              className="min-w-0 flex-1 rounded-full border border-[var(--border-strong)] bg-transparent px-2.5 py-1.5 text-[0.72rem] outline-none placeholder:text-[var(--fg-faint)]"
+            />
+            <button
+              type="submit"
+              disabled={!newTrackLabel.trim()}
+              className="min-h-8 shrink-0 cursor-pointer rounded-full px-2.5 text-[0.7rem] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ backgroundColor: "var(--color-electric-blue)" }}
+            >
+              Add
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

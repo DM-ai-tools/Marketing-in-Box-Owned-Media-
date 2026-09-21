@@ -112,6 +112,8 @@ function SpecifyBox({
 
 export function QuestionWidget({ field, disabled, onChoose, onSkip }: Props) {
   const showSkip = !field.required && field.kind !== "boolean_flag";
+  const [selected, setSelected] = useState<string[]>([]);
+  const [customValue, setCustomValue] = useState("");
   /** The "specify" choice the operator picked, while they are typing what it stands for. */
   const [specifying, setSpecifying] = useState<string | null>(null);
 
@@ -120,22 +122,75 @@ export function QuestionWidget({ field, disabled, onChoose, onSkip }: Props) {
   // answer for a question that is no longer on screen.
   useEffect(() => {
     setSpecifying(null);
+    setSelected([]);
+    setCustomValue("");
   }, [field.field_id]);
+
+  const multiSelect = field.kind === "multi_select";
+
+  function addCustomService() {
+    const value = customValue.trim();
+    if (!value) return;
+    setSelected((current) =>
+      current.some((item) => item.toLowerCase() === value.toLowerCase()) ? current : [...current, value],
+    );
+    setCustomValue("");
+  }
 
   return (
     <div className="mt-2.5 flex flex-wrap items-center gap-2">
-      {field.kind === "enum_choice" &&
+      {(field.kind === "enum_choice" || multiSelect) &&
         field.choices?.map((c) => (
           <PillButton
             key={c}
             disabled={disabled}
-            // A "specify" choice is an instruction, not an answer: answering the question with its
-            // own words would file "Other: specify" as the client's company type.
-            onClick={() => (specifyPrefix(c) ? setSpecifying(c) : onChoose(c))}
+            onClick={() => {
+              if (specifyPrefix(c)) {
+                setSpecifying(c);
+                return;
+              }
+              if (!multiSelect) {
+                onChoose(c);
+                return;
+              }
+              setSelected((current) =>
+                current.includes(c) ? current.filter((value) => value !== c) : [...current, c],
+              );
+            }}
           >
-            {c}
+            <span className={multiSelect && selected.includes(c) ? "font-semibold text-[var(--color-electric-blue)]" : undefined}>
+              {multiSelect && selected.includes(c) ? "✓ " : ""}{c}
+            </span>
           </PillButton>
         ))}
+
+      {multiSelect && (
+        <>
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={customValue}
+              disabled={disabled}
+              onChange={(event) => setCustomValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addCustomService();
+                }
+              }}
+              placeholder="Add another sub-service"
+              aria-label="Add a custom sub-service"
+              className="min-h-10 min-w-[12rem] flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-raised)] px-3 py-2 text-[0.85rem] outline-none placeholder:text-[var(--fg-faint)] focus:border-[var(--color-electric-blue)] sm:min-h-0"
+            />
+            <PillButton disabled={disabled || !customValue.trim()} onClick={addCustomService}>
+              Add custom
+            </PillButton>
+          </div>
+          <PillButton disabled={disabled || selected.length === 0} onClick={() => onChoose(selected.join(", "))}>
+            Continue with {selected.length || "selected"}
+          </PillButton>
+        </>
+      )}
 
       {field.kind === "boolean_flag" && (
         <>

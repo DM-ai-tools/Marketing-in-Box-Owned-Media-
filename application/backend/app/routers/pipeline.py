@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -91,6 +92,7 @@ from app.services import (
     insights,
     keywords as keywords_service,
     page_replica as page_replica_service,
+    runway_client,
     slide_deck as slide_deck_service,
     usage as usage_service,
 )
@@ -1885,6 +1887,7 @@ def _page_design_input(value: dict) -> PageDesignInput | None:
         design_md=design_md or legacy,
         theme_brief=theme_brief or legacy,
         screenshot_urls=tuple(value.get("model_screenshot_urls") or ()),
+        image_briefs=tuple(value.get("image_briefs") or ()),
     )
 
 
@@ -1967,6 +1970,7 @@ async def resolve_page_design(
                             # Pre-filtered, so the prompt builder never has to re-derive which
                             # images the model API will accept.
                             "model_screenshot_urls": [s.image_url for s in design.model_screenshots],
+                            "image_briefs": [brief.prompt for brief in design.image_briefs],
                         },
                         written_by_asset_id=None,
                     )
@@ -1994,6 +1998,7 @@ async def resolve_page_design(
         design_md=design.design_md,
         theme_brief=design.theme_brief,
         screenshot_urls=tuple(s.image_url for s in design.model_screenshots),
+        image_briefs=tuple(brief.prompt for brief in design.image_briefs),
     )
 
 
@@ -2021,6 +2026,7 @@ class PageDesignResponse(BaseModel):
     #: Which readers answered: "styleguide", "fonts", "css parse", "screenshots".
     sources: list[str] = []
     notes: list[str] = []
+    image_briefs: list[dict[str, str]] = []
 
 
 @router.get("/runs/{run_id}/design", response_model=PageDesignResponse)
@@ -2056,6 +2062,10 @@ async def read_run_page_design(run_id: str) -> PageDesignResponse:
         screenshots=[ScreenshotOut(**shot) for shot in (value.get("screenshots") or [])],
         sources=list(value.get("sources") or []),
         notes=list(value.get("notes") or []),
+        image_briefs=[
+            {"role": "generated", "ratio": "", "prompt": prompt}
+            for prompt in (value.get("image_briefs") or [])
+        ],
     )
 
 
@@ -2096,6 +2106,40 @@ async def capture_page_design_route(payload: PageDesignRequest) -> PageDesignRes
         ],
         sources=list(design.sources),
         notes=list(design.notes),
+        image_briefs=[
+            {"role": brief.role, "ratio": brief.ratio, "prompt": brief.prompt}
+            for brief in design.image_briefs
+        ],
+    )
+
+
+class RunwayImageRequest(BaseModel):
+    prompt: str
+    ratio: str = "1360:768"
+    output_count: int = 1
+
+
+class RunwayImageResponse(BaseModel):
+    model: str
+    urls: list[str]
+
+
+@router.post("/design/images", response_model=RunwayImageResponse)
+async def generate_design_image(payload: RunwayImageRequest) -> RunwayImageResponse:
+    """Generate an image from a DESIGN.md brief using Runway GPT Image 2."""
+    try:
+        urls = await runway_client.generate_image(
+            payload.prompt,
+            ratio=payload.ratio,
+            output_count=payload.output_count,
+        )
+    except runway_client.RunwayNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except runway_client.RunwayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return RunwayImageResponse(
+        model=os.environ.get(runway_client.MODEL_ENV, "gpt_image_2"),
+        urls=list(urls),
     )
 
 

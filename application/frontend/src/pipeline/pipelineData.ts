@@ -393,13 +393,13 @@ export const UI_DRIVEN_COMPETITOR_MAIN_ASSET_IDS = new Set<string>([
 export const SUB_SERVICE_FIELD: FieldDef = {
   field_id: SUB_SERVICE_FACT,
   label: "Sub-service",
-  kind: "enum_choice",
+  kind: "multi_select",
   required: true,
   source: "user_input",
   choices: [...SUB_SERVICE_CHOICES],
   helpText:
-    "Which single sub-service this run builds for. It is what every competitor search is run on and what every asset below is written about — so one run, one sub-service.",
-  placeholder: "e.g. Google Ads — or type any other sub-service",
+    "Select one or more sub-services, or type a custom service below. Each selected service gets its own linked Phase 2 child run, while this chat and the Phase 1 context are shared.",
+  placeholder: "e.g. Google Ads, Meta Ads, TikTok",
 };
 
 /** field_id -> the sub-service fact that answers it, for Phase 2's intake walk. */

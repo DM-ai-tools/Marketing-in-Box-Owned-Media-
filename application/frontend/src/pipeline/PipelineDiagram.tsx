@@ -138,7 +138,8 @@ export function PipelineDiagram() {
   // The messages array, then the set — a selector returning a fresh `Set` would hand
   // `useSyncExternalStore` a new snapshot on every read.
   const messages = usePipelineStore((s) => s.messages);
-  const approved = useMemo(() => approvedAssetIds(messages, phase), [messages, phase]);
+  const activePhase2TrackId = usePipelineStore((s) => s.activePhase2TrackId);
+  const approved = useMemo(() => approvedAssetIds(messages, phase, activePhase2TrackId), [messages, phase, activePhase2TrackId]);
   const runningLabel = navStatus === "Awaiting Input" ? "Awaiting Input" : "Generating…";
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
   const reduceMotion = useReducedMotion();
