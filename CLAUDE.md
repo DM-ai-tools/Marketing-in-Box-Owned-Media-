@@ -272,6 +272,88 @@ to proceed, and an image after that sits between the instruction and the respons
 
 ---
 
+## Image briefs — OpenAI, this backend's own media route, and why the model never calls either itself
+
+`capture_page_design` also derives three `ImageBrief`s (`app/services/image_briefs.py`) from the
+measured brand tokens — hero, proof, closing-cta — each a photorealistic prompt bound to the run's
+real palette and typography, at one of `gpt-image-2`'s accepted sizes.
+
+**The briefs used to be handed to the model as an instruction, not a value — and that was a real
+bug.** The `cro`/`pillar_page` prompt used to read *"Generate the image with Runway GPT Image 2,
+then place the returned hosted URL in the HTML."* That generation call has no tool access to an
+image generator; the model cannot literally do that. It could only fabricate a plausible-looking
+URL, which is the exact failure `design_tokens.py` documents for an invented palette, one layer
+up — a generated asset that looks correct until someone opens it and the image is a dead link.
+
+The fix is the same shape as that one: measure first, then hand the model the resolved value.
+
+- **Originally wired to Runway, since replaced with OpenAI's `gpt-image-2`** — this was a real
+  provider swap, not just an endpoint change, because of one difference confirmed against OpenAI's
+  own docs before switching: `response_format` (which picks `url` vs `b64_json`) is documented as
+  DALL-E-only. GPT image models always return base64 bytes, never a hosted URL. Runway hosted the
+  file for you; OpenAI does not, so this pipeline now has to.
+- **`app/services/media_storage.py` is the piece that fact requires — and it stores the bytes in
+  Postgres, not on local disk.** A first version wrote to `media/generated/` and served it with
+  `StaticFiles`; that broke on deployment. This app runs on Railway, where local disk is the
+  *container's* disk — ephemeral across every redeploy/restart by default — and a Railway Volume
+  does not fix it either: confirmed against Railway's own docs, a Volume "cannot be used with
+  replicas" and is capped at one per service, so it would not survive this backend running as more
+  than one instance. Postgres is already durable, already provisioned, and already
+  multi-instance-safe, so the bytes live in a `MediaAsset` row (`app/db/models.py`, migration
+  `c8d914e6a5b3`) and are served back at `GET /media/{id}` (`app/routers/media.py`) — the one
+  deliberate exception to this schema's usual "store a reference, not the bytes" rule (see
+  `MediaAsset`'s own docstring for why the `.pptx` slide-deck's generate-and-stream pattern
+  doesn't apply here: an OpenAI image is neither free nor deterministic to regenerate, and has to
+  keep answering at the same URL for as long as the HTML it is embedded in exists).
+  **A base64 data URI was deliberately not the fix either** — that is the exact failure the logo
+  section (`DESIGN.md` pipeline, above) already documents: thousands of characters the model would
+  have to echo byte-perfectly into its own output.
+- **`BACKEND_PUBLIC_URL` must be set on any real deployment.** It is what `media_storage.py` uses
+  to build the absolute URL handed to the model; unset, it falls back to `127.0.0.1:8001` for
+  local dev, which is the *container's own loopback* on Railway — unreachable from outside, so
+  every generated image would be a dead link in the delivered HTML. On Railway:
+  `BACKEND_PUBLIC_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}` (`RAILWAY_PUBLIC_DOMAIN` is injected by
+  Railway automatically).
+- **`image_briefs.generate_all(briefs, session)`** calls `openai_image_client.generate_image` for
+  all three briefs concurrently (mirroring the two Context.dev screenshots), and lets each brief
+  fail independently — a content-policy rejection on one costs that image alone, never the other
+  two. Saving to Postgres happens *after* that gather, one at a time: an `AsyncSession` is not
+  safe for concurrent use, so `media_storage.save_generated_image` cannot be called from inside
+  the concurrent branch. Returns `((), ())` immediately, no delay and no log noise, whenever
+  `OPENAI_API_KEY` is unset — the same "skip cleanly" contract `context_dev.is_configured()`,
+  `firecrawl_client`, and `brandfetch_client` all already have.
+- **Generation is server-side, triggered from `resolve_page_design`, cached per run, and the
+  image rows and the pointer to them commit together.** `_ensure_generated_images` in
+  `app/routers/pipeline.py` runs on the first `PAGE_REPLICA_STAGES` stage (`cro` or `pillar_page`)
+  that actually needs imagery, and only then: it is a no-op when the run already has
+  `generated_images` stored, when there are no briefs, or when OpenAI is unconfigured. It opens
+  one session, passes it into `generate_all` (so every `MediaAsset` it stages lands on that same
+  session), and only then writes the run's `generated_images` context entry and commits once —
+  the images and the run's pointer to them either both persist or neither does. The second
+  `PAGE_REPLICA_STAGES` member reuses the first's result for free, the same "capture once, read
+  from context after" rule `DESIGN_CAPTURE_VERSION` already applies to the brand tokens
+  themselves — image generation is real money exactly like a Context.dev credit is, and a stage
+  re-run for a copy tweak should not re-spend on images that did not need to change.
+- **The prompt gets real URLs, never an instruction.** `generation.py`'s `_generated_images_block`
+  lists each `GeneratedImage`'s role, size and already-hosted `/media/{id}` URL and tells the
+  model to use it verbatim — nothing here asks the model to produce a URL itself.
+  `PageDesignInput.generated_images` replaces the old `image_briefs: tuple[str, ...]` field for
+  this reason: a prompt string is something to act on, a resolved URL is something to copy.
+- **Every brief's size must be one `gpt-image-2` actually accepts.** `1024x1024` / `1536x1024` /
+  `1024x1536` / `auto`, per OpenAI's own parameter reference — this is the same lesson the Runway
+  integration learned the hard way (its ratio strings, `1360:768` / `1168:880`, were never in
+  Runway's accepted enum and 400'd on every live call, caught only by hitting the real API rather
+  than a mocked test). `openai_image_client.VALID_SIZES` is the source of truth;
+  `test_every_brief_size_is_one_openai_actually_accepts` in `tests/test_image_briefs.py` is the
+  permanent cross-check, and `openai_image_client.generate_image` rejects an invalid size, quality
+  or output_format locally (`OpenAIImageInvalidRequest`, mapped to a 422) before spending a
+  request on one.
+- **A failed generation degrades, it does not fail the stage.** `_ensure_generated_images` writes
+  nothing when every brief failed, so the run tries again on its next qualifying stage rather than
+  caching an empty result that looks identical to "already tried."
+
+---
+
 ## Page replication — following the client's real page
 
 DESIGN.md answers "what is this page made of". It does not answer "what shape is it", and it never

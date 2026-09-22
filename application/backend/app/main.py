@@ -41,7 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.logging_config import configure_logging
-from app.routers import anthropic, auth, chat_sessions, intel, pipeline, usage
+from app.routers import anthropic, auth, chat_sessions, intel, media, pipeline, usage
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -179,6 +179,10 @@ app.include_router(usage.router, prefix="/usage", tags=["usage"])
 # Market intelligence over Context.dev (brand records, web search). Every call in there goes
 # through app/services/context_dev.py, the one module holding the API key.
 app.include_router(intel.router, prefix="/intel", tags=["intel"])
+# OpenAI-generated brand images, served from Postgres (`MediaAsset`) rather than local disk —
+# this app deploys to Railway, where local disk is the container's own ephemeral disk. See
+# app/services/media_storage.py.
+app.include_router(media.router, prefix="/media", tags=["media"])
 
 # Feature routers are mounted here as they land, e.g.:
 #   from app.routers import runs

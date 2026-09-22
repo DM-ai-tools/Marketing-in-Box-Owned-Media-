@@ -34,6 +34,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
@@ -922,6 +923,38 @@ class PasswordResetToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # Stamped the moment the token is redeemed, which is what makes it single-use.
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class MediaAsset(Base):
+    """One generated image's bytes, served back at `GET /media/{id}` (`app/routers/media.py`).
+
+    The one deliberate break from this schema's own convention: every other binary-shaped output
+    in this codebase (the `.pptx` slide deck) is generated on demand and streamed, never stored —
+    see `download_slide_deck`. An OpenAI-generated image cannot follow that pattern because it
+    cannot be cheaply regenerated identically (it is not deterministic, and a re-generation costs
+    real money), and it has to keep answering at the same URL for as long as the HTML it is
+    embedded in exists.
+
+    It also deliberately does not live on local disk (`app/services/media_storage.py`'s first
+    version did, briefly). This backend runs on Railway, where local disk is the *container's*
+    disk: ephemeral across redeploys/restarts by default, and — confirmed against Railway's own
+    volume docs before this table was added — even a persistent Volume "cannot be used with
+    replicas" and is capped at one per service, so it would not survive this backend ever scaling
+    beyond one instance either. Postgres is already this app's durable, already-provisioned,
+    already-multi-instance-safe system of record, so the bytes go here instead of introducing a
+    second storage dependency (S3 or similar) for what is, per run, three small files.
+    """
+
+    __tablename__ = "media_assets"
+    __table_args__ = (Index("ix_media_assets_created_at", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    #: e.g. "image/png" — served back verbatim as the response's Content-Type.
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

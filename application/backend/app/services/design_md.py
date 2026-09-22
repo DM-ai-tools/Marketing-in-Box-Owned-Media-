@@ -72,7 +72,7 @@ from dataclasses import dataclass, field
 
 from app.services import brandfetch_client, context_dev, firecrawl_client
 from app.services.design_tokens import DesignTokens, extract_design_tokens, is_neutral, tokens_to_css
-from app.services.image_briefs import ImageBrief, briefs_markdown, build_image_briefs
+from app.services.image_briefs import ImageBrief, build_image_briefs
 from app.services.page_structure import PageStructure, extract_page_structure, structure_markdown
 
 logger = logging.getLogger(__name__)
@@ -1140,8 +1140,12 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
     design_md = build_design_md(
         url, guide, fonts_data, tokens, screenshots=screenshots, structure=structure, fallback=fallback
     )
+    # Specs only — role, ratio, prompt. What actually reaches the model is real Runway URLs,
+    # generated server-side once real ones exist (`image_briefs.generate_all`, wired from
+    # `resolve_page_design` in the pipeline router). Baking an instruction to "go generate this
+    # with Runway" into the document itself was the bug: the model that reads DESIGN.md has no way
+    # to call Runway, so it could only fabricate a URL. See `image_briefs.py`'s module docstring.
     image_briefs = build_image_briefs(design_md)
-    design_md = f"{design_md.rstrip()}\n\n{briefs_markdown(image_briefs)}\n"
     theme_brief = build_design_md(url, guide, fonts_data, tokens, theme_only=True, fallback=fallback)
 
     logger.info(

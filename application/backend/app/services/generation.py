@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.services.claude_client import get_client
+from app.services.image_briefs import GeneratedImage
 from app.services.page_structure import STRUCTURE_HEADING
 from app.services.usage import CallUsage
 
@@ -603,12 +604,26 @@ _THEME_ONLY_DIRECTIVE = (
     "below."
 )
 
-_IMAGE_BRIEF_DIRECTIVE = (
-    "\n\n===== RUNWAY IMAGE GENERATION BRIEFS =====\n"
-    "Use these prompts when this HTML asset needs imagery. Generate the image with Runway GPT Image 2, "
-    "then place the returned hosted URL in the HTML. Do not invent a different visual direction, embed "
-    "base64 output, or add stock-image URLs.\n"
-)
+_GENERATED_IMAGES_HEADING = "===== GENERATED IMAGES ====="
+
+
+def _generated_images_block(images: tuple[GeneratedImage, ...]) -> str:
+    """Real, already-hosted URLs for this stage's imagery — never an instruction to produce one.
+    The model reading this has no tool access to an image generator, so telling it to "generate
+    the image and place the returned URL" (the previous version of this block) was unfollowable:
+    it could only fabricate a plausible-looking URL. This hands it the resolved value instead, the
+    same fix `design_tokens.py` documents for a measured colour versus an invented one. The URL
+    points at this backend's own `/media/generated/...` — see `app/services/media_storage.py`.
+    """
+    lines = [
+        f"\n\n{_GENERATED_IMAGES_HEADING}\n",
+        "Use these exact URLs verbatim in an <img> src for the section named. Do not alter the URL, "
+        "do not embed it as base64, and do not substitute a stock photo or an invented URL.\n",
+    ]
+    for image in images:
+        lines.append(f"- **{image.role}** (`{image.size}`): {image.url}\n")
+    lines.append(f"===== END {_GENERATED_IMAGES_HEADING.strip('= ')} =====\n")
+    return "".join(lines)
 
 
 def _brand_token_block(design_markdown: str | None, *, theme_only: bool = False, has_screenshots: bool = False) -> str:
@@ -663,8 +678,11 @@ class PageDesignInput:
     theme_brief: str = ""
     #: Public image URLs, already filtered to what the model API will accept.
     screenshot_urls: tuple[str, ...] = ()
-    #: Runway-ready prompts for visual assets in HTML-producing stages.
-    image_briefs: tuple[str, ...] = ()
+    #: Already-generated Runway images — real, hosted URLs, not prompts. Generated server-side
+    #: once per run by `resolve_page_design` (see `app/services/image_briefs.py`); empty when
+    #: Runway is unconfigured or every generation failed, in which case the stage simply gets no
+    #: imagery block rather than an instruction it cannot carry out.
+    generated_images: tuple[GeneratedImage, ...] = ()
 
     def sheet_for(self, asset_id: str) -> str:
         """Which view this stage reads. Falls back to whichever one was built, so a caller that
@@ -676,8 +694,8 @@ class PageDesignInput:
     def screenshots_for(self, asset_id: str) -> tuple[str, ...]:
         return self.screenshot_urls if asset_id in SCREENSHOT_STAGES else ()
 
-    def image_briefs_for(self, asset_id: str) -> tuple[str, ...]:
-        return self.image_briefs if asset_id in PAGE_REPLICA_STAGES else ()
+    def generated_images_for(self, asset_id: str) -> tuple[GeneratedImage, ...]:
+        return self.generated_images if asset_id in PAGE_REPLICA_STAGES else ()
 
 
 class UnknownStageError(KeyError):
@@ -865,9 +883,9 @@ def build_stage_request(
     library, tail = _prompt_parts(asset_id, answers, phase, page_design)
 
     if page_design is not None:
-        briefs = page_design.image_briefs_for(asset_id)
-        if briefs:
-            tail += _IMAGE_BRIEF_DIRECTIVE + "\n".join(briefs) + "\n===== END RUNWAY IMAGE GENERATION BRIEFS =====\n"
+        images = page_design.generated_images_for(asset_id)
+        if images:
+            tail += _generated_images_block(images)
 
     user_content: str | list[dict[str, object]] = tail
     shots = page_design.screenshots_for(asset_id) if page_design is not None else ()

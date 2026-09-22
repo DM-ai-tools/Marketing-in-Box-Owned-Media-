@@ -89,14 +89,17 @@ from app.services import (
     design_md as design_md_service,
     design_tokens as design_tokens_service,
     headlines as headlines_service,
+    image_briefs as image_briefs_service,
     insights,
     keywords as keywords_service,
+    media_storage,
+    openai_image_client,
     page_replica as page_replica_service,
-    runway_client,
     slide_deck as slide_deck_service,
     usage as usage_service,
 )
 from app.services.api_errors import classify as classify_api_error
+from app.services.image_briefs import GeneratedImage, ImageBrief
 from app.services.dependencies import (
     UNRESOLVED,
     Dependency,
@@ -1870,6 +1873,106 @@ def _reuse_stored_design(value: dict, url: str | None) -> tuple[bool, str]:
     return True, ""
 
 
+def _briefs_from_stored(raw: list | None) -> tuple[ImageBrief, ...]:
+    """Rebuild `ImageBrief` specs from a stored context entry.
+
+    An entry written before this shape existed holds bare prompt strings with no size — read
+    those with OpenAI's default size rather than discarding them, the same "legacy entries are
+    read, not re-captured" rule `_page_design_input` already applies to `content`.
+    """
+    briefs: list[ImageBrief] = []
+    for item in raw or ():
+        if isinstance(item, dict) and item.get("prompt"):
+            briefs.append(
+                ImageBrief(
+                    role=str(item.get("role") or ""),
+                    size=str(item.get("size") or openai_image_client.DEFAULT_SIZE),
+                    prompt=str(item["prompt"]),
+                )
+            )
+        elif isinstance(item, str) and item:
+            briefs.append(ImageBrief(role="", size=openai_image_client.DEFAULT_SIZE, prompt=item))
+    return tuple(briefs)
+
+
+def _generated_images_from_stored(raw: list | None) -> tuple[GeneratedImage, ...]:
+    images: list[GeneratedImage] = []
+    for item in raw or ():
+        if isinstance(item, dict) and item.get("url"):
+            images.append(
+                GeneratedImage(
+                    role=str(item.get("role") or ""),
+                    size=str(item.get("size") or ""),
+                    prompt=str(item.get("prompt") or ""),
+                    url=str(item["url"]),
+                )
+            )
+    return tuple(images)
+
+
+async def _ensure_generated_images(
+    session_factory, run_uuid: uuid.UUID, value: dict, asset_id: str | None
+) -> dict:
+    """Generate this run's brief images on the first stage that actually needs them, and persist
+    the result so the second `PAGE_REPLICA_STAGES` member reuses it for free.
+
+    A no-op — returns `value` unchanged — whenever any of: the stage does not need imagery, the
+    run already has generated images stored, there are no briefs to fulfil, or OpenAI has no key
+    configured. Each of those is the same "skip cleanly" behaviour `image_briefs.generate_all`
+    already has; this just adds the persistence layer around it.
+    """
+    if asset_id not in PAGE_REPLICA_STAGES or value.get("generated_images"):
+        return value
+    briefs = _briefs_from_stored(value.get("image_briefs"))
+    if not briefs or not openai_image_client.is_configured():
+        return value
+
+    # One session for the whole operation: `generate_all` stages each successfully-generated
+    # image as a `MediaAsset` row on it (see that function's docstring for why saving happens
+    # sequentially, after the concurrent OpenAI calls, rather than inside them), and the
+    # `generated_images` context entry commits on the same session right after — the images and
+    # the pointer to them land together in one transaction, or neither does.
+    async with session_factory() as session:
+        if await session.get(Run, run_uuid) is None:
+            return value
+
+        generated, notes = await image_briefs_service.generate_all(briefs, session)
+        if not generated:
+            # Nothing to persist — leave the run to try again on its next stage rather than
+            # writing an empty marker that would be indistinguishable from "already tried and got
+            # nothing".
+            if notes:
+                logger.info("Image generation produced nothing for run_id=%s: %s", run_uuid, "; ".join(notes))
+            return value
+
+        updated = {
+            **value,
+            "generated_images": [
+                {"role": g.role, "size": g.size, "prompt": g.prompt, "url": g.url} for g in generated
+            ],
+        }
+        version = await _next_version(session, run_uuid, DESIGN_TOKENS_CONTEXT_KEY)
+        session.add(
+            ContextEntry(
+                run_id=run_uuid,
+                context_key=DESIGN_TOKENS_CONTEXT_KEY,
+                version=version,
+                value=updated,
+                written_by_asset_id=None,
+            )
+        )
+        await session.commit()
+
+    logger.info(
+        "Generated %s/%s brief image(s) for run_id=%s: %s",
+        len(generated),
+        len(briefs),
+        run_uuid,
+        ", ".join(g.role for g in generated),
+    )
+    return updated
+
+
 def _page_design_input(value: dict) -> PageDesignInput | None:
     """Rebuild the generation input from a stored context entry.
 
@@ -1887,7 +1990,7 @@ def _page_design_input(value: dict) -> PageDesignInput | None:
         design_md=design_md or legacy,
         theme_brief=theme_brief or legacy,
         screenshot_urls=tuple(value.get("model_screenshot_urls") or ()),
-        image_briefs=tuple(value.get("image_briefs") or ()),
+        generated_images=_generated_images_from_stored(value.get("generated_images")),
     )
 
 
@@ -1895,6 +1998,8 @@ async def resolve_page_design(
     run_id: str | None,
     answers: dict[str, str],
     profile: dict[str, str],
+    *,
+    asset_id: str | None = None,
 ) -> PageDesignInput | None:
     """This run's DESIGN.md and reference screenshots, capturing them first if it has none.
 
@@ -1906,6 +2011,11 @@ async def resolve_page_design(
 
     Capture costs 17 Context.dev credits, so it happens once per run and is read from the run's
     context on every stage after the first.
+
+    `asset_id` is the stage actually asking. Passed only by the per-stage generation flow — a
+    preview or readiness check has no reason to trigger an OpenAI spend — and used only to decide
+    whether this is a `PAGE_REPLICA_STAGES` member that still needs its brief images generated;
+    see `_ensure_generated_images`.
     """
     url = _design_source_url(answers, profile)
     session_factory = get_sessionmaker()
@@ -1924,6 +2034,7 @@ async def resolve_page_design(
             value, _on_run = stored
             reuse, why = _reuse_stored_design(value, url)
             if reuse:
+                value = await _ensure_generated_images(session_factory, run_uuid, value, asset_id)
                 return _page_design_input(value)
             logger.info("Re-capturing page design for run_id=%s: %s", run_id, why)
 
@@ -1932,10 +2043,41 @@ async def resolve_page_design(
 
     design = await design_md_service.capture_page_design(url)
 
+    stored_value: dict | None = None
     if run_uuid is not None:
         # Stored either way. An unavailable sheet is a real finding worth keeping: it stops every
         # later stage in the run from re-fetching a page that is known to refuse readers, and it
         # tells the operator why their HTML came out in placeholder greys.
+        stored_value = {
+            # `content` is kept as an alias of the full sheet so anything still reading the
+            # pre-DESIGN.md shape keeps working.
+            "content": design.design_md,
+            "design_md": design.design_md,
+            "theme_brief": design.theme_brief,
+            "source_url": url,
+            "capture_version": DESIGN_CAPTURE_VERSION,
+            "available": design.available,
+            "reason": design.reason,
+            "sources": list(design.sources),
+            "notes": design.notes,
+            "screenshots": [
+                {
+                    "url": shot.image_url,
+                    "label": shot.label,
+                    "kind": shot.kind,
+                    "width": shot.width,
+                    "height": shot.height,
+                    "model_safe": shot.model_safe,
+                }
+                for shot in design.screenshots
+            ],
+            # Pre-filtered, so the prompt builder never has to re-derive which images the model
+            # API will accept.
+            "model_screenshot_urls": [s.image_url for s in design.model_screenshots],
+            "image_briefs": [
+                {"role": b.role, "size": b.size, "prompt": b.prompt} for b in design.image_briefs
+            ],
+        }
         async with session_factory() as session:
             if await session.get(Run, run_uuid) is not None:
                 version = await _next_version(session, run_uuid, DESIGN_TOKENS_CONTEXT_KEY)
@@ -1944,34 +2086,7 @@ async def resolve_page_design(
                         run_id=run_uuid,
                         context_key=DESIGN_TOKENS_CONTEXT_KEY,
                         version=version,
-                        value={
-                            # `content` is kept as an alias of the full sheet so anything still
-                            # reading the pre-DESIGN.md shape keeps working.
-                            "content": design.design_md,
-                            "design_md": design.design_md,
-                            "theme_brief": design.theme_brief,
-                            "source_url": url,
-                            "capture_version": DESIGN_CAPTURE_VERSION,
-                            "available": design.available,
-                            "reason": design.reason,
-                            "sources": list(design.sources),
-                            "notes": design.notes,
-                            "screenshots": [
-                                {
-                                    "url": shot.image_url,
-                                    "label": shot.label,
-                                    "kind": shot.kind,
-                                    "width": shot.width,
-                                    "height": shot.height,
-                                    "model_safe": shot.model_safe,
-                                }
-                                for shot in design.screenshots
-                            ],
-                            # Pre-filtered, so the prompt builder never has to re-derive which
-                            # images the model API will accept.
-                            "model_screenshot_urls": [s.image_url for s in design.model_screenshots],
-                            "image_briefs": [brief.prompt for brief in design.image_briefs],
-                        },
+                        value=stored_value,
                         written_by_asset_id=None,
                     )
                 )
@@ -1990,15 +2105,22 @@ async def resolve_page_design(
         # Stored above either way — an unreadable page is a finding worth keeping, because it stops
         # every later stage re-paying for a page known to refuse readers. But the stages get the
         # stated-unavailable sheet, not nothing, so they build in flagged greys instead of guessing.
+        # No page to read means no briefs either, so there is nothing for images to be generated
+        # from — `_ensure_generated_images` is skipped rather than called on an empty list.
         return PageDesignInput(
             design_md=design.design_md, theme_brief=design.theme_brief
         )
+
+    generated_images: tuple[GeneratedImage, ...] = ()
+    if run_uuid is not None and stored_value is not None:
+        stored_value = await _ensure_generated_images(session_factory, run_uuid, stored_value, asset_id)
+        generated_images = _generated_images_from_stored(stored_value.get("generated_images"))
 
     return PageDesignInput(
         design_md=design.design_md,
         theme_brief=design.theme_brief,
         screenshot_urls=tuple(s.image_url for s in design.model_screenshots),
-        image_briefs=tuple(brief.prompt for brief in design.image_briefs),
+        generated_images=generated_images,
     )
 
 
@@ -2027,6 +2149,9 @@ class PageDesignResponse(BaseModel):
     sources: list[str] = []
     notes: list[str] = []
     image_briefs: list[dict[str, str]] = []
+    #: Real, already-hosted URLs — empty until a `PAGE_REPLICA_STAGES` stage has actually
+    #: run for this run (this route never generates them; see `POST /pipeline/design/images`).
+    generated_images: list[dict[str, str]] = []
 
 
 @router.get("/runs/{run_id}/design", response_model=PageDesignResponse)
@@ -2063,8 +2188,12 @@ async def read_run_page_design(run_id: str) -> PageDesignResponse:
         sources=list(value.get("sources") or []),
         notes=list(value.get("notes") or []),
         image_briefs=[
-            {"role": "generated", "ratio": "", "prompt": prompt}
-            for prompt in (value.get("image_briefs") or [])
+            {"role": b.role, "size": b.size, "prompt": b.prompt}
+            for b in _briefs_from_stored(value.get("image_briefs"))
+        ],
+        generated_images=[
+            {"role": g.role, "size": g.size, "url": g.url}
+            for g in _generated_images_from_stored(value.get("generated_images"))
         ],
     )
 
@@ -2107,39 +2236,52 @@ async def capture_page_design_route(payload: PageDesignRequest) -> PageDesignRes
         sources=list(design.sources),
         notes=list(design.notes),
         image_briefs=[
-            {"role": brief.role, "ratio": brief.ratio, "prompt": brief.prompt}
+            {"role": brief.role, "size": brief.size, "prompt": brief.prompt}
             for brief in design.image_briefs
         ],
     )
 
 
-class RunwayImageRequest(BaseModel):
+class GeneratedImageRequest(BaseModel):
     prompt: str
-    ratio: str = "1360:768"
-    output_count: int = 1
+    size: str = openai_image_client.DEFAULT_SIZE
+    quality: str = openai_image_client.DEFAULT_QUALITY
 
 
-class RunwayImageResponse(BaseModel):
+class GeneratedImageResponse(BaseModel):
     model: str
-    urls: list[str]
+    url: str
 
 
-@router.post("/design/images", response_model=RunwayImageResponse)
-async def generate_design_image(payload: RunwayImageRequest) -> RunwayImageResponse:
-    """Generate an image from a DESIGN.md brief using Runway GPT Image 2."""
+@router.post("/design/images", response_model=GeneratedImageResponse)
+async def generate_design_image(payload: GeneratedImageRequest) -> GeneratedImageResponse:
+    """Generate one image from a DESIGN.md brief using OpenAI's image model, and return the URL
+    this backend now hosts it at (see `app/services/media_storage.py`).
+
+    Ad hoc — for an operator previewing a brief before it is wired into a run. The per-stage flow
+    (`resolve_page_design` -> `_ensure_generated_images`) is what generates and caches a run's
+    real hero/proof/closing-cta set; this route does not touch that cache.
+    """
     try:
-        urls = await runway_client.generate_image(
+        result = await openai_image_client.generate_image(
             payload.prompt,
-            ratio=payload.ratio,
-            output_count=payload.output_count,
+            size=payload.size,
+            quality=payload.quality,
         )
-    except runway_client.RunwayNotConfigured as exc:
+    except openai_image_client.OpenAIImageNotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except runway_client.RunwayError as exc:
+    except openai_image_client.OpenAIImageInvalidRequest as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except openai_image_client.OpenAIImageError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return RunwayImageResponse(
-        model=os.environ.get(runway_client.MODEL_ENV, "gpt_image_2"),
-        urls=list(urls),
+
+    session_factory = get_sessionmaker()
+    async with session_factory() as session:
+        url = media_storage.save_generated_image(session, result.data, output_format=result.output_format)
+        await session.commit()
+    return GeneratedImageResponse(
+        model=os.environ.get(openai_image_client.MODEL_ENV, openai_image_client.DEFAULT_MODEL),
+        url=url,
     )
 
 
@@ -3201,7 +3343,7 @@ async def _generation_sse_stream(
         # simply omits the block then, and the stage's own prompt falls back to asking for brand
         # values rather than inventing a palette. Which view of it a stage sees — the full DESIGN.md
         # or the theme brief — and whether it gets the screenshots is decided in `generation.py`.
-        page_design = await resolve_page_design(run_id, answers, client_profile)
+        page_design = await resolve_page_design(run_id, answers, client_profile, asset_id=asset_id)
 
         # Only the stages that rebuild a page, and only when there is a page to rebuild. Captured
         # before the generation rather than after it so the operator learns *now* whether the
