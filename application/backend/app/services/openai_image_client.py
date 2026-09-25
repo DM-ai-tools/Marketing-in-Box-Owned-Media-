@@ -90,9 +90,31 @@ def _client() -> httpx.AsyncClient:
     )
 
 
+@lru_cache(maxsize=1)
+def _edit_client() -> httpx.AsyncClient:
+    """A second client for `/images/edits`, without `_client()`'s forced `Content-Type: application/json`.
+
+    That endpoint is multipart (it uploads reference image bytes alongside the prompt), and httpx
+    has to compute its own boundary header for that — a client-level `application/json` default
+    would fight it on every edit request.
+    """
+    key = os.environ.get(API_KEY_ENV, "").strip()
+    if not key:
+        raise OpenAIImageNotConfigured(
+            f"{API_KEY_ENV} is not set, so OpenAI image generation is unavailable. Add it to the "
+            "backend .env."
+        )
+    return httpx.AsyncClient(
+        base_url=BASE_URL,
+        headers={"Authorization": f"Bearer {key}"},
+        timeout=_TIMEOUT_SECONDS,
+    )
+
+
 def reset_client() -> None:
-    """Drop the cached client. For tests and for a key rotated without a restart."""
+    """Drop the cached clients. For tests and for a key rotated without a restart."""
     _client.cache_clear()
+    _edit_client.cache_clear()
 
 
 def _fail(what: str, exc: Exception) -> OpenAIImageError:
@@ -195,6 +217,107 @@ async def generate_image(
     returned_format = payload_out.get("output_format") or output_format
     logger.info(
         "OpenAI Image API used operation=generate model=%s bytes=%s format=%s",
+        selected_model,
+        len(data),
+        returned_format,
+    )
+    return GeneratedImageBytes(data=data, output_format=returned_format)
+
+
+# How many reference images `edit_image` will download and upload per call. OpenAI's edit endpoint
+# accepts several, but each one is a real download plus a few hundred KB of upload — one hero shot
+# plus a couple of supporting photos is enough to ground the subject without turning one brief into
+# a slow multi-megabyte request.
+_MAX_REFERENCE_IMAGES = 3
+
+_CONTENT_TYPE_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+async def edit_image(
+    prompt: str,
+    reference_urls: tuple[str, ...],
+    *,
+    size: str = DEFAULT_SIZE,
+    quality: str = DEFAULT_QUALITY,
+    model: str | None = None,
+) -> GeneratedImageBytes:
+    """Generate one image grounded in real reference photographs, via `POST /v1/images/edits`.
+
+    `generate_image` is text-only: handed nothing but brand colours and a scene description, it can
+    only invent a subject, which is the "random character images" failure this fixes — a
+    photorealistic image, correctly styled, of a scene that has nothing to do with the client's
+    actual business. This function instead downloads the real photographs Firecrawl found on the
+    client's own page (`firecrawl_client.extract_reference_images`) and hands them to OpenAI as
+    input alongside the prompt, so the output is a new image in the same visual register — same
+    kind of subject, setting and mood — rather than an unconstrained guess.
+
+    Raises `OpenAIImageError` if every reference URL fails to download, or if OpenAI's response has
+    no usable image — callers (`image_briefs.generate_all`) fall back to `generate_image` on either.
+    """
+    if not reference_urls:
+        raise OpenAIImageInvalidRequest("edit_image needs at least one entry in reference_urls.")
+    if size not in VALID_SIZES:
+        raise OpenAIImageInvalidRequest(
+            f"{size!r} is not a size OpenAI's image models accept. Valid values: "
+            f"{', '.join(sorted(VALID_SIZES))}."
+        )
+    if quality not in VALID_QUALITIES:
+        raise OpenAIImageInvalidRequest(
+            f"{quality!r} is not a quality OpenAI's image models accept. Valid values: "
+            f"{', '.join(sorted(VALID_QUALITIES))}."
+        )
+
+    selected_model = model or os.environ.get(MODEL_ENV, DEFAULT_MODEL)
+
+    downloaded: list[tuple[str, bytes, str]] = []
+    async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as downloader:
+        for index, ref_url in enumerate(reference_urls[:_MAX_REFERENCE_IMAGES]):
+            try:
+                response = await downloader.get(ref_url)
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                logger.warning("Could not download reference image %r for an edit: %s", ref_url, exc)
+                continue
+            content_type = response.headers.get("content-type", "image/png").split(";")[0].strip()
+            extension = _CONTENT_TYPE_EXTENSIONS.get(content_type, "png")
+            downloaded.append((f"reference-{index}.{extension}", response.content, content_type))
+
+    if not downloaded:
+        raise OpenAIImageError(
+            f"None of the {len(reference_urls)} reference image(s) could be downloaded for an edit."
+        )
+
+    files = [("image[]", (name, data, content_type)) for name, data, content_type in downloaded]
+    data_fields = {"model": selected_model, "prompt": prompt, "size": size, "quality": quality, "n": "1"}
+
+    logger.info(
+        "OpenAI Image API executing operation=edit model=%s size=%s references=%s/%s",
+        selected_model,
+        size,
+        len(downloaded),
+        len(reference_urls),
+    )
+    try:
+        response = await _edit_client().post("/images/edits", data=data_fields, files=files)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.error("OpenAI Image API error operation=edit model=%s error=%s", selected_model, exc)
+        raise _fail("Could not edit an image with OpenAI", exc) from exc
+
+    payload_out = response.json()
+    entries = payload_out.get("data") or []
+    if not entries or not entries[0].get("b64_json"):
+        logger.error("OpenAI Image API error operation=edit model=%s error=%s", selected_model, "response had no b64_json")
+        raise OpenAIImageError("OpenAI returned no image data for this edit.")
+
+    try:
+        data = base64.b64decode(entries[0]["b64_json"])
+    except (ValueError, TypeError) as exc:
+        raise OpenAIImageError(f"OpenAI returned edited image data that could not be decoded: {exc}") from exc
+
+    returned_format = payload_out.get("output_format") or DEFAULT_OUTPUT_FORMAT
+    logger.info(
+        "OpenAI Image API used operation=edit model=%s bytes=%s format=%s",
         selected_model,
         len(data),
         returned_format,

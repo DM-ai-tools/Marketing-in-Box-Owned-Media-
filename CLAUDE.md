@@ -553,6 +553,114 @@ palette.
 
 ---
 
+## SociaVault — live social post data for Stage 10
+
+`social_content_strategy_audit`'s `raw_post_data_source` field asks for real posts with real
+timestamps and engagement counts, and offers exactly two ways to supply them: an exported CSV/XLSX,
+or "research live via browser" — a model reading a scrape or a screenshot and guessing at like
+counts, which is the same invented-measurement failure `design_tokens.py` documents for a palette
+and `image_briefs.py` for a photo, one platform over. `app/services/sociavault_client.py` is a real
+third option: [SociaVault](https://docs.sociavault.com/) is a paid, structured API over Facebook,
+Instagram and LinkedIn's public data, keyed by `SOCIO_VAULT` in the backend `.env`.
+
+### The wrapper
+
+**`app/services/sociavault_client.py` is the only module that talks to SociaVault.** Same shape as
+`firecrawl_client.py` and `brandfetch_client.py`: a cached client, `is_configured()`, one exception
+type, and `fetch_recent_posts(platform, handle, *, limit)` normalising all three platforms' very
+different raw shapes into one `SocialPost`. A field a platform genuinely does not publish — LinkedIn
+has no documented like/comment count — is left `None`, never `0`; printing `0` would claim a real
+measurement of zero engagement, which is a different, false claim.
+
+Pagination is capped at `_MAX_PAGES_PER_ACCOUNT` regardless of `limit` or platform: Facebook returns
+3 posts/page against Instagram's ~12, so a same-sized sample costs roughly 4x the credits, and the
+cap bounds worst-case spend either way rather than looping until a very long history runs out.
+
+### `social_audit.py` — parsing the intake field and rendering the document
+
+`parse_account_handles` reads the exact free-text shape `client_s_own_social_pages_handles` already
+uses ("Facebook: /trafficradius, Instagram: @trafficradius, LinkedIn: /company/trafficradius") —
+the same text is typed for a competitor. A platform this module has no endpoint for (YouTube,
+TikTok, Pinterest, ...) is silently skipped, not an error: naming one is a normal thing for the
+field to do, and `render_social_data_md` reports it as "provide manually" rather than failing the
+whole fetch.
+
+`render_social_data_md` builds the document the field's own instruction requires: a stated sample
+size, a stated collection method, and a `more_available` flag rather than presenting a sample as a
+full archive. This is prose for a prompt to read, not a token schema like `DESIGN.md` — nothing
+downstream references a value here by name.
+
+### The prepass — why the field doesn't need a manual fetch first
+
+Attaching a real answer to `raw_post_data_source` before running Stage 10 is optional, not the only
+path in: `_run_social_data_prepass` (`app/routers/pipeline.py`, alongside `_run_competitor_prepass`)
+runs automatically inside `_generation_sse_stream` whenever the stage is `social_content_strategy_
+audit` and the field is blank or asks for "research live" — the same guard shape the competitor
+prepass uses for its own target field. It parses `client_s_own_social_pages_handles`, fetches the
+client's real posts via `sociavault_client`, and fills the field before the stage's own prompt is
+built, exactly the way a Context.dev capture fills `DESIGN.md` before a replica stage reads it.
+
+**A real answer already supplied is never overwritten.** An operator who attached a CSV, or pasted
+actual post data, keeps it — the prepass only fires on blank or "research live" wording, matching
+the exact "don't clobber what's already there" rule every other prepass in this codebase follows.
+
+### Competitors — resolving a domain to a handle, Firecrawl first
+
+`competitor_list` names a company and a domain, never a social handle, and a domain is not
+something `sociavault_client` can look up. `social_audit.resolve_competitor_handles(domain)` is the
+missing step: almost every business site links to its own social profiles somewhere (a header icon,
+a footer, "follow us"), so reading those links off the page turns a domain into a real, fetchable
+handle.
+
+**Firecrawl first, Context.dev as the fallback for whatever Firecrawl leaves unresolved** — the
+reverse of `design_md.py`'s usual Context.dev-primary ordering, by explicit choice for this job:
+this is a one-off per-competitor lookup rather than the once-per-run brand capture Context.dev's
+own credit cost is weighed against there, and Firecrawl's `extract_social_links` (a `/extract` call
+against a small fixed schema, same shape as `extract_brand_tokens`) is the cheaper of the two.
+Context.dev's `retrieve_brand` — 10 credits, already used elsewhere in this codebase for a domain's
+brand record — only runs for platforms Firecrawl didn't find, and never overrides one it did; same
+"each tier only fills what the one before it left open" rule `design_md._capture_brand_fallback`
+already follows for brand tokens.
+
+**Automatic, but bounded — `_MAX_AUTO_COMPETITORS` (5), independent of what the operator typed
+into `number_of_competitors_to_audit`.** Every competitor resolved this way costs a real Firecrawl
+or Context.dev call before SociaVault can even be asked, on every stage run, so the cap is fixed
+rather than following an operator's own dial for a decision this prepass makes without asking. A
+run naming more competitors than the cap gets a note saying so; `POST /pipeline/social/posts` still
+covers a 6th, 7th, ... competitor by hand. Competitor SociaVault fetches also use a lower sample
+size than the client's own (`_COMPETITOR_LIMIT_PER_PLATFORM`, 15 vs. 40) for the same reason: this
+cost is now multiplied by up to five accounts on up to three platforms each.
+
+**Still legitimately `N/D` when it is.** A competitor whose site links to no discoverable social
+profile, or whose `competitor_list` entry could not be parsed for a domain at all, gets a stated
+"could not be resolved" line rather than a silently-omitted section — the stage still correctly
+marks that competitor's post-level metrics `N/D` per its own brief rule, and the document says why.
+
+Emits a `social_prepass` SSE event (`skipped`, and either `content`/`accounts` or `error`) so the
+transcript shows what was fetched, the same shape the `prepass` event already has for competitors.
+
+### Routes
+
+- `POST /pipeline/social/posts` — `{label, handles_text, limit_per_platform}` → real posts fetched
+  and rendered to markdown. What the prepass calls internally for the client; also usable directly
+  to preview one competitor's data by hand if the operator has that competitor's own handles.
+  Unattached to a run and stores nothing, like `POST /pipeline/design`.
+- `GET /pipeline/social/status` — free, for the UI to decide whether to offer a manual-fetch button.
+
+### Rules
+
+- **Credits are money.** `limit_per_platform` is the credit dial, same role `num_results` plays on
+  `POST /intel/search` — leave it at the default unless a stage genuinely needs a longer sample.
+- **A missing key is a 503, a bad handle is a 422 (or a per-account note), matching `/intel/*`.**
+  `fetch_account_snapshot` degrades one account/platform at a time — one private or stale handle
+  must not cost the rest of the audit, the same rule `image_briefs.generate_all` already follows
+  for a content-policy rejection on one brief.
+- **Tests never hit the live API.** Patch the module-level functions in `sociavault_client` (routes,
+  `social_audit`) or `sociavault_client._client()`. See `tests/test_sociavault_client.py`,
+  `tests/test_social_audit.py` and `tests/test_social_data_prepass.py`.
+
+---
+
 ## Phase 2 — a sub-service, and why it writes its own copy
 
 Phase 2 builds the same stack one level down, for a single *sub-service* (Google Ads, Meta Ads,

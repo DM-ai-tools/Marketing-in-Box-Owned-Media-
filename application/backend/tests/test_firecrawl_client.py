@@ -102,3 +102,60 @@ async def test_extract_brand_tokens_raises_when_no_job_id_comes_back(monkeypatch
 
     with pytest.raises(firecrawl_client.FirecrawlError):
         await firecrawl_client.extract_brand_tokens("https://client.com/")
+
+
+@pytest.mark.asyncio
+async def test_extract_reference_images_returns_hero_and_content_photos(monkeypatch):
+    async def post(path, json):
+        assert path == "/extract"
+        assert json["schema"] is firecrawl_client._IMAGE_SCHEMA
+        return _Response({"success": True, "id": "job-3"})
+
+    async def get(path):
+        return _Response(
+            {
+                "status": "completed",
+                "data": {
+                    "heroImageUrl": "https://client.com/hero.jpg",
+                    "contentImageUrls": [
+                        "https://client.com/team.jpg",
+                        "https://client.com/office.jpg",
+                        "https://client.com/hero.jpg",  # a duplicate of the hero — must not repeat
+                    ],
+                },
+            }
+        )
+
+    fake = types.SimpleNamespace(post=post, get=get)
+    monkeypatch.setattr(firecrawl_client, "_client", lambda: fake)
+    monkeypatch.setattr(firecrawl_client, "_POLL_INTERVAL_SECONDS", 0)
+
+    images = await firecrawl_client.extract_reference_images("https://client.com/")
+
+    assert images.available
+    assert images.hero_image_url == "https://client.com/hero.jpg"
+    # Hero first, deduplicated against the content list — the order `image_briefs.py` hands to the
+    # OpenAI edit endpoint. `content_image_urls` itself is not cross-deduped against the hero; only
+    # `all_urls`, the property actually used downstream, is.
+    assert images.all_urls == (
+        "https://client.com/hero.jpg",
+        "https://client.com/team.jpg",
+        "https://client.com/office.jpg",
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_reference_images_available_is_false_when_the_page_has_none(monkeypatch):
+    async def post(path, json):
+        return _Response({"success": True, "id": "job-4"})
+
+    async def get(path):
+        return _Response({"status": "completed", "data": {}})
+
+    fake = types.SimpleNamespace(post=post, get=get)
+    monkeypatch.setattr(firecrawl_client, "_client", lambda: fake)
+
+    images = await firecrawl_client.extract_reference_images("https://client.com/")
+
+    assert images.available is False
+    assert images.all_urls == ()

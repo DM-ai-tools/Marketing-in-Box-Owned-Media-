@@ -566,7 +566,21 @@ export const ASSET_CATALOG: AssetDefinition[] = [
       ctx("word_for_the_first_commitment_step", "Word for the first commitment step", "cro_terminology_map", { sub_key: "word_for_the_first_commitment_step" }),
       txt("primary_cta_label_and_action", "Primary CTA Label + Action"),
       txt("secondary_cta_label_and_action_optional", "Secondary CTA Label + Action (optional)", { required: false }),
-      txt("image_placement_instructions_optional", "Image Placement Instructions (optional)", { required: false }),
+      choice(
+        "image_placement_instructions_optional",
+        "Image Placement Instructions (optional)",
+        [
+          "Let agent handle image generation and placeholders (gpt-image-2 model)",
+          "Follow reference design logic",
+          "Specify custom images and placeholders: specify",
+        ],
+        {
+          required: false,
+          default: "Let agent handle image generation and placeholders (gpt-image-2 model)",
+          helpText:
+            "Choose whether to let the agent create gpt-image-2 generation prompts and placeholders, replicate the reference page's image positions, or specify custom image requirements.",
+        },
+      ),
       choice("component_fallback_preference", "Component Fallback Preference", ["STRICT", "ADAPTIVE"], { default: "ADAPTIVE" }),
       choice("accessibility_requirement", "Accessibility Requirement", ["STANDARD WCAG AA", "CLIENT-SPECIFIED", "NOT REQUIRED"], { default: "STANDARD WCAG AA" }),
       choice("output_format", "Output Format", ["Full HTML + CSS", "HTML sections only", "React component", "Figma-ready component brief", "WordPress block structure"]),

@@ -45,8 +45,15 @@
     { "field_id": "primary_cta_label_and_action", "label": "Primary CTA Label + Action", "kind": "text", "required": true, "source": "user_input", "raw_explanation": "e.g. \"Book a free consultation\" → contact form" },
     { "field_id": "secondary_cta_label_and_action_optional", "label": "Secondary CTA Label + Action (optional)", "kind": "text", "required": false, "source": "user_input", "raw_explanation": "YOUR ANSWER / NONE" },
 
-    { "field_id": "image_placement_instructions_optional", "label": "Image Placement Instructions (optional)", "kind": "text", "required": false, "source": "user_input",
-      "fallback_instruction": "Follow reference design logic if left blank.", "raw_explanation": "YOUR ANSWER / follow reference design logic if blank" },
+    { "field_id": "image_placement_instructions_optional", "label": "Image Placement Instructions (optional)", "kind": "enum_choice", "required": false, "source": "user_input",
+      "choices": [
+        "Let agent handle image generation and placeholders (gpt-image-2 model)",
+        "Follow reference design logic",
+        "Specify custom images and placeholders: specify"
+      ],
+      "default": "Let agent handle image generation and placeholders (gpt-image-2 model)",
+      "fallback_instruction": "Let agent handle image generation and placeholders (gpt-image-2 model) or follow reference design logic if left blank.",
+      "raw_explanation": "Let agent handle image generation and placeholders (gpt-image-2 model) / Follow reference design logic / Specify custom images and placeholders: specify" },
     { "field_id": "component_fallback_preference", "label": "Component Fallback Preference", "kind": "enum_choice", "required": true, "source": "user_input",
       "choices": ["STRICT", "ADAPTIVE"], "default": "ADAPTIVE",
       "raw_explanation": "STRICT — skip anything the reference has no equivalent for / ADAPTIVE — build new sections from the closest matching reference pattern (default)" },

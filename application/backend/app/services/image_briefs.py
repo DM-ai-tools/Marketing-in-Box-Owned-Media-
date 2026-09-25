@@ -1,4 +1,4 @@
-"""Brand-aware image briefs for HTML-producing assets, and the OpenAI calls that fulfil them.
+"""Brand-aware image briefs for HTML-producing assets, and the image-generation calls that fulfil them.
 
 Why generation happens here and not in the model's own prompt
 ----------------------------------------------------------------
@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services import media_storage, openai_image_client
+from app.services import media_storage, openai_image_client, runway_image_client
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,10 @@ class ImageBrief:
     role: str
     size: str
     prompt: str
+    #: Real photographs off the client's own reference page (`firecrawl_client.extract_reference_images`).
+    #: When present, `generate_all` grounds the image in these via `openai_image_client.edit_image`
+    #: instead of a text-only generation — see that function's docstring for why.
+    reference_image_urls: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -57,18 +61,66 @@ def _token(document: str, name: str, fallback: str) -> str:
     return match.group(1).strip() if match else fallback
 
 
-def build_image_briefs(design_md: str, *, asset_label: str = "the HTML asset") -> tuple[ImageBrief, ...]:
-    """Create prompts that bind subject matter to the measured brand system."""
+def build_image_briefs(
+    design_md: str,
+    *,
+    asset_label: str = "the HTML asset",
+    subject_context: str = "",
+    reference_image_urls: tuple[str, ...] = (),
+) -> tuple[ImageBrief, ...]:
+    """Create prompts that bind subject matter to the measured brand system.
+
+    `subject_context` and `reference_image_urls` are what stop the output being a plausible but
+    unrelated scene ("random character images"): a brief built from brand tokens alone tells the
+    model what colours and typography to use, never what the business *is*, so the model filled
+    that gap itself. `subject_context` is a short description of the actual service (from the
+    stage's own intake — see `pipeline._image_subject_context`); `reference_image_urls` are real
+    photographs off the client's page (`firecrawl_client.extract_reference_images`), which
+    `generate_all` uses to ground the image via `openai_image_client.edit_image` rather than a
+    text-only generation.
+    """
     primary = _token(design_md, "primary", "the measured primary brand colour")
     surface = _token(design_md, "surface", "the measured surface colour")
     ink = _token(design_md, "on-surface", "the measured text colour")
     heading_font = _token(design_md, "fontFamily", "the measured heading typeface")
-    base = (
-        f"Photorealistic editorial image for {asset_label}. Match the brand system exactly: "
-        f"primary accent {primary}, surface {surface}, text contrast {ink}, typography reference {heading_font}. "
-        "Use natural light, believable human expression, realistic skin and materials, premium commercial photography, "
-        "restrained composition, and intentional negative space for HTML overlay text. Do not add logos, watermarks, "
-        "legible text, fake UI, gradients, illustration, or generic stock-photo styling."
+
+    if subject_context:
+        subject_line = (
+            f"This image is for a page about: {subject_context}. Every image MUST depict this "
+            "specific business, service or outcome — real-looking people, settings and objects "
+            "plausible for it. Do not depict an unrelated industry, product or scene."
+        )
+    else:
+        subject_line = (
+            "No specific business description is available for this run. Depict a plausible, "
+            "industry-neutral professional scene (an office, a consultation, a workspace) rather "
+            "than an arbitrary or unrelated subject — do not invent a specific product, uniform, "
+            "signage or setting that could contradict the real client's business."
+        )
+
+    if reference_image_urls:
+        reference_line = (
+            "Real photographs from this client's own page are supplied as reference. Match their "
+            "actual subject matter, setting, people and mood — this is not a mood-board suggestion, "
+            "it is what the image must depict, restyled only enough to fit the composition below."
+        )
+    else:
+        reference_line = ""
+
+    base = " ".join(
+        part
+        for part in (
+            f"Photorealistic editorial image for {asset_label}.",
+            subject_line,
+            reference_line,
+            f"Match the brand system exactly: primary accent {primary}, surface {surface}, "
+            f"text contrast {ink}, typography reference {heading_font}.",
+            "Use natural light, believable human expression, realistic skin and materials, premium "
+            "commercial photography, restrained composition, and intentional negative space for "
+            "HTML overlay text. Do not add logos, watermarks, legible text, fake UI, gradients, "
+            "illustration, or generic stock-photo styling.",
+        )
+        if part
     )
     return (
         ImageBrief(
@@ -77,17 +129,20 @@ def build_image_briefs(design_md: str, *, asset_label: str = "the HTML asset") -
             # composes against is wide, not square. See `openai_image_client.VALID_SIZES`.
             size="1536x1024",
             prompt=f"{base} Hero composition: a credible scene that communicates the service outcome, with the focal subject on the right and clean copy space on the left.",
+            reference_image_urls=reference_image_urls,
         ),
         ImageBrief(
             role="proof",
             # Square — a proof/testimonial card crops far more forgivingly than a wide hero shot.
             size="1024x1024",
             prompt=f"{base} Proof section composition: a specific, grounded moment showing the client or customer experiencing the measurable outcome, with room for a short heading and caption.",
+            reference_image_urls=reference_image_urls,
         ),
         ImageBrief(
             role="closing-cta",
             size="1536x1024",
             prompt=f"{base} Closing call-to-action composition: confident but human, visually calm, with a clear foreground subject and generous uncluttered space for a CTA overlay.",
+            reference_image_urls=reference_image_urls,
         ),
     )
 
@@ -95,35 +150,78 @@ def build_image_briefs(design_md: str, *, asset_label: str = "the HTML asset") -
 async def generate_all(
     briefs: tuple[ImageBrief, ...], session: AsyncSession
 ) -> tuple[tuple[GeneratedImage, ...], tuple[str, ...]]:
-    """Fulfil every brief through OpenAI and return `(generated, notes)`.
+    """Fulfil every brief and return `(generated, notes)`.
 
-    The OpenAI calls are issued concurrently, like the two Context.dev screenshots in
-    `design_md.capture_page_design`, and each is allowed to fail on its own: three independent
-    images, so a content-policy rejection on one does not cost the other two.
+    Generation order, per brief
+    ----------------------------
+    1. If the brief carries `reference_image_urls`, try OpenAI's reference-grounded edit
+       (`openai_image_client.edit_image`) — the image is built from the client's own real
+       photographs, not invented from a text description alone. See that function's docstring.
+    2. Otherwise, or if step 1 failed (a reference URL that no longer resolves, a content-policy
+       rejection), try plain OpenAI generation (`openai_image_client.generate_image`).
+    3. If OpenAI fails entirely *and* `RUNWAYML_API_SECRET` is set, retry with Runway
+       (`runway_image_client.generate_image`). Runway is transparent to the rest of the pipeline:
+       it returns the same `GeneratedImageBytes` type. Runway has no edit equivalent wired here, so
+       a reference-grounded brief that falls through to Runway loses the grounding, not the image.
+    4. If everything fails, the brief is skipped and a note is appended.
 
-    Saving to Postgres happens *after* that gather, one at a time — an `AsyncSession` is not safe
-    for concurrent use across coroutines, so `media_storage.save_generated_image` cannot be called
-    from inside the concurrent branch. This only adds a handful of in-process `session.add()` calls
-    to the critical path, not more network round trips: nothing is flushed or committed here,
-    so `session.add()` is not itself awaited. The caller (`_ensure_generated_images` in
-    `app/routers/pipeline.py`) commits once, after also writing the run's `generated_images`
-    context entry on the same session — the images and the pointer to them land together or not
-    at all.
+    The generation calls are issued concurrently per brief, like the two Context.dev screenshots in
+    `design_md.capture_page_design`. Saving to Postgres happens *after* that gather, one at a time
+    — an `AsyncSession` is not safe for concurrent use across coroutines.
 
-    `notes` carries one line per failure for the caller to fold into the run's own notes — the
-    same "state it, don't invent a substitute" rule as everywhere else this pipeline degrades.
+    `notes` carries one line per failure for the caller to fold into the run's own notes.
 
-    Returns `((), ())` immediately when OpenAI is not configured, so a deployment with no key
-    behaves exactly as it did before this function existed — no delay, no log noise.
+    Returns `((), ())` immediately when neither provider is configured.
     """
-    if not briefs or not openai_image_client.is_configured():
+    openai_ok = openai_image_client.is_configured()
+    runway_ok = runway_image_client.is_configured()
+    if not briefs or (not openai_ok and not runway_ok):
         return (), ()
 
     async def _one(brief: ImageBrief) -> openai_image_client.GeneratedImageBytes | Exception:
-        try:
-            return await openai_image_client.generate_image(brief.prompt, size=brief.size)
-        except openai_image_client.OpenAIImageError as exc:
-            return exc
+        # --- primary: OpenAI, reference-grounded when a real photo is available ---
+        if openai_ok:
+            if brief.reference_image_urls:
+                try:
+                    return await openai_image_client.edit_image(
+                        brief.prompt, brief.reference_image_urls, size=brief.size
+                    )
+                except openai_image_client.OpenAIImageError as exc:
+                    logger.warning(
+                        "OpenAI reference-grounded edit failed for brief %r — trying a text-only "
+                        "generation: %s",
+                        brief.role,
+                        exc,
+                    )
+            try:
+                return await openai_image_client.generate_image(brief.prompt, size=brief.size)
+            except openai_image_client.OpenAIImageError as exc:
+                openai_failure = exc
+                logger.warning(
+                    "OpenAI image failed for brief %r — trying Runway fallback: %s",
+                    brief.role,
+                    exc,
+                )
+                # --- fallback: Runway ---
+                if runway_ok:
+                    try:
+                        return await runway_image_client.generate_image(brief.prompt, size=brief.size)
+                    except runway_image_client.RunwayImageError as runway_exc:
+                        return runway_exc
+                # Runway not configured (or this brief never reached it): the real reason this
+                # brief failed is OpenAI's own error, not "no provider is configured" — that string
+                # would be actively misleading when OpenAI *is* configured and simply refused.
+                return openai_failure
+        # --- OpenAI not configured at all ---
+        if runway_ok:
+            try:
+                return await runway_image_client.generate_image(brief.prompt, size=brief.size)
+            except runway_image_client.RunwayImageError as exc:
+                return exc
+        # Neither provider available for this brief.
+        return openai_image_client.OpenAIImageError(
+            "No image provider is configured (OPENAI_API_KEY and RUNWAYML_API_SECRET are both unset)."
+        )
 
     results = await asyncio.gather(*(_one(brief) for brief in briefs))
 

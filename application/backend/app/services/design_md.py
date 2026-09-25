@@ -1007,7 +1007,9 @@ def _site_name(url: str) -> str:
 # ----------------------------------------------------------------------------------------------
 
 
-async def capture_page_design(url: str, *, with_screenshots: bool = True) -> PageDesign:
+async def capture_page_design(
+    url: str, *, with_screenshots: bool = True, subject_context: str = ""
+) -> PageDesign:
     """Read one page every way this backend can, and return its DESIGN.md.
 
     Costs, when Context.dev is configured: 10 credits (styleguide) + 5 (fonts) + 2 (screenshots) =
@@ -1022,8 +1024,16 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
     `BRANDFETCH_API_KEY`; either or both may be unset, in which case this tier is a no-op and costs
     nothing extra). Their cost is outside the 17-credit figure above and is not fixed, since they
     run only on a gap.
+
+    Firecrawl is also asked for the page's own real photographs (`extract_reference_images`),
+    unconditionally rather than on a gap — there is no free local reader that could ever fill this
+    field, and it is what lets `image_briefs.build_image_briefs` ground a generated hero/proof/CTA
+    image in the client's actual subject matter instead of inventing one. `subject_context` (a short
+    description of the service this run is for, from the stage's own intake) is passed straight
+    through to the same function for the same reason.
     """
     use_context_dev = context_dev.is_configured()
+    use_firecrawl_images = firecrawl_client.is_configured()
 
     async def styleguide():
         return await context_dev.extract_styleguide(url) if use_context_dev else None
@@ -1040,8 +1050,13 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
             return_exceptions=True,
         )
 
-    guide_result, fonts_result, shots_result, tokens_result = await asyncio.gather(
-        styleguide(), fonts(), shots(), extract_design_tokens(url), return_exceptions=True
+    async def reference_images():
+        if not use_firecrawl_images:
+            return None
+        return await firecrawl_client.extract_reference_images(url)
+
+    guide_result, fonts_result, shots_result, tokens_result, reference_images_result = await asyncio.gather(
+        styleguide(), fonts(), shots(), extract_design_tokens(url), reference_images(), return_exceptions=True
     )
 
     notes: list[str] = []
@@ -1059,6 +1074,17 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
     guide = _ok(guide_result, "styleguide")
     fonts_data = _ok(fonts_result, "fonts")
     tokens = _ok(tokens_result, "css parse")
+
+    # Not read through `_ok`: `reference_images()` returns `None` (not a result) whenever Firecrawl
+    # is unconfigured, and a `ReferenceImages` with no URLs is a real answer ("this page has no
+    # usable photos") rather than a failure — neither should be logged as one.
+    reference_images: firecrawl_client.ReferenceImages | None = None
+    if isinstance(reference_images_result, BaseException):
+        logger.info("Page design: reference photos failed for %r: %s", url, reference_images_result)
+        notes.append(f"Reference photos could not be read: {reference_images_result}")
+    elif reference_images_result is not None and reference_images_result.available:
+        reference_images = reference_images_result
+        sources.append("reference photos (firecrawl)")
 
     # Free, and from the HTML the CSS parse has already fetched — `DesignTokens.html` exists for
     # exactly this, so reading the page's skeleton costs no request and no Context.dev credit.
@@ -1140,12 +1166,16 @@ async def capture_page_design(url: str, *, with_screenshots: bool = True) -> Pag
     design_md = build_design_md(
         url, guide, fonts_data, tokens, screenshots=screenshots, structure=structure, fallback=fallback
     )
-    # Specs only — role, ratio, prompt. What actually reaches the model is real Runway URLs,
+    # Specs only — role, ratio, prompt. What actually reaches the model is real hosted URLs,
     # generated server-side once real ones exist (`image_briefs.generate_all`, wired from
     # `resolve_page_design` in the pipeline router). Baking an instruction to "go generate this
-    # with Runway" into the document itself was the bug: the model that reads DESIGN.md has no way
-    # to call Runway, so it could only fabricate a URL. See `image_briefs.py`'s module docstring.
-    image_briefs = build_image_briefs(design_md)
+    # yourself" into the document itself was the bug: the model that reads DESIGN.md has no way to
+    # call an image generator, so it could only fabricate a URL. See `image_briefs.py`'s docstring.
+    image_briefs = build_image_briefs(
+        design_md,
+        subject_context=subject_context,
+        reference_image_urls=reference_images.all_urls if reference_images is not None else (),
+    )
     theme_brief = build_design_md(url, guide, fonts_data, tokens, theme_only=True, fallback=fallback)
 
     logger.info(

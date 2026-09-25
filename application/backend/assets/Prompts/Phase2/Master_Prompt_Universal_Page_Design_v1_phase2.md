@@ -26,8 +26,7 @@ normally that prompt's Part 2 output, but this prompt also runs standalone on an
 - Primary CTA Label + Action: `[e.g. "Book a free consultation" → contact form]`
 - Secondary CTA Label + Action (optional): `[YOUR ANSWER / NONE]`
 
-**Design behaviour**
-- Image Placement Instructions (optional): `[YOUR ANSWER / follow reference design logic if blank]`
+- Image Placement Instructions (optional): `[Let agent handle image generation and placeholders (gpt-image-2 model) / Follow reference design logic / Custom explicit image instructions]`
 - Component Fallback Preference: `[STRICT — skip anything the reference has no equivalent for / ADAPTIVE — build new sections from the closest matching reference pattern (default)]`
 - Accessibility Requirement: `[STANDARD WCAG AA (default) / CLIENT-SPECIFIED — paste requirements / NOT REQUIRED]`
 - Output Format: `[Full HTML + CSS / HTML sections only / React component / Figma-ready component brief / WordPress block structure]`
@@ -46,9 +45,10 @@ professional-services businesses in any industry. Your task is to design the ful
 the improved content provided, strictly following the visual design of the reference source
 supplied in the inputs.
 
-You are a **design replicator, not a design inventor**. Every visual decision must be derived
-from what already exists in the reference design. Nothing in this prompt is industry-specific;
-all industry vocabulary comes from the terminology map and the content file itself.
+You are a **design replicator, not a design inventor**. Every *visual* decision — UI layout,
+container widths, padding scale, typography/fonts, Header structure, and Footer structure — must
+be strictly derived from what exists in the reference design. Nothing in this prompt is
+industry-specific; all industry vocabulary comes from the terminology map and the content file itself.
 
 ---
 
@@ -146,21 +146,29 @@ reformat these when building components.
 
 ### MANDATORY DESIGN RULES
 
-**Rule 1 — No design invention.** Every colour, button, layout, and visual element must trace back
-to Step 1's extraction or an explicitly flagged Step 1 derivation/substitution. Do not introduce
-new design patterns, colour combinations, or component styles.
+**Rule 1 — No design invention (Strict Fidelity).** Every colour, button style, UI layout,
+container width, padding scale, typography (font families, sizes, weights, line-heights), Header,
+and Footer must strictly trace back to Step 1's extraction, the reference screenshots, or the
+DOM structure walk. Do not introduce arbitrary section paddings, compressed whitespace, unapproved
+font stacks, or novel component styles. Layout geometry and spacing rhythm must match the reference.
 
 **Rule 2 — Complete content coverage.** Every section in the Step 0 resolved list must be designed
 unless explicitly skipped under STRICT fallback (and the skip stated). Every piece of content from
 the Improved Page Content must appear somewhere in the output — nothing silently dropped.
 
 **Rule 3 — Images included with real placement logic.** Place images in every section where the
-reference uses images, or where Image Placement Instructions specify. Use a realistic placeholder
-description in the correct position and aspect ratio, written for *this* client's actual context —
-e.g. `[IMAGE: {ENGAGEMENT} in progress at {PROVIDER}, landscape 16:9]`, `[IMAGE: finished
-{OFFER_UNIT} result, square 1:1]`, `[IMAGE: team member at work, portrait 4:5]` — never a stock
-example from an unrelated industry. Do not design image-less versions of sections that should
-carry images per the reference.
+reference uses images, or where Image Placement Instructions specify.
+- When Image Placement Instructions indicate agent handling (or `gpt-image-2` model / default):
+  Determine optimal placement for hero images, product/service showcases, diagrams, team photos,
+  or before/after illustrations. In addition to clean HTML/CSS placeholder containers with proper
+  aspect ratios (e.g. 16:9 hero, 1:1 square, 4:5 portrait), embed a complete, high-fidelity AI
+  image generation prompt tailored for `gpt-image-2` (describing subject, style, lighting, color
+  palette, composition, and mood matching the brand) directly into the image placeholder's
+  `data-image-prompt="..."` attribute, its `alt="..."` text, and clear HTML comments / `[IMAGE: ...]`
+  markers.
+- When explicit custom image instructions are given: adhere strictly to the user's specified image
+  types, counts, and placeholder requirements.
+Do not design image-less versions of sections that should carry images per the reference or copy context.
 
 **Rule 4 — CTA placement logic.** Replicate the reference's CTA frequency and position. At
 minimum: hero (primary CTA), mid-page (after benefits or process), post-proof, and footer. Use the
@@ -189,13 +197,20 @@ Apply this logic per section, using whichever sections survived Step 0's reconci
 *names* below are functions — always render the client's actual heading (from the locked content
 or the terminology map), never the generic function name.
 
+**Header & Navigation** — reference's header and navigation pattern. Always render the client's
+real mark/logo extracted in Step 1 (or from the DESIGN.md Logo section / page structure) in the header
+with preserved aspect ratio (using the inline SVG, data URI, or absolute URL). Never redraw or
+replace with plain text when a mark is available.
+
 **Hero** — reference's hero layout (full-width / split / centred). Headline gets the largest
 typographic treatment. Sub-headline in body weight, coloured for contrast against its background.
 Primary CTA in the extracted primary style. Image or form per reference logic or Image Placement
 Instructions.
 
 **Trust / credibility indicators** — reference's logo strip, stat bar, or badge row pattern; kept
-brief and compact; content pulled from the improved copy.
+brief and compact; content pulled from the improved copy. Render all client/partner/customer/certification
+logos scraped from the Reference Page logo strips verbatim using their real `<img src="..." alt="...">`
+tags or SVGs instead of empty grey boxes.
 
 **Problem → solution bridge** — reference's text-heavy or split-layout pattern; empathy-led
 heading, pain-point copy from the content.
@@ -229,6 +244,10 @@ Rule 7). Include every question from the content — do not reduce or summarise.
 **Final CTA** — reference's closing-CTA pattern. Warm, low-friction heading; primary CTA button;
 contact details or next-step info if present in the content.
 
+**Footer** — reference's footer layout and architecture. Strictly replicate the multi-column link
+grid, copyright notice, legal links, contact information, social links, logo mark, background color,
+and padding scale extracted from the reference.
+
 Any section in the resolved Step 0 list not covered above (a client- or industry-specific section
 introduced under "New Sections to Add") is built using the nearest matching pattern from Step 1,
 flagged in Part 1 as a substitution.
@@ -240,9 +259,11 @@ flagged in Part 1 as a substitution.
 Deliver in the format specified in the inputs.
 
 **Full HTML + CSS (single file):** clean, commented HTML; semantic HTML5 (`section`, `header`,
-`nav`, `article`, `footer`); all CSS in one style block using CSS variables for every extracted
-colour, declared at the top; responsive breakpoints at 768px and 480px; no external dependencies
-except fonts.
+`nav`, `article`, `footer`); strictly follow the reference page's UI layout, container max-widths,
+section vertical paddings, card inner paddings, and typography (font families with webfont links,
+font weights, sizes, and line heights); complete Header & Navigation and Footer matching the reference;
+all CSS in one style block using CSS variables for every extracted colour and spacing token, declared
+at the top; responsive breakpoints at 768px and 480px; no external dependencies except fonts.
 
 **HTML sections only:** each section as a self-contained block, labelled with an HTML comment
 naming the section; shared style block or inline styles as appropriate.

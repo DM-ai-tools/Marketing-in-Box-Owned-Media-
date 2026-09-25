@@ -3,13 +3,21 @@
 Why this exists
 ----------------
 Context.dev is, and stays, the primary source for `DESIGN.md` (see `app/services/design_md.py`
-and the "One API and one key for web data" rule in `CLAUDE.md`). This module exists for a narrow,
-secondary job: when Context.dev's `/web/styleguide` and `/web/fonts` and the free local CSS parse
-in `design_tokens.py` *all* leave a field unfilled — a bot-walled page, a JS-heavy theme the local
-parse cannot resolve — Firecrawl's structured extraction is tried before giving up on that field.
+and the "One API and one key for web data" rule in `CLAUDE.md`). This module has two jobs, on two
+different triggers.
 
-It is never called unless `design_md._brand_gaps` finds something missing, and it never overrides
-a value Context.dev or the local parse already found. See `design_md._capture_brand_fallback`.
+**`extract_brand_tokens`** is the narrow, secondary one: when Context.dev's `/web/styleguide` and
+`/web/fonts` and the free local CSS parse in `design_tokens.py` *all* leave a field unfilled — a
+bot-walled page, a JS-heavy theme the local parse cannot resolve — Firecrawl's structured extraction
+is tried before giving up on that field. It is never called unless `design_md._brand_gaps` finds
+something missing, and it never overrides a value Context.dev or the local parse already found. See
+`design_md._capture_brand_fallback`.
+
+**`extract_reference_images`** has no equivalent gap to wait for: there is no free local reader for
+"what does this business actually look like", and a generated image with nothing to go on but brand
+colours is exactly how this pipeline used to produce photorealistic images of the wrong subject
+(see its own docstring, and `image_briefs.py`). It runs once per run, alongside the brand-token
+capture, whenever Firecrawl is configured and image generation is about to happen.
 
 What this module returns
 -------------------------
@@ -66,6 +74,42 @@ _SCHEMA: dict[str, Any] = {
         "bodyFont": {"type": "string", "description": "The font family used for body text"},
         "logoUrl": {"type": "string", "description": "Absolute URL of the site's primary logo image"},
         "buttonBorderRadius": {"type": "string", "description": "CSS border-radius of the primary button, e.g. 8px"},
+    },
+}
+
+# What `extract_reference_images` asks for — the page's own real photos, not its brand tokens.
+# Separate from `_SCHEMA` because it is asked for on a different trigger (see that function's
+# docstring): brand tokens are asked for only on a named gap, reference photos are asked for
+# whenever image generation is about to run, since there is no "gap" for a subject a text-only
+# prompt could otherwise only guess at.
+_IMAGE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "heroImageUrl": {
+            "type": "string",
+            "description": "Absolute URL of the page's main hero/banner photograph — the large image "
+            "at the top of the page, if it is a real photo rather than an icon or illustration",
+        },
+        "contentImageUrls": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Absolute URLs of up to 4 other real photographs used further down the page "
+            "(people, premises, product, work in progress). Exclude logos, icons, decorative SVGs and "
+            "stock illustration.",
+        },
+    },
+}
+
+# What `extract_social_links` asks for — resolving a competitor's *domain* to the social accounts
+# `sociavault_client` can then fetch real posts from. Stage 10 (`social_content_strategy_audit`)
+# has a real handle for the client (`client_s_own_social_pages_handles`) but only a domain for each
+# competitor (`competitor_list`'s own output), and a domain is not a handle SociaVault can look up.
+_SOCIAL_LINKS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "facebookUrl": {"type": "string", "description": "Absolute URL of this business's Facebook page, if one is linked anywhere on the site (header, footer, or a social icon)"},
+        "instagramUrl": {"type": "string", "description": "Absolute URL of this business's Instagram profile, if linked"},
+        "linkedinUrl": {"type": "string", "description": "Absolute URL of this business's LinkedIn company page, if linked"},
     },
 }
 
@@ -194,6 +238,137 @@ async def extract_brand_tokens(url: str) -> BrandTokens:
         logo_url=data.get("logoUrl") or None,
         button_border_radius=data.get("buttonBorderRadius") or None,
         raw=data,
+    )
+
+
+@dataclass(frozen=True)
+class ReferenceImages:
+    """The page's own real photographs, for grounding a generated image in the client's actual
+    business rather than in brand colours alone. See `extract_reference_images`."""
+
+    source_url: str
+    hero_image_url: str | None = None
+    content_image_urls: tuple[str, ...] = ()
+
+    @property
+    def available(self) -> bool:
+        return bool(self.hero_image_url or self.content_image_urls)
+
+    @property
+    def all_urls(self) -> tuple[str, ...]:
+        """Hero first, deduplicated — the order `image_briefs.py` hands to OpenAI's edit endpoint,
+        since the hero shot is the most representative single reference when only one is used."""
+        ordered = [self.hero_image_url, *self.content_image_urls]
+        return tuple(dict.fromkeys(u for u in ordered if u))
+
+
+async def extract_reference_images(url: str) -> ReferenceImages:
+    """Ask Firecrawl for the page's own real photos.
+
+    Why this exists
+    ----------------
+    A generated hero/proof/CTA image used to be briefed on brand colours and typography alone
+    (`image_briefs.build_image_briefs`) — nothing told the model what the business actually *is*,
+    so it filled that gap with a plausible but arbitrary scene: the "random character images" that
+    do not reflect the client's real product, people or premises. Handing the model real photographs
+    from the client's own page (via `openai_image_client.edit_image`) grounds the generated image in
+    the actual subject matter instead of an invented one — the same fix `DESIGN.md`'s palette
+    measurement is for colour, one layer up.
+
+    Unlike `extract_brand_tokens`, this is not gated on a "gap" — there is no free local reader for
+    "what does this business look like", so it is called whenever image generation is about to run
+    and Firecrawl is configured. Raises `FirecrawlError` on failure or timeout; callers treat that as
+    "no reference available" and fall back to a text-only prompt, never a fabricated one.
+    """
+    logger.info("Firecrawl API executing operation=extract_reference_images url=%r", url)
+    client = _client()
+    try:
+        submit = await client.post("/extract", json={"urls": [url], "schema": _IMAGE_SCHEMA})
+        submit.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.error("Firecrawl API error operation=extract_reference_images url=%r error=%s", url, exc)
+        raise _fail(f"Could not submit a Firecrawl image extract for {url}", exc) from exc
+
+    payload = submit.json()
+    job_id = payload.get("id")
+    if not job_id:
+        raise FirecrawlError(f"Firecrawl did not return a job id for {url}.")
+
+    try:
+        data = await _poll(client, job_id, url)
+    except FirecrawlError as exc:
+        logger.error("Firecrawl API error operation=extract_reference_images url=%r error=%s", url, exc)
+        raise
+
+    content_urls = tuple(
+        dict.fromkeys(u.strip() for u in (data.get("contentImageUrls") or []) if isinstance(u, str) and u.strip())
+    )[:4]
+    return ReferenceImages(
+        source_url=url,
+        hero_image_url=(data.get("heroImageUrl") or "").strip() or None,
+        content_image_urls=content_urls,
+    )
+
+
+@dataclass(frozen=True)
+class SocialLinks:
+    """A domain's own social profile URLs — not the client's, a *competitor's*. See
+    `extract_social_links` and `social_audit.resolve_competitor_handles`, the module that turns this
+    into something `sociavault_client.fetch_recent_posts` can actually look up."""
+
+    source_url: str
+    facebook_url: str | None = None
+    instagram_url: str | None = None
+    linkedin_url: str | None = None
+
+    @property
+    def available(self) -> bool:
+        return bool(self.facebook_url or self.instagram_url or self.linkedin_url)
+
+
+async def extract_social_links(url: str) -> SocialLinks:
+    """Ask Firecrawl which Facebook/Instagram/LinkedIn URLs a business's own site links to.
+
+    Why this exists
+    ----------------
+    Stage 10 (`social_content_strategy_audit`) has a real, ready-to-fetch handle for the client
+    (`client_s_own_social_pages_handles`), but for a competitor it only has a domain
+    (`competitor_list`'s own output names a company and a URL, never a social handle) — and a
+    domain is not something `sociavault_client` can look up directly. This is the missing step: a
+    business's own site almost always links to its own social profiles (header icons, footer,
+    "follow us"), so reading those links off the page turns a domain into a real, fetchable handle,
+    per `social_audit.resolve_competitor_handles` — Firecrawl first, Context.dev's `retrieve_brand`
+    as the fallback when Firecrawl is unconfigured or finds nothing, per that function's own
+    docstring for why the order is inverted from `design_md.py`'s usual Context.dev-primary rule.
+
+    Raises `FirecrawlError` on failure or timeout; callers treat that as "no links found here" and
+    fall through to the next source, never a fabricated handle.
+    """
+    logger.info("Firecrawl API executing operation=extract_social_links url=%r", url)
+    client = _client()
+    try:
+        submit = await client.post("/extract", json={"urls": [url], "schema": _SOCIAL_LINKS_SCHEMA})
+        submit.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.error("Firecrawl API error operation=extract_social_links url=%r error=%s", url, exc)
+        raise _fail(f"Could not submit a Firecrawl social-links extract for {url}", exc) from exc
+
+    payload = submit.json()
+    job_id = payload.get("id")
+    if not job_id:
+        raise FirecrawlError(f"Firecrawl did not return a job id for {url}.")
+
+    try:
+        data = await _poll(client, job_id, url)
+    except FirecrawlError as exc:
+        logger.error("Firecrawl API error operation=extract_social_links url=%r error=%s", url, exc)
+        raise
+
+    return SocialLinks(
+        source_url=url,
+        facebook_url=(data.get("facebookUrl") or "").strip() or None,
+        instagram_url=(data.get("instagramUrl") or "").strip() or None,
+        linkedin_url=(data.get("linkedinUrl") or "").strip() or None,
     )
 
 

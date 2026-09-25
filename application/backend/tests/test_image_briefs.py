@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from app.services import design_md, image_briefs, media_storage, openai_image_client
+from app.services import design_md, image_briefs, media_storage, openai_image_client, runway_image_client
 from app.services.design_tokens import DesignTokens
 
 URL = "https://trafficradius.com.au/"
@@ -77,6 +77,7 @@ async def test_generate_all_is_a_no_op_when_openai_is_not_configured(monkeypatch
     """No key, no delay, no log noise — the same 'skip cleanly' contract every other optional
     source in this codebase has (`context_dev.is_configured()`, `firecrawl_client`, ...)."""
     monkeypatch.setattr(openai_image_client, "is_configured", lambda: False)
+    monkeypatch.setattr(runway_image_client, "is_configured", lambda: False)
     briefs = image_briefs.build_image_briefs(_design_md_sample())
 
     generated, notes = await image_briefs.generate_all(briefs, _FakeSession())
@@ -90,6 +91,9 @@ async def test_generate_all_fulfils_each_brief_independently(monkeypatch):
     """One brief failing (a content-policy rejection, an out-of-credits response partway through)
     must not cost the other two — each is its own note, not a shared failure."""
     monkeypatch.setattr(openai_image_client, "is_configured", lambda: True)
+    # Runway unconfigured, so the failed brief's note reports the real OpenAI error rather than a
+    # Runway fallback attempt (which, left unmocked, would otherwise make a real network call).
+    monkeypatch.setattr(runway_image_client, "is_configured", lambda: False)
 
     async def fake_generate(prompt, *, size, **_):
         if "Proof section" in prompt:
@@ -131,6 +135,85 @@ async def test_a_save_failure_is_also_a_note_not_a_crash(monkeypatch):
     assert generated == ()
     assert len(notes) == 3
     assert all("could not be saved" in note.lower() for note in notes)
+
+
+def test_subject_context_is_bound_into_every_brief():
+    """The fix for 'random character images' that don't reflect the client's business: without a
+    subject, the model had nothing but colours to go on and filled the gap with an arbitrary scene.
+    `subject_context` is that missing grounding."""
+    briefs = image_briefs.build_image_briefs(_design_md_sample(), subject_context="SEO for e-commerce stores")
+    for brief in briefs:
+        assert "SEO for e-commerce stores" in brief.prompt
+
+
+def test_no_subject_context_still_gets_a_neutral_grounding_instruction():
+    """Absent a subject, the prompt must still say something that stops the model inventing a
+    specific unrelated business — not silently fall back to the old ungrounded wording."""
+    briefs = image_briefs.build_image_briefs(_design_md_sample())
+    for brief in briefs:
+        assert "industry-neutral" in brief.prompt.lower()
+
+
+def test_reference_image_urls_are_carried_onto_every_brief():
+    refs = ("https://trafficradius.com.au/hero.jpg", "https://trafficradius.com.au/team.jpg")
+    briefs = image_briefs.build_image_briefs(_design_md_sample(), reference_image_urls=refs)
+    for brief in briefs:
+        assert brief.reference_image_urls == refs
+        assert "real photographs from this client" in brief.prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_generate_all_grounds_a_brief_with_reference_images_via_edit(monkeypatch):
+    """A brief carrying reference photos must be fulfilled through `edit_image`, not a text-only
+    `generate_image` call — that is the whole point of scraping them."""
+    monkeypatch.setattr(openai_image_client, "is_configured", lambda: True)
+    monkeypatch.setattr(runway_image_client, "is_configured", lambda: False)
+
+    calls = []
+
+    async def fake_edit(prompt, reference_urls, *, size, **_):
+        calls.append(reference_urls)
+        return openai_image_client.GeneratedImageBytes(data=b"fake-bytes", output_format="png")
+
+    async def fake_generate(prompt, *, size, **_):
+        raise AssertionError("should not fall back to a text-only generation when refs are given")
+
+    monkeypatch.setattr(openai_image_client, "edit_image", fake_edit)
+    monkeypatch.setattr(openai_image_client, "generate_image", fake_generate)
+
+    refs = ("https://trafficradius.com.au/hero.jpg",)
+    briefs = image_briefs.build_image_briefs(_design_md_sample(), reference_image_urls=refs)
+
+    generated, notes = await image_briefs.generate_all(briefs, _FakeSession())
+
+    assert len(generated) == 3
+    assert notes == ()
+    assert calls == [refs] * 3
+
+
+@pytest.mark.asyncio
+async def test_generate_all_falls_back_to_text_only_when_the_edit_fails(monkeypatch):
+    """A reference URL that has gone stale, or a content-policy rejection on the edit, must not
+    lose the image outright — it should still get a plain, ungrounded generation."""
+    monkeypatch.setattr(openai_image_client, "is_configured", lambda: True)
+    monkeypatch.setattr(runway_image_client, "is_configured", lambda: False)
+
+    async def fake_edit(prompt, reference_urls, *, size, **_):
+        raise openai_image_client.OpenAIImageError("could not download reference image")
+
+    async def fake_generate(prompt, *, size, **_):
+        return openai_image_client.GeneratedImageBytes(data=b"fake-bytes", output_format="png")
+
+    monkeypatch.setattr(openai_image_client, "edit_image", fake_edit)
+    monkeypatch.setattr(openai_image_client, "generate_image", fake_generate)
+
+    refs = ("https://trafficradius.com.au/hero.jpg",)
+    briefs = image_briefs.build_image_briefs(_design_md_sample(), reference_image_urls=refs)
+
+    generated, notes = await image_briefs.generate_all(briefs, _FakeSession())
+
+    assert len(generated) == 3
+    assert notes == ()
 
 
 def test_missing_tokens_fall_back_to_a_named_placeholder_not_a_blank():

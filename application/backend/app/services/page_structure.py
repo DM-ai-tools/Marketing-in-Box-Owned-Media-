@@ -668,7 +668,7 @@ def _contacts(document: Document, band_roles: list[tuple[Node, str]]) -> tuple[C
 def _logo_strips(bands: list[Node], base_url: str) -> tuple[LogoStrip, ...]:
     """Rows of third-party marks — client logos, partner badges, award seals.
 
-    A strip is three or more images in one container with no heading between them, or a container
+    A strip is two or more images in one container with no heading between them, or a container
     whose class says so. `alt` text is kept: it names the client, and a rebuild that keeps the
     image but drops the alt loses the only accessible version of the section's content.
     """
@@ -676,9 +676,10 @@ def _logo_strips(bands: list[Node], base_url: str) -> tuple[LogoStrip, ...]:
     for index, band in enumerate(bands):
         haystack = _hint_haystack(band)
         declared = any(word in haystack for word in _LOGO_WORDS)
+        min_count = 2 if declared else 3
         for node in band.walk():
             images = [child for child in _visible(node.elements) if child.tag in {"img", "picture"}]
-            if len(images) < 3:
+            if len(images) < min_count:
                 # A strip is usually `div > a > img`, so also accept a container whose children
                 # each hold exactly one image.
                 wrapped = [
@@ -687,14 +688,14 @@ def _logo_strips(bands: list[Node], base_url: str) -> tuple[LogoStrip, ...]:
                     if child.find("img") is not None and len(child.find_all("img")) == 1
                 ]
                 images = [img for img in wrapped if img is not None]
-            if len(images) < 3:
+            if len(images) < min_count:
                 continue
             alt_hits = sum(
                 1
                 for img in images
                 if any(word in f"{img.attr('alt')} {img.attr('src')}".lower() for word in _LOGO_WORDS)
             )
-            if not declared and alt_hits < max(2, len(images) // 3):
+            if not declared and alt_hits < max(1, len(images) // 3):
                 continue
             pairs = tuple(_image_pair(img, base_url) for img in images[:_MAX_STRIP_IMAGES])
             strips.append(LogoStrip(band_index=index + 1, images=pairs))

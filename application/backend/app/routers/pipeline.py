@@ -43,6 +43,7 @@ No context-resolution/read side or rejection/edit flow beyond what's listed abov
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -54,7 +55,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,8 +95,11 @@ from app.services import (
     keywords as keywords_service,
     media_storage,
     openai_image_client,
+    runway_image_client,
     page_replica as page_replica_service,
     slide_deck as slide_deck_service,
+    social_audit as social_audit_service,
+    sociavault_client,
     usage as usage_service,
 )
 from app.services.api_errors import classify as classify_api_error
@@ -1828,6 +1832,41 @@ def _as_url(value: str) -> str | None:
     return None
 
 
+# Which answer fields say what the business actually sells, in the order they are most likely to
+# be a real, specific description. Checked against `answers` first (the stage's own intake, e.g.
+# `cro`'s `target_service_or_sub_service`) and `profile` second (the run-level facts collected
+# across earlier stages — see `GenerateStageRequest.client_profile`).
+_SUBJECT_CONTEXT_ANSWER_FIELDS = ("target_service_or_sub_service", "client_industry", "sub_vertical_niche")
+_SUBJECT_CONTEXT_PROFILE_FIELDS = ("industry", "sub_service")
+# Sentinels that mean "nothing was actually said" — the NEW PAGE mode strings, and the ordinary
+# placeholders an operator types into a skipped field. Passing one of these through as the subject
+# would brief a generated image on the literal words "NEW PAGE", not on a business.
+_SUBJECT_CONTEXT_BLANK = {"", "N/A", "NONE", "UNKNOWN", "TBD"}
+
+
+def _image_subject_context(answers: dict[str, str], profile: dict[str, str]) -> str:
+    """A short, real description of the business this run's images should depict.
+
+    Without this, `image_briefs.build_image_briefs` had only brand colours and typography to work
+    from — nothing said what the client's business or service actually is, so a generated hero/proof
+    image was photorealistic but of an arbitrary scene: the "random character images" bug. This
+    pulls the plainest, most specific answer already on hand rather than asking a new question.
+    """
+    parts: list[str] = []
+    for field_id in _SUBJECT_CONTEXT_ANSWER_FIELDS:
+        value = (answers.get(field_id) or "").strip()
+        if value and value.upper() not in _SUBJECT_CONTEXT_BLANK and not value.startswith("[[context:"):
+            parts.append(value)
+    for field_id in _SUBJECT_CONTEXT_PROFILE_FIELDS:
+        value = (profile.get(field_id) or "").strip()
+        if value and value.upper() not in _SUBJECT_CONTEXT_BLANK:
+            parts.append(value)
+    # Dedup while keeping order — `client_industry` and `profile["industry"]` are very often the
+    # same string, and repeating it in the prompt wastes words without adding information.
+    seen = list(dict.fromkeys(parts))
+    return " — ".join(seen[:3])
+
+
 def _design_source_url(answers: dict[str, str], profile: dict[str, str]) -> str | None:
     for field_id in _DESIGN_SOURCE_FIELDS:
         value = (answers.get(field_id) or "").strip()
@@ -1888,6 +1927,9 @@ def _briefs_from_stored(raw: list | None) -> tuple[ImageBrief, ...]:
                     role=str(item.get("role") or ""),
                     size=str(item.get("size") or openai_image_client.DEFAULT_SIZE),
                     prompt=str(item["prompt"]),
+                    reference_image_urls=tuple(
+                        str(u) for u in (item.get("reference_image_urls") or ()) if u
+                    ),
                 )
             )
         elif isinstance(item, str) and item:
@@ -1924,7 +1966,7 @@ async def _ensure_generated_images(
     if asset_id not in PAGE_REPLICA_STAGES or value.get("generated_images"):
         return value
     briefs = _briefs_from_stored(value.get("image_briefs"))
-    if not briefs or not openai_image_client.is_configured():
+    if not briefs or (not openai_image_client.is_configured() and not runway_image_client.is_configured()):
         return value
 
     # One session for the whole operation: `generate_all` stages each successfully-generated
@@ -2041,7 +2083,9 @@ async def resolve_page_design(
     if not url:
         return None
 
-    design = await design_md_service.capture_page_design(url)
+    design = await design_md_service.capture_page_design(
+        url, subject_context=_image_subject_context(answers, profile)
+    )
 
     stored_value: dict | None = None
     if run_uuid is not None:
@@ -2075,7 +2119,13 @@ async def resolve_page_design(
             # API will accept.
             "model_screenshot_urls": [s.image_url for s in design.model_screenshots],
             "image_briefs": [
-                {"role": b.role, "size": b.size, "prompt": b.prompt} for b in design.image_briefs
+                {
+                    "role": b.role,
+                    "size": b.size,
+                    "prompt": b.prompt,
+                    "reference_image_urls": list(b.reference_image_urls),
+                }
+                for b in design.image_briefs
             ],
         }
         async with session_factory() as session:
@@ -2242,6 +2292,95 @@ async def capture_page_design_route(payload: PageDesignRequest) -> PageDesignRes
     )
 
 
+class SocialStatusResponse(BaseModel):
+    configured: bool
+    detail: str = ""
+
+
+@router.get("/social/status", response_model=SocialStatusResponse)
+async def social_status() -> SocialStatusResponse:
+    """Whether SociaVault is available. No API call, so it costs nothing — the UI uses this to
+    decide whether to offer the "fetch live posts" button on Stage 10 at all."""
+    if sociavault_client.is_configured():
+        return SocialStatusResponse(configured=True)
+    return SocialStatusResponse(
+        configured=False,
+        detail=f"{sociavault_client.API_KEY_ENV} is not set on the backend, so live post data is off.",
+    )
+
+
+class SocialPostsRequest(BaseModel):
+    #: What this account is called in the rendered document — "Client" or a competitor's name.
+    label: str = Field(min_length=1)
+    #: Free text in the same shape as the `client_s_own_social_pages_handles` field itself, e.g.
+    #: "Facebook: /trafficradius, Instagram: @trafficradius, LinkedIn: /company/trafficradius".
+    handles_text: str = Field(min_length=1)
+    limit_per_platform: int = Field(default=40, ge=1, le=100)
+
+
+class SocialAccountOut(BaseModel):
+    platform: str
+    handle: str
+    sample_size: int
+    more_available: bool
+    credits_used: int
+
+
+class SocialPostsResponse(BaseModel):
+    label: str
+    #: Ready to paste straight into `raw_post_data_source` as text.
+    markdown: str
+    accounts: list[SocialAccountOut]
+    notes: list[str]
+
+
+@router.post("/social/posts", response_model=SocialPostsResponse)
+async def fetch_social_posts(payload: SocialPostsRequest) -> SocialPostsResponse:
+    """Fetch one account's real, live posts across Facebook/Instagram/LinkedIn via SociaVault, and
+    render them into the document Stage 10's `raw_post_data_source` field asks for.
+
+    Unattached to a run and stores nothing — like `/design`, this is a preview button the operator
+    calls once per account (the client, then each competitor being audited) and pastes the result
+    into that field, rather than typing "research live via browser" and letting the model guess at
+    engagement numbers it cannot actually measure. A platform in `handles_text` this module has no
+    endpoint for (YouTube, TikTok, ...) is silently skipped and reported in `notes`, not an error —
+    naming an unsupported platform is a normal thing for the field to do.
+    """
+    accounts = social_audit_service.parse_account_handles(payload.handles_text)
+    if not accounts:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "No recognisable Facebook/Instagram/LinkedIn handle found in handles_text. Expected "
+                "the same format as the intake field, e.g. 'Instagram: @trafficradius'."
+            ),
+        )
+
+    try:
+        results, notes = await social_audit_service.fetch_account_snapshot(
+            accounts, limit_per_platform=payload.limit_per_platform
+        )
+    except sociavault_client.SociaVaultNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    markdown = social_audit_service.render_social_data_md(payload.label, results, notes)
+    return SocialPostsResponse(
+        label=payload.label,
+        markdown=markdown,
+        accounts=[
+            SocialAccountOut(
+                platform=r.platform,
+                handle=r.handle,
+                sample_size=len(r.posts),
+                more_available=r.more_available,
+                credits_used=r.credits_used,
+            )
+            for r in results
+        ],
+        notes=list(notes),
+    )
+
+
 class GeneratedImageRequest(BaseModel):
     prompt: str
     size: str = openai_image_client.DEFAULT_SIZE
@@ -2255,34 +2394,51 @@ class GeneratedImageResponse(BaseModel):
 
 @router.post("/design/images", response_model=GeneratedImageResponse)
 async def generate_design_image(payload: GeneratedImageRequest) -> GeneratedImageResponse:
-    """Generate one image from a DESIGN.md brief using OpenAI's image model, and return the URL
-    this backend now hosts it at (see `app/services/media_storage.py`).
+    """Generate one image from a DESIGN.md brief, with OpenAI as primary and Runway as fallback.
 
     Ad hoc — for an operator previewing a brief before it is wired into a run. The per-stage flow
     (`resolve_page_design` -> `_ensure_generated_images`) is what generates and caches a run's
     real hero/proof/closing-cta set; this route does not touch that cache.
     """
-    try:
-        result = await openai_image_client.generate_image(
-            payload.prompt,
-            size=payload.size,
-            quality=payload.quality,
+    result = None
+    provider = openai_image_client.MODEL_ENV  # used in response label
+
+    # --- primary: OpenAI ---
+    if openai_image_client.is_configured():
+        try:
+            result = await openai_image_client.generate_image(
+                payload.prompt,
+                size=payload.size,
+                quality=payload.quality,
+            )
+            provider = os.environ.get(openai_image_client.MODEL_ENV, openai_image_client.DEFAULT_MODEL)
+        except openai_image_client.OpenAIImageInvalidRequest as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except openai_image_client.OpenAIImageError as exc:
+            logger.warning("OpenAI image failed in /design/images — trying Runway: %s", exc)
+
+    # --- fallback: Runway ---
+    if result is None and runway_image_client.is_configured():
+        try:
+            result = await runway_image_client.generate_image(
+                payload.prompt,
+                size=payload.size,
+            )
+            provider = runway_image_client.DEFAULT_MODEL
+        except runway_image_client.RunwayImageError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No image provider is configured. Set OPENAI_API_KEY or RUNWAYML_API_SECRET.",
         )
-    except openai_image_client.OpenAIImageNotConfigured as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except openai_image_client.OpenAIImageInvalidRequest as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except openai_image_client.OpenAIImageError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     session_factory = get_sessionmaker()
     async with session_factory() as session:
         url = media_storage.save_generated_image(session, result.data, output_format=result.output_format)
         await session.commit()
-    return GeneratedImageResponse(
-        model=os.environ.get(openai_image_client.MODEL_ENV, openai_image_client.DEFAULT_MODEL),
-        url=url,
-    )
+    return GeneratedImageResponse(model=provider, url=url)
 
 
 # --------------------------------------------------------------------------------------------
@@ -3308,6 +3464,204 @@ async def _run_competitor_prepass(
     }
 
 
+# Stage 10. Its `raw_post_data_source` field is the one `_run_social_data_prepass` fills — see that
+# function's docstring for why "research live via browser" cannot actually be executed by the model
+# and needs a real fetch instead.
+_SOCIAL_AUDIT_ASSET_ID = "social_content_strategy_audit"
+_SOCIAL_POST_DATA_FIELD_ID = "raw_post_data_source"
+_SOCIAL_HANDLES_FIELD_ID = "client_s_own_social_pages_handles"
+_SOCIAL_CLIENT_NAME_FIELD_ID = "client_name"
+_SOCIAL_COMPETITOR_LIST_FIELD_ID = "competitor_list"
+_SOCIAL_COMPETITOR_COUNT_FIELD_ID = "number_of_competitors_to_audit"
+_SOCIAL_COMPETITOR_ANALYSIS_ASSET_ID = "competitor_analysis_social_content_strategy"
+
+# Hard cap on how many competitors this prepass resolves and fetches *automatically*, independent
+# of what the operator typed into `number_of_competitors_to_audit`. Each one costs a Firecrawl (or
+# Context.dev, at 10 credits) handle-resolution call plus a SociaVault fetch per platform resolved —
+# credits this prepass spends without being asked to, on every stage run, so the bound is fixed
+# rather than following an operator's dial that this call was never shown. `POST /pipeline/social/
+# posts` is still there for auditing a 6th, 7th, ... competitor by hand.
+_MAX_AUTO_COMPETITORS = 5
+# Lower than the client's own default (`sociavault_client`'s 40): this cost is now multiplied by up
+# to `_MAX_AUTO_COMPETITORS` accounts, each on up to three platforms, on every stage run.
+_COMPETITOR_LIMIT_PER_PLATFORM = 15
+
+# What the field's own `raw_explanation` calls option (b) — matched case-insensitively against
+# whatever the operator actually typed, e.g. "research live via browser, 40-60 per platform". A
+# blank answer is treated the same way: the field is required, so an operator who left it blank in
+# the UI and is relying on the model to sort it out meant this option too.
+_SOCIAL_LIVE_RESEARCH_PATTERN = re.compile(r"research\s+live", re.IGNORECASE)
+
+
+async def _fetch_competitor_social_blocks(
+    competitor_list_raw: str, requested_count: str
+) -> tuple[str, tuple[str, ...], bool]:
+    """Resolve up to `_MAX_AUTO_COMPETITORS` competitors from `competitor_list` to real social
+    handles (Firecrawl first, Context.dev as fallback — see `social_audit.resolve_competitor_handles`)
+    and fetch their live posts. Returns `(markdown, notes, any_data)`; never raises — a competitor
+    whose list cannot be parsed, or whose site links to no social profile, is a stated finding, not
+    a failure that should cost the client's own already-fetched data.
+
+    `any_data` is `True` only when at least one competitor's social accounts were actually resolved
+    — the caller uses it to decide whether this prepass produced anything real at all, since the
+    markdown itself is never empty (a "not fetched, here's why" sentence is still text).
+    """
+    if not competitor_list_raw or competitor_list_raw.startswith("[[context:"):
+        return (
+            "Not fetched — no competitor list is available on this run yet.",
+            ("Competitor list is empty or unresolved; competitor rows are N/D.",),
+            False,
+        )
+
+    try:
+        analysis = parse_analysis(_SOCIAL_COMPETITOR_ANALYSIS_ASSET_ID, competitor_list_raw)
+    except CompetitorParseError as exc:
+        logger.info("Social data prepass: competitor list could not be parsed for domains: %s", exc)
+        return (
+            "Not fetched — the competitor list on this run could not be parsed for domains "
+            f"({exc}). Competitor rows are N/D per this brief's own rule.",
+            (f"Competitor list parse failed: {exc}",),
+            False,
+        )
+
+    try:
+        requested = max(1, int(requested_count))
+    except (TypeError, ValueError):
+        requested = _MAX_AUTO_COMPETITORS
+    take = min(requested, _MAX_AUTO_COMPETITORS, len(analysis.competitors))
+    competitors = analysis.competitors[:take]
+
+    if not competitors:
+        return "Not fetched — the competitor list has no entries.", (), False
+
+    notes: list[str] = []
+    if requested > take:
+        notes.append(
+            f"{requested} competitors were requested; {take} were fetched automatically to bound "
+            f"API spend (cap: {_MAX_AUTO_COMPETITORS}). Use POST /pipeline/social/posts for the rest."
+        )
+
+    async def _one(competitor) -> tuple[str, bool]:
+        accounts = await social_audit_service.resolve_competitor_handles(competitor.domain)
+        if not accounts:
+            return (
+                f"## {competitor.name} — live social data\n\nNo Facebook/Instagram/LinkedIn "
+                f"profile could be resolved from `{competitor.domain}` via Firecrawl or "
+                "Context.dev. Mark this competitor's post-level metrics N/D.\n",
+                False,
+            )
+        results, account_notes = await social_audit_service.fetch_account_snapshot(
+            accounts, limit_per_platform=_COMPETITOR_LIMIT_PER_PLATFORM
+        )
+        return social_audit_service.render_social_data_md(competitor.name, results, account_notes), True
+
+    outcomes = await asyncio.gather(*(_one(c) for c in competitors), return_exceptions=True)
+
+    rendered: list[str] = []
+    any_data = False
+    for competitor, outcome in zip(competitors, outcomes):
+        if isinstance(outcome, Exception):
+            logger.info("Social data prepass: competitor %r failed: %s", competitor.name, outcome)
+            notes.append(f"{competitor.name}: {outcome}")
+            rendered.append(
+                f"## {competitor.name} — live social data\n\nCould not be fetched ({outcome}). "
+                "Mark this competitor's post-level metrics N/D.\n"
+            )
+            continue
+        block, resolved_any = outcome
+        rendered.append(block)
+        any_data = any_data or resolved_any
+
+    return "\n".join(rendered), tuple(notes), any_data
+
+
+async def _run_social_data_prepass(
+    asset_id: str, answers: dict[str, str]
+) -> tuple[dict[str, str], dict | None]:
+    """Fetch real, live social posts — the client's own via `client_s_own_social_pages_handles`,
+    and up to `_MAX_AUTO_COMPETITORS` competitors' via their resolved domains — and fill
+    `raw_post_data_source` with them, so the stage never has to fall back to "research live via
+    browser": an option the model has no actual way to execute (no browsing tool reaches this
+    backend's generation calls), which is why the field kept coming back full of `N/D` rows even
+    when the operator had supplied real client handles.
+
+    Competitor coverage is best-effort, not guaranteed: `competitor_list` is company names and
+    domains, and `social_audit.resolve_competitor_handles` still has to find that domain's actual
+    social links before SociaVault can be asked for anything — a competitor with no discoverable
+    social presence, or an unparseable competitor list, legitimately stays N/D, and the document
+    says so explicitly rather than silently omitting the section.
+
+    Only runs for `social_content_strategy_audit`, and only when the operator has not already
+    supplied a real answer (an attached CSV/XLSX, or pasted post data) — the same "don't overwrite
+    what's already there" rule `_run_competitor_prepass` follows for its own target field.
+    """
+    if asset_id != _SOCIAL_AUDIT_ASSET_ID:
+        return answers, None
+
+    existing = (answers.get(_SOCIAL_POST_DATA_FIELD_ID) or "").strip()
+    if existing and not _SOCIAL_LIVE_RESEARCH_PATTERN.search(existing) and not existing.startswith("[[context:"):
+        logger.info(
+            "Skipping social data prepass — %s already supplied (%s chars)",
+            _SOCIAL_POST_DATA_FIELD_ID,
+            len(existing),
+        )
+        return answers, None
+
+    handles_text = (answers.get(_SOCIAL_HANDLES_FIELD_ID) or "").strip()
+    accounts = social_audit_service.parse_account_handles(handles_text)
+    resolved = dict(answers)
+    all_notes: list[str] = []
+
+    client_results: tuple = ()
+    if accounts:
+        try:
+            client_results, client_notes = await social_audit_service.fetch_account_snapshot(accounts)
+            all_notes.extend(client_notes)
+        except Exception as exc:  # noqa: BLE001 - degraded, not fatal; see `_run_competitor_prepass`
+            logger.exception("Social data prepass failed for client handles=%r", handles_text)
+            all_notes.append(f"Client fetch failed: {exc}")
+    else:
+        all_notes.append(
+            f"No Facebook/Instagram/LinkedIn handle recognised in {_SOCIAL_HANDLES_FIELD_ID!r} for "
+            "the client."
+        )
+
+    label = (answers.get(_SOCIAL_CLIENT_NAME_FIELD_ID) or "Client").strip() or "Client"
+    client_block = social_audit_service.render_social_data_md(f"{label} (client)", client_results, ())
+
+    competitor_block, competitor_notes, competitor_any_data = await _fetch_competitor_social_blocks(
+        (answers.get(_SOCIAL_COMPETITOR_LIST_FIELD_ID) or "").strip(),
+        answers.get(_SOCIAL_COMPETITOR_COUNT_FIELD_ID) or "",
+    )
+    all_notes.extend(competitor_notes)
+
+    if not client_results and not competitor_any_data:
+        return answers, {
+            "type": "social_prepass",
+            "asset_id": asset_id,
+            "target_field_id": _SOCIAL_POST_DATA_FIELD_ID,
+            "skipped": True,
+            "error": "; ".join(all_notes) or "No live data could be fetched for any account.",
+        }
+
+    document = client_block + "\n## Competitor accounts\n\n" + competitor_block + "\n"
+    if all_notes:
+        document += "\n### Collection notes\n\n" + "\n".join(f"- {note}" for note in all_notes) + "\n"
+    resolved[_SOCIAL_POST_DATA_FIELD_ID] = document
+
+    return resolved, {
+        "type": "social_prepass",
+        "asset_id": asset_id,
+        "target_field_id": _SOCIAL_POST_DATA_FIELD_ID,
+        "skipped": False,
+        "content": document,
+        "accounts": [
+            {"platform": r.platform, "handle": r.handle, "sample_size": len(r.posts), "credits_used": r.credits_used}
+            for r in client_results
+        ],
+    }
+
+
 async def _generation_sse_stream(
     asset_id: str,
     answers: dict[str, str],
@@ -3338,6 +3692,13 @@ async def _generation_sse_stream(
         )
         if prepass_event is not None:
             yield _sse(prepass_event)
+
+        # Stage 10 only. Fetches the client's real, live posts via SociaVault so the field never
+        # has to fall back to a browsing option this model has no way to actually execute — see
+        # `_run_social_data_prepass`'s docstring for why the competitor rows stay N/D.
+        answers, social_prepass_event = await _run_social_data_prepass(asset_id, answers)
+        if social_prepass_event is not None:
+            yield _sse(social_prepass_event)
 
         # Captured once per run and cached; None when there is no page to read. `build_prompt`
         # simply omits the block then, and the stage's own prompt falls back to asking for brand
