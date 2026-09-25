@@ -8,7 +8,12 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
-    "sqlalchemy>=2.0",
+    # [asyncio] extra pulls in greenlet, which app/db/base.py's async engine requires at import
+    # time — alembic's env.py imports that engine too, so a pre-deploy `alembic upgrade` needs it
+    # just as much as the running app does. Missing it fails with
+    # "ModuleNotFoundError: No module named greenlet" the moment alembic (or anything else) imports
+    # app.db.base, not on first async query — confirmed on a Railway pre-deploy migration run.
+    "sqlalchemy[asyncio]>=2.0",
     "alembic>=1.13",
     "psycopg[binary]>=3.1",
     "pydantic>=2.7",
